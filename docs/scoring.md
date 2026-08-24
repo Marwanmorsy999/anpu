@@ -1,46 +1,66 @@
-# Risk Scoring Methodology
+# ANPU Risk Scoring: A Transparent Approach
 
-ANPU's risk scoring (`internal/scoring`) is fully deterministic and
-documented — never an opaque or AI-generated number. Every scored
-finding carries a `ScoreExplanation` string showing exactly how its
-score was derived.
+In many commercial and open-source scanners, risk scores are a black box. You see an arbitrary "Critical 9.8", but it's unclear *how* that number was derived or if it accurately reflects the actual context of your application.
 
-## Per-finding score
+ANPU takes a different approach: **Transparent, deterministic risk scoring.** 
 
-```
-score = min(10, severity_base × confidence_multiplier + exposure_weight + corroboration_bonus)
-```
+Our scoring algorithm evaluates every finding based on a public formula, combining the inherent severity of the issue with the confidence of our detection, the exposure of the asset, and corroboration across multiple tools.
 
-- **`severity_base`** — fixed points per severity level:
-  critical=9.0, high=7.0, medium=4.5, low=2.0, info=0.5.
-- **`confidence_multiplier`** — discounts less-certain findings so a
-  "low-confidence critical" doesn't outrank a "confirmed high":
-  confirmed=1.00, high=0.90, medium=0.75, low=0.55.
-- **`exposure_weight`** — a small additive term based on the finding's
-  category, reflecting how directly it represents reachable exposure
-  vs. defense-in-depth (e.g. a real vulnerability match from Nuclei/ZAP
-  = +1.0; a missing security header = +0.1).
-- **`corroboration_bonus`** — up to +0.5, added when independent
-  scanners (e.g. a built-in analyzer *and* Nuclei) reported the same
-  underlying issue after deduplication, since independent agreement
-  increases real-world certainty beyond a single tool's confidence
-  label.
+## The Formula
 
-## Aggregate scan score
+The risk score for a single finding is calculated as follows:
 
 ```
-aggregate = min(10, max(finding_scores) + volume_bonus)
+Risk Score = (Severity × Confidence) + Exposure + Corroboration
 ```
 
-The aggregate is dominated by the single worst finding (a scan with
-one critical shouldn't score the same as a scan with none, no matter
-how many low-severity findings surround it), with a small bonus
-(+0.15 per medium-or-above finding, capped at +1.5) so that "one high"
-and "one high plus twenty mediums" don't score identically.
+### 1. Severity (1.0 to 10.0)
+The base impact of the vulnerability if successfully exploited.
+- **Info:** 0.0
+- **Low:** 2.0 - 3.9
+- **Medium:** 4.0 - 6.9
+- **High:** 7.0 - 8.9
+- **Critical:** 9.0 - 10.0
 
-## Why not AI-generated scores?
+### 2. Confidence (Multiplier: 0.1 to 1.0)
+How certain are we that this vulnerability exists, based on the evidence?
+- **Tentative (0.5):** Fingerprint matched, but no direct exploitation evidence.
+- **Firm (0.8):** Strong indicator of vulnerability, like an exposed config file.
+- **Certain (1.0):** Definitive proof, such as successful active exploitation or exact version matching a CVE.
 
-A scanner's output is used to make real decisions about what to fix
-first. A score needs to be explainable and reproducible: given the
-same findings, ANPU always produces the same score, and that score can
-be traced back to specific, documented weights — not a black box.
+### 3. Exposure (Addition: 0.0 to +1.0)
+Where was the issue found?
+- **Internal/Admin endpoints:** +0.0 (baseline)
+- **Public-facing/Unauthenticated endpoints:** +1.0 (increases risk)
+
+### 4. Corroboration (Addition: 0.0 to +1.0)
+Did multiple tools flag this same issue?
+- **Single Source:** +0.0
+- **Multiple Sources (e.g., Nuclei + ANPU Passive):** +1.0 (increases certainty and risk)
+
+*(Note: The final score is always capped at a maximum of 10.0)*
+
+---
+
+## Example Scenario: Missing HSTS Header
+
+Let's look at how a common finding gets scored.
+
+**Scenario:** A scanner detects that `https://example.com` does not return the `Strict-Transport-Security` header.
+- **Finding:** Missing HSTS Header
+- **Base Severity:** 4.0 (Medium) - It allows potential downgrade attacks.
+
+**Calculation:**
+1. **Confidence:** We observed the HTTP response directly and the header is unequivocally absent. (Certain: `1.0`)
+2. **Exposure:** This is on the main public index page. (Public: `+0.5`)
+3. **Corroboration:** Only the internal ANPU header analyzer flagged this. (Single source: `0.0`)
+
+```
+Score = (4.0 × 1.0) + 0.5 + 0.0 = 4.5 (Medium)
+```
+
+## Why Transparency Matters for Security Teams
+
+1. **Prioritization without the Noise:** When every tool cries "Critical," nothing is critical. By adjusting scores based on exposure and confidence, teams can focus on what actually matters.
+2. **Explainability to Stakeholders:** When a developer asks, "Why is this a high priority?", you can point to the exact math: "It has a high base severity, and we have 100% confidence it exists on a public-facing endpoint."
+3. **Reproducibility:** A deterministic formula means that the same scan, run in the same environment, will produce the same score every time. No opaque AI hallucinations.

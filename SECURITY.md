@@ -57,5 +57,17 @@ Please include:
   demonstrate the issue against a real third-party site)
 - Any suggested fix, if you have one
 
-We aim to acknowledge reports within a few days. Please give us a
-reasonable amount of time to fix an issue before public disclosure.
+**Response Timeline:**
+- Acknowledgement: Within 2 business days.
+- Initial Triage & Assessment: Within 5 business days.
+- Target Resolution: Within 30 days for moderate/low issues, within 7 days for critical/high issues.
+
+Please give us a reasonable amount of time to fix an issue before public disclosure.
+
+**PGP Key for Encrypted Reports (Placeholder):**
+```
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+(Insert PGP Key Here)
+-----END PGP PUBLIC KEY BLOCK-----
+```

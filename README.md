@@ -5,11 +5,16 @@
 
 [Install](#3-installation) &middot; [Documentation](#5-architecture) &middot; [Releases](https://github.com/Marwanmorsy999/anpu/releases)
 
-![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)
-![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
-![CI](https://github.com/Marwanmorsy999/anpu/actions/workflows/ci.yml/badge.svg)
-![SARIF](https://img.shields.io/badge/SARIF-Supported-success)
-![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?style=flat&logo=docker)
+![Build Status](https://img.shields.io/github/actions/workflow/status/Marwanmorsy999/anpu/ci.yml?branch=main&style=flat-square)
+![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go)
+![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)
+![SARIF](https://img.shields.io/badge/SARIF-Supported-success?style=flat-square)
+![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?style=flat-square&logo=docker)
+
+### 🔗 Quick Links
+- 🎯 **[Risk Scoring Deep Dive](./docs/scoring.md)** - Understand our transparent scoring math.
+- ⚙️ **[CI/CD Integration](./docs/ci-cd.md)** - Drop-in workflows for GitHub Actions.
+- 🛡️ **[Security Policy](./SECURITY.md)** - Responsible disclosure & safety.
 
 ```bash
 $ anpu scan https://example.com
@@ -40,7 +45,7 @@ Report: ./reports/example.html
 
 ## Why ANPU?
 
-ANPU orchestrates existing security tools (Nuclei today, OWASP ZAP planned) alongside its own passive analyzers, and combines the results into a single, unified, understandable security report. Unlike cloud scanners, ANPU runs entirely as a single local Go binary, ensuring your scan data stays completely private.
+ANPU orchestrates existing security tools (like Nuclei) alongside its own passive analyzers, and combines the results into a single, unified, understandable security report. Unlike cloud scanners, ANPU runs entirely as a single local Go binary, ensuring your scan data stays completely private.
 
 > ⚠️ **ANPU performs active network requests against the target you give it.** Only scan targets you own or are explicitly authorized to test. See [SECURITY.md](./SECURITY.md).
 
@@ -252,10 +257,7 @@ output can be consumed by GitHub code scanning workflows or other SARIF-compatib
   match into an ANPU finding, preserving the original template ID and
   match evidence. If Nuclei isn't installed, ANPU logs a warning and
   continues — it never fails the whole scan.
-- **OWASP ZAP** (`internal/integrations/zap.go`): interface is
-  defined and wired into the pipeline (`Available()` returns `false`),
-  but the actual ZAP driver is not implemented yet. This is a real
-  extension point, not a fake scanner.
+- **OWASP ZAP** (`internal/integrations/zap.go`) - **[Status: Planned / Interface Defined]**: The interface is defined and wired into the pipeline (`Available()` returns `false`), but the actual ZAP driver is not implemented yet. This is a real extension point on our roadmap, designed to eventually support full DAST orchestration.
 
 ## 10. Development
 

@@ -1,0 +1,6 @@
+/anpu
+/reports/
+*.db
+anpu.yaml
+.DS_Store
+/dist/

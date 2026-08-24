@@ -1,17 +1,48 @@
 # ANPU
 
 **Guard what you build.**
+*Authorized web security analysis and attack-surface intelligence CLI.*
 
-ANPU is an open-source, authorized web security analysis and
-attack-surface intelligence CLI. It orchestrates existing security
-tools (Nuclei today, OWASP ZAP planned) alongside its own passive
-analyzers, and combines the results into a single, unified,
-understandable security report — as a single local Go binary, no cloud
-services required.
+[Install](#3-installation) &middot; [Documentation](#5-architecture) &middot; [Releases](https://github.com/Marwanmorsy999/anpu/releases)
 
-> ⚠️ **ANPU performs active network requests against the target you give
-> it.** Only scan targets you own or are explicitly authorized to test.
-> See [SECURITY.md](./SECURITY.md).
+![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)
+![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
+![CI](https://github.com/Marwanmorsy999/anpu/actions/workflows/ci.yml/badge.svg)
+![SARIF](https://img.shields.io/badge/SARIF-Supported-success)
+![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?style=flat&logo=docker)
+
+```bash
+$ anpu scan https://example.com
+
+        ▄▀█ █▄░█ █▀█ █░█
+        █▀█ █░▀█ █▀▀ █▄█
+   Web Security Intelligence
+
+Target: https://example.com
+
+Recon              ✓
+Technology         ✓
+TLS                ✓
+Headers            ✓
+Cookies            ✓
+Endpoints          ✓
+
+Results
+CRITICAL     0
+HIGH         0
+MEDIUM       2
+LOW          5
+INFO         11
+
+Risk Score: 3.4/10
+Report: ./reports/example.html
+```
+
+## Why ANPU?
+
+ANPU orchestrates existing security tools (Nuclei today, OWASP ZAP planned) alongside its own passive analyzers, and combines the results into a single, unified, understandable security report. Unlike cloud scanners, ANPU runs entirely as a single local Go binary, ensuring your scan data stays completely private.
+
+> ⚠️ **ANPU performs active network requests against the target you give it.** Only scan targets you own or are explicitly authorized to test. See [SECURITY.md](./SECURITY.md).
 
 ---
 

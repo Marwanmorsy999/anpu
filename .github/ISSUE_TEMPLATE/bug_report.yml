@@ -1,0 +1,55 @@
+name: Bug Report
+description: Create a report to help us improve ANPU
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+        Please read `SECURITY.md` before filing a bug. If this is a security vulnerability in ANPU itself, do NOT file a public issue.
+  - type: input
+    id: version
+    attributes:
+      label: ANPU Version
+      description: What version of ANPU are you running? (e.g., v0.2.0)
+      placeholder: vX.Y.Z
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: What operating system are you using? (e.g., Windows 11, Ubuntu 22.04, macOS Sonoma)
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: What command did you run? What happened?
+      placeholder: |
+        1. Run `anpu scan https://example.com`
+        2. Observe error...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: A clear and concise description of what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs/Output
+      description: Please paste any relevant console output or panic logs here.
+      render: shell

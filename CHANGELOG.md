@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.1
+## 0.3.1 (Unreleased)
 
 - **CI self-test**: security scanning now runs only against a pinned local OWASP Juice Shop fixture and uploads generated reports as workflow artifacts instead of GitHub Code Scanning.
 - **SARIF validation**: CI verifies SARIF 2.1.0 structure, ANPU tool identity, and non-empty results before archiving reports.
@@ -21,7 +21,7 @@
 - New shared `DoWithHeaders` client method keeps custom probes (CORS/methods) behind the same SSRF guards as core requests.
 - Added live-site integration test (`ANPU_LIVE_TESTS=1 go test -run TestLiveScanExample ./cmd/anpu`) that runs the full pipeline against example.com and validates the JSON report end-to-end.
 - **Breaking Change**: Added a connectivity pre-check. Scans now immediately abort with a non-zero exit code if the target is completely unreachable (e.g., DNS failure, connection refused). Use `--skip-pre-check` to bypass this behavior.
-- Switched the SQLite driver from `mattn/go-sqlite3` (cgo) to `modernc.org/sqlite` (pure Go). ANPU no longer requires a C compiler at build time and produces valid executables on all platforms out of the box; the vendored `third_party/go-sqlite3` copy was removed.
+- Switched the SQLite driver from `mattn/go-sqlite3` (cgo) to `modernc.org/sqlite` (pure Go). ANPU no longer requires a C compiler at build time and produces valid executables on all platforms out of the box; the old vendored `third_party/go-sqlite3` copy was removed.
 - SARIF reports now serialize empty `rules`/`results` as `[]` instead of `null`, complying with the SARIF 2.1.0 schema.
 - Fixed a bug where error messages were printed twice in the terminal.
 - Added path to output filenames (`target-path-date.html`) to prevent collisions on same-host scans.

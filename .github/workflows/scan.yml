@@ -6,6 +6,8 @@ on:
   pull_request:
     branches: [ "main" ]
   schedule:
+    # Weekly (Mondays at 03:00 UTC): catches tool/image drift without
+    # re-scanning an unchanged local fixture every day.
     - cron: '0 3 * * 1'
 
 permissions:
@@ -20,9 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    # Safe, deterministic DAST fixture. ANPU never scans a third-party host in CI.
     services:
       juice-shop:
+        # Pinned immutable OWASP Juice Shop fixture for a local-only self-test.
         image: bkimminich/juice-shop@sha256:73c53fbf442e8337b3ea3d98c7e8550308854701ebdfce4cc39768f36b75430e
         ports: [ "3000:3000" ]
 
@@ -38,12 +40,12 @@ jobs:
       - name: Build ANPU
         run: go build -o anpu ./cmd/anpu
 
-      - name: Wait for Juice Shop
+      - name: Wait for Juice Shop (host-side readiness)
         run: |
           set -euo pipefail
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:3000/ >/dev/null 2>&1; then
-              echo "juice-shop is ready (attempt $i)"
+              echo "juice-shop is up (attempt $i)"
               exit 0
             fi
             echo "waiting for juice-shop ($i/30)..."
@@ -55,7 +57,6 @@ jobs:
 
       - name: Run ANPU Scan
         env:
-          # Only for the local CI fixture; never set this for arbitrary targets.
           ANPU_ALLOW_LOCAL_NETWORK: "1"
         run: |
           mkdir -p ./reports
@@ -69,20 +70,17 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          files=(./reports/*.sarif)
-          if [ "${#files[@]}" -ne 1 ]; then
-            echo "Expected exactly one SARIF file; found ${#files[@]}" >&2
+          sarif_files=(./reports/*.sarif)
+          if [ "${#sarif_files[@]}" -ne 1 ]; then
+            echo "Expected exactly one SARIF file; found ${#sarif_files[@]}" >&2
             ls -la ./reports/ || true
             exit 1
           fi
-          jq -e '.version == "2.1.0"' "${files[0]}"
-          jq -e '.runs[0].tool.driver.name == "ANPU"' "${files[0]}"
-          jq -e '.runs[0].results | type == "array"' "${files[0]}"
-          jq -e '.runs[0].results | length >= 1' "${files[0]}"
+          jq -e '.version == "2.1.0"' "${sarif_files[0]}"
+          jq -e '.runs[0].tool.driver.name == "ANPU"' "${sarif_files[0]}"
+          jq -e '.runs[0].results | type == "array"' "${sarif_files[0]}"
+          jq -e '.runs[0].results | length >= 1' "${sarif_files[0]}"
 
-      # ANPU is a DAST/web scanner: findings point at live URLs, not repository
-      # source files. GitHub Code Scanning's upload-sarif rejects such locations,
-      # so preserve the complete SARIF as a normal workflow artifact instead.
       - name: Upload Scan Reports
         if: always()
         uses: actions/upload-artifact@v4

@@ -2,7 +2,7 @@
 # directory, or pass --config /path/to/this/file.
 #
 # CLI flags always override values here. See README.md → "Scan profiles"
-# for what each profile enables by default.
+# for profile defaults.
 
 target:
   url: https://example.com
@@ -17,8 +17,14 @@ modules:
   headers: true
   cookies: true
   endpoints: true
-  nuclei: true    # only takes effect if the nuclei binary is installed
-  zap: false      # not yet implemented (see internal/integrations/zap.go)
+  subdomains: false
+  portscan: false
+  dirs: false
+  secrets: false
+  cors: false
+  methods: false
+  nuclei: false   # optional; enable explicitly or use an active profile
+  zap: false      # planned; driver is not implemented yet
 
 report:
   html: true

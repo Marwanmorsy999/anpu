@@ -187,7 +187,6 @@ func (n *NucleiScanner) Run(ctx context.Context, sc *scanner.ScanContext) (scann
 	if waitErr != nil {
 		msg := strings.TrimSpace(stderr.String())
 		if msg != "" {
-			// Keep the diagnostic compact for terminal/report output.
 			msg = strings.Join(strings.Fields(msg), " ")
 			if len(msg) > 500 {
 				msg = msg[:500] + "..."

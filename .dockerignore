@@ -1,0 +1,6 @@
+.git/
+.github/
+reports/
+dist/
+docs/
+*.db

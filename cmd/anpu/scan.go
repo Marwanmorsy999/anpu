@@ -109,7 +109,6 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		JSON:         jsonOut,
 		HTML:         htmlOut,
 		SARIF:        sarifOut,
-		NoNuclei:     noNuclei,
 		NoZAP:        noZAP,
 		Verbose:      flagVerbose,
 		SkipPreCheck: skipPreCheck,
@@ -146,8 +145,8 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 
 	reportPath := ""
 	slugBase := target.Host
-	if target.Raw.Path != "" && target.Raw.Path != "/" {
-		slugBase += target.Raw.Path
+	if target.URL.Path != "" && target.URL.Path != "/" {
+		slugBase += target.URL.Path
 	}
 	slug := sanitizeForFilename(slugBase)
 	dateStr := time.Now().Format("2006-01-02-150405")

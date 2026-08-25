@@ -8,15 +8,17 @@
 
 [Install](#3-installation) · [Documentation](#5-architecture) · [Releases](https://github.com/Marwanmorsy999/anpu/releases)
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/Marwanmorsy999/anpu/ci.yml?branch=main&style=flat-square)](https://github.com/Marwanmorsy999/anpu/actions) [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://go.dev/) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE) [![SARIF](https://img.shields.io/badge/SARIF-Supported-success?style=flat-square)](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?style=flat-square&logo=docker)](https://docs.docker.com/)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/Marwanmorsy999/anpu/ci.yml?branch=main&style=flat-square)](https://github.com/Marwanmorsy999/anpu/actions) [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://go.dev/) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE) [![SARIF](https://img.shields.io/badge/SARIF-Supported-success&style=flat-square)](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?style=flat-square&logo=docker)](https://docs.docker.com/)
 
-### 🔗 Quick Links
+### Quick links
 
-- 🎯 **[Risk Scoring Deep Dive](docs/scoring.md)** - Understand our transparent scoring math.
-- ⚙️ **[CI/CD Integration](docs/ci-cd.md)** - Drop-in workflows for GitHub Actions.
-- 🛡️ **[Security Policy](SECURITY.md)** - Responsible disclosure & safety.
+- [Risk Scoring Deep Dive](docs/scoring.md)
+- [CI/CD Integration](docs/ci-cd.md)
+- [Security Policy](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
 
-```
+```text
 $ anpu scan https://example.com
 
         ▄▀█ █▄░█ █▀█ █░█
@@ -40,58 +42,39 @@ LOW          5
 INFO         11
 
 Risk Score: 3.4/10
-Report: ./reports/example.html
+Report: ./reports/example.com-2026-01-01-120000.html
 ```
-
-## Why ANPU?
-
-ANPU orchestrates existing security tools (Nuclei) alongside its own passive analyzers, and combines the results into a single, unified, understandable security report. Unlike cloud scanners, ANPU runs entirely as a single local Go binary — your scan data never leaves your machine.
-
-|                         | ANPU | Nuclei alone | Cloud scanners |
-|-------------------------|:----:|:------------:|:--------------:|
-| Local / private         | ✅   | ✅           | ❌             |
-| Unified HTML report     | ✅   | ❌           | ✅             |
-| Transparent scoring     | ✅   | ❌           | ❌             |
-| Offline build           | ✅   | ❌           | ❌             |
-| Scan history + diff     | ✅   | ❌           | ✅             |
-| CI gate (`--fail-on`)   | ✅   | ⚠️ manual    | ✅             |
-| SARIF output            | ✅   | ✅           | varies         |
-
-> ⚠️ **ANPU performs active network requests against the target you give it.** Only scan targets you own or are explicitly authorized to test. See [SECURITY.md](SECURITY.md).
-
----
 
 ## 1. What ANPU is
 
-ANPU is **not** another from-scratch vulnerability scanner. Its job is to:
+ANPU is a local-first security analysis CLI. It combines its own passive and low-impact analyzers with optional external scanners, normalizes their results into one evidence-backed finding model, deduplicates overlapping findings, scores them deterministically, and produces machine-readable and human-readable reports.
 
-1. Run its own passive analyzers (HTTP headers, cookies, TLS, technology fingerprinting, recon, endpoint discovery).
-2. Optionally invoke real, independently-maintained scanners (Nuclei; ZAP in the future) as subprocesses/APIs.
-3. Normalize every result — from any source — into one unified, evidence-backed finding model.
-4. Deduplicate findings that multiple tools reported for the same underlying issue.
-5. Score every finding transparently (documented, deterministic scoring — never an opaque or AI-generated number).
-6. Produce a polished HTML report (plus JSON/SARIF for tooling), and store scan history locally in SQLite.
+ANPU is **not** a from-scratch replacement for every security scanner. Its value is the orchestration and intelligence layer that turns multiple security signals into one understandable assessment.
 
 ## 2. What it does
 
-- **Recon**: DNS resolution, robots.txt/sitemap.xml parsing, redirect chain observation, source-map exposure detection.
+- **Recon**: DNS resolution, robots.txt/sitemap.xml parsing, redirect-chain observation, and source-map exposure detection.
 - **HTTP / security headers**: CSP, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, Server/X-Powered-By disclosure.
 - **Cookies**: Secure, HttpOnly, SameSite, with context-aware severity.
-- **TLS**: certificate validity, expiration, hostname match, protocol version, HTTP→HTTPS redirect behavior.
-- **Technology fingerprinting**: web servers, frameworks, CMSs, CDNs, JS libraries — from headers, cookies, and page content, with confidence scores and no invented version numbers.
-- **Endpoint discovery**: links, forms, and JS references, normalized and categorized (page / api / asset / authentication / admin-like / unknown).
-- **Nuclei integration** (optional): runs real `nuclei` templates scoped to the selected profile, converts results into ANPU findings.
-- **Deduplication**: merges the same underlying issue across sources while preserving every original piece of evidence.
-- **Transparent risk scoring**: severity × confidence + exposure + corroboration, with a documented formula attached to every score.
+- **TLS**: certificate validity, expiration, hostname match, protocol version, and HTTP→HTTPS redirect behavior.
+- **Technology fingerprinting**: web servers, frameworks, CMSs, CDNs, JS libraries — using observed signals without inventing versions.
+- **Endpoint discovery**: links, forms, and JavaScript references, normalized and categorized.
+- **Subdomains / ports / paths**: profile-gated discovery engines with safety and false-positive safeguards.
+- **Secret detection**: scans discovered content for supported credential/token patterns without treating target-controlled data as executable.
+- **CORS / HTTP methods**: targeted configuration and method checks behind the same SSRF protections as core requests.
+- **Nuclei integration**: optional execution of a real Nuclei binary, with profile-aware template scope and graceful degradation when Nuclei is unavailable.
+- **Deduplication**: merges overlapping findings while preserving source evidence.
+- **Transparent scoring**: deterministic per-finding and aggregate scoring with explanations stored in results.
 
 ## 3. Installation
 
-### Pre-built binaries (recommended)
+### Pre-built binaries
 
-Linux (amd64) binaries are available on the [Releases page](https://github.com/Marwanmorsy999/anpu/releases). macOS and other architectures: use Docker below, or build from source — official cross-platform binaries are on the roadmap.
+The Releases page contains published release artifacts. The `main` branch may be ahead of the latest published release; check the release notes when choosing a version for production use.
+
+Linux amd64 is currently the published native binary target. Other platforms can use Docker or build from source.
 
 ```sh
-# macOS / Linux — extract and run
 tar -xzf anpu_*.tar.gz
 ./anpu --help
 ```
@@ -105,9 +88,11 @@ go build -o anpu ./cmd/anpu
 ./anpu --help
 ```
 
-ANPU's dependency set — Cobra, pflag, go-sqlite3, and yaml.v3 — is vendored under `third_party/`, so this builds fully offline once you have the repository.
+Dependencies are defined in `go.mod` and pinned through `go.sum`. A first build normally needs access to the configured Go module proxy (or an already-populated local module cache). Subsequent builds can reuse the cached modules.
 
 ### Docker
+
+The image uses pure-Go SQLite, so no C compiler is required inside the build stage.
 
 ```sh
 docker build -t anpu .
@@ -117,10 +102,10 @@ docker run --rm -v "$(pwd)/reports:/reports" anpu scan https://example.com --out
 ## 4. Quick start
 
 ```sh
-# Safe (default) profile — passive analysis only, HTML report
+# Safe (default) profile
 ./anpu scan https://example.com
 
-# Standard profile — adds Nuclei's exposure/misconfig/CVE templates
+# Standard profile with machine-readable output
 ./anpu scan https://example.com --profile standard --json --sarif
 
 # View past scans
@@ -133,47 +118,51 @@ docker run --rm -v "$(pwd)/reports:/reports" anpu scan https://example.com --out
 ./anpu diff scan-old scan-new
 ```
 
+`safe` is the default and is designed for passive/low-impact analysis. `standard` and `deep` enable more active checks. Only use ANPU against systems you own or are explicitly authorized to test.
+
 ## 5. Architecture
 
-```
-cmd/anpu/              CLI entry point (Cobra commands: scan, history, show)
+```text
+cmd/anpu/              CLI entry point (scan, history, show, diff, tools)
 
 internal/
-  scanner/              Scanner interface, target validation, pipeline orchestrator
-  diff/                 Historical scan comparison and attack-surface change detection
-  recon/                Passive recon (DNS, robots.txt, sitemap.xml, redirects)
-  http/                 Shared HTTP client (timeouts, redirect/SSRF guards)
-  technology/           Technology fingerprinting
-  tls/                  Passive TLS analysis
-  headers/              Security headers + cookie analysis
-  endpoints/            Endpoint discovery/normalization
-  findings/             Deduplication engine
-  scoring/              Transparent risk scoring
-  storage/              SQLite persistence (scan history)
-  integrations/         Nuclei (implemented) + ZAP (prepared interface)
-  reporting/            JSON / SARIF / HTML report generation, terminal UI
-  config/               YAML config loading + CLI-flag resolution
+  scanner/              scanner interface, target validation, pipeline orchestrator
+  diff/                 historical scan comparison and attack-surface change detection
+  recon/                DNS, robots.txt, sitemap.xml, redirects
+  http/                 shared HTTP client and SSRF/redirect guards
+  technology/           technology fingerprinting
+  tls/                  passive TLS analysis
+  headers/              security headers + cookie analysis
+  endpoints/            endpoint discovery/normalization
+  subdomains/           subdomain enumeration
+  portscan/             TCP connect port scanning
+  dirs/                 sensitive-path discovery and soft-404 filtering
+  secrets/              token/key pattern detection
+  cors/                 CORS auditing
+  methods/              HTTP method auditing
+  findings/             deduplication engine
+  scoring/              transparent risk scoring
+  storage/              SQLite persistence for scan history
+  integrations/         Nuclei integration + prepared ZAP interface
+  reporting/            JSON / SARIF / HTML report generation and terminal UI
+  config/               YAML config loading and CLI-flag resolution
 
-pkg/models/             Shared, scanner-agnostic data model (Finding, Technology,
-                        Endpoint, ScanSummary, ...)
+pkg/models/             shared scanner-agnostic data model
 
-third_party/            Vendored dependencies (cobra, pflag, go-sqlite3, yaml.v3)
-rules/                  Reserved for future custom detection rules
-tests/                  Shared test fixtures/helpers
-docs/                   Additional documentation
+docs/                   scoring and CI/CD documentation
 ```
 
-**Design principle**: `internal/scanner` defines a single `Scanner` interface (`Name`, `Available`, `Run`). Every analyzer and every external tool integration implements it, and the orchestrator only ever depends on that interface — never on a concrete scanner. Adding a new scanner means implementing the interface and registering it in `cmd/anpu/scan.go`'s `buildPipeline`; nothing else in the pipeline changes.
+**Design principle:** `internal/scanner` defines the scanner boundary and pipeline orchestration. Concrete analyzer packages are wired together in `cmd/anpu/scan.go`; the orchestrator works with scanner interfaces rather than hard-coding analyzer internals.
 
 ## 6. Scan profiles
 
-| Profile          | Passive analysis | Nuclei                                        | Notes                                                    |
-|------------------|:----------------:|:---------------------------------------------:|----------------------------------------------------------|
-| `safe` (default) | ✅               | ❌                                            | Headers, cookies, TLS, technology, recon, endpoints only |
-| `standard`       | ✅               | ✅ (exposure, misconfig, tech, ssl, cve tags) |                                                          |
-| `deep`           | ✅               | ✅ (broader template set, all severities)     |                                                          |
+| Profile | Passive analysis | Active engines | Nuclei | Purpose |
+|---|:---:|:---:|:---:|---|
+| `safe` (default) | ✅ | Limited | ❌ by default | Low-impact baseline |
+| `standard` | ✅ | ✅ | ✅ when available | Broader security assessment |
+| `deep` | ✅ | ✅ | ✅ when available | Broader discovery and active analysis |
 
-`--no-nuclei` / `--no-zap` (or `nuclei: false` / `zap: false` in config) disable those integrations regardless of profile.
+Module toggles in `anpu.yaml` can further enable or disable individual engines. `--no-nuclei` and `--no-zap` override integration settings for the current run.
 
 ## 7. Scan comparison and CI gates
 
@@ -188,16 +177,29 @@ docs/                   Additional documentation
 ./anpu scan https://example.com --profile standard --sarif --fail-on high
 ```
 
-`--fail-on` exits non-zero after reports and scan history are written. Supported thresholds: `low`, `medium`, `high`, `critical` (default: `none`).
+`--fail-on` exits non-zero after reports and scan history have been written. Supported thresholds are `low`, `medium`, `high`, and `critical`; the default is `none`.
 
-## 8. Output examples
+See [docs/ci-cd.md](docs/ci-cd.md) for a complete GitHub Actions example.
 
-`--json` and `--sarif` write machine-readable equivalents; `--sarif` output integrates with GitHub code scanning and other SARIF-compatible tooling.
+## 8. Output formats
+
+ANPU can write:
+
+- **HTML** for people and security review.
+- **JSON** for automation and downstream processing.
+- **SARIF 2.1.0** for SARIF-compatible security tooling.
+
+Reports include observed evidence and score explanations. ANPU does not manufacture evidence when a check could not be verified.
 
 ## 9. Integrations
 
-- **Nuclei** (`internal/integrations/nuclei.go`): if `nuclei` is on `PATH`, ANPU invokes it with a template scope matched to the selected profile, parses its `-jsonl` output, and converts each match into an ANPU finding. If Nuclei isn't installed, ANPU logs a warning and continues.
-- **OWASP ZAP** (`internal/integrations/zap.go`) — **[Planned]**: Interface defined, driver not yet implemented. A real roadmap extension point for full DAST orchestration.
+### Nuclei
+
+Nuclei is optional. If a `nuclei` executable is available on `PATH`, ANPU can invoke it using a profile-scoped template set and normalize its JSONL results into ANPU findings. If Nuclei is unavailable, ANPU warns and continues with its built-in analysis.
+
+### OWASP ZAP
+
+The ZAP integration is currently **planned**. The interface exists as an extension point, but the ZAP driver is not implemented yet.
 
 ## 10. Development
 
@@ -205,23 +207,21 @@ docs/                   Additional documentation
 go build ./...
 go vet ./...
 go test ./...
-gofmt -l $(find . -name '*.go' | grep -v third_party)   # should print nothing
+gofmt -l $(find . -name '*.go')
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide, including how to add a new analyzer or external tool integration.
+For the same checks used by GitHub Actions, see `.github/workflows/ci.yml` and `.github/workflows/scan.yml`.
 
 ## 11. Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Please read [SECURITY.md](SECURITY.md) first: ANPU has hard safety boundaries (no local-network scanning by default, no destructive actions, no fabricated evidence) that all contributions must respect.
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and read [SECURITY.md](SECURITY.md) first.
 
-### Good first issues
-
-Looking for a place to start? Check the [`good first issue`](https://github.com/Marwanmorsy999/anpu/labels/good%20first%20issue) label.
+Good starter work is tracked with the [`good first issue`](https://github.com/Marwanmorsy999/anpu/labels/good%20first%20issue) label.
 
 ## 12. Responsible use
 
-ANPU performs active network requests. **Only scan targets you own or are explicitly authorized to test.** Unauthorized scanning may be illegal in your jurisdiction. See [SECURITY.md](SECURITY.md) for the full list of built-in safety boundaries.
+ANPU performs network requests and, depending on the profile, may perform active discovery. **Only scan targets you own or are explicitly authorized to test.** Built-in guardrails reduce accidental harm but do not establish authorization.
 
----
+## License
 
-License: [Apache-2.0](LICENSE)
+Apache-2.0 — see [LICENSE](LICENSE).

@@ -14,7 +14,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -23,10 +26,10 @@ import (
 )
 
 // NucleiScanner implements scanner.Scanner by shelling out to the real
-// `nuclei` binary, if present on PATH.
+// `nuclei` binary, if present on PATH or in a Go bin directory.
 type NucleiScanner struct {
 	// BinaryPath overrides the resolved path to nuclei, primarily for
-	// testing. If empty, PATH lookup ("nuclei") is used.
+	// testing. If empty, PATH and Go bin directories are searched.
 	BinaryPath string
 	// Timeout bounds the whole nuclei invocation.
 	Timeout time.Duration
@@ -42,17 +45,50 @@ func (n *NucleiScanner) resolvedPath() string {
 	if n.BinaryPath != "" {
 		return n.BinaryPath
 	}
+	if path, err := findExecutable("nuclei"); err == nil {
+		return path
+	}
 	return "nuclei"
+}
+
+func findExecutable(binary string) (string, error) {
+	if path, err := exec.LookPath(binary); err == nil {
+		return path, nil
+	}
+
+	names := []string{binary}
+	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(binary), ".exe") {
+		names = append(names, binary+".exe")
+	}
+
+	var candidates []string
+	if gobin := strings.TrimSpace(os.Getenv("GOBIN")); gobin != "" {
+		for _, name := range names {
+			candidates = append(candidates, filepath.Join(gobin, name))
+		}
+	}
+	if gopath := strings.TrimSpace(os.Getenv("GOPATH")); gopath != "" {
+		for _, gp := range filepath.SplitList(gopath) {
+			for _, name := range names {
+				candidates = append(candidates, filepath.Join(gp, "bin", name))
+			}
+		}
+	}
+
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate, nil
+		}
+	}
+
+	return "", fmt.Errorf("%s not found on PATH or Go bin directories", binary)
 }
 
 // Available checks whether the nuclei binary can be found and executed.
 // It never attempts to download or install nuclei — ANPU orchestrates
 // existing tools, it doesn't manage them.
 func (n *NucleiScanner) Available(ctx context.Context) bool {
-	path, err := exec.LookPath(n.resolvedPath())
-	if err != nil {
-		return false
-	}
+	path := n.resolvedPath()
 	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(checkCtx, path, "-version")
@@ -71,7 +107,7 @@ func nucleiTemplateTagsForProfile(p models.Profile) []string {
 	case models.ProfileStandard:
 		return []string{"-tags", "exposure,misconfig,tech,ssl,cve", "-severity", "info,low,medium,high"}
 	case models.ProfileDeep:
-		return []string{"-severity", "info,low,medium,high,critical"} // broader default template set
+		return []string{"-severity", "info,low,medium,high,critical"}
 	default:
 		return []string{"-tags", "exposure,misconfig,tech,ssl"}
 	}
@@ -137,17 +173,13 @@ func (n *NucleiScanner) Run(ctx context.Context, sc *scanner.ScanContext) (scann
 		}
 		var nl nucleiJSONLine
 		if err := json.Unmarshal([]byte(line), &nl); err != nil {
-			continue // skip unparseable lines rather than failing the whole scan
+			continue
 		}
 		findings = append(findings, convertNucleiFinding(nl, sc.Target.Raw))
 	}
 
 	waitErr := cmd.Wait()
 	if waitErr != nil {
-		// A nonzero exit from nuclei with no findings/errors is common
-		// (e.g. exits based on match count semantics in some versions).
-		// Treat it as a warning, not a hard pipeline failure, since we
-		// already captured whatever valid JSONL was emitted.
 		warnings = append(warnings, fmt.Sprintf("nuclei exited with an error (results captured so far are still included): %v", waitErr))
 	}
 
@@ -182,15 +214,10 @@ func convertNucleiFinding(nl nucleiJSONLine, target string) models.Finding {
 	}
 
 	return models.Finding{
-		ID:          "nuclei-" + nl.TemplateID,
-		Title:       nl.Info.Name,
-		Description: nl.Info.Description,
-		Severity:    sev,
-		// Template matches are signature-based and generally reliable,
-		// but ANPU still labels them "high" rather than "confirmed"
-		// unless there's out-of-band verification, since template
-		// matches can have false positives (version banners, generic
-		// string matches, etc).
+		ID:              "nuclei-" + nl.TemplateID,
+		Title:           nl.Info.Name,
+		Description:     nl.Info.Description,
+		Severity:        sev,
 		Confidence:      models.ConfidenceHigh,
 		Category:        models.CategoryVulnerability,
 		CWE:             cwe,

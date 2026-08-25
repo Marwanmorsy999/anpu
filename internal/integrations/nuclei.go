@@ -11,6 +11,7 @@ package integrations
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -142,7 +143,7 @@ type nucleiJSONLine struct {
 func (n *NucleiScanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
 	if !n.Available(ctx) {
 		return scanner.StageResult{
-			Warnings: []string{"nuclei is not installed or not on PATH; skipping Nuclei-based checks. Install nuclei (https://github.com/projectdiscovery/nuclei) to enable this stage."},
+			Warnings: []string{"nuclei is not installed or not on PATH; skipping Nuclei-based checks. Install Nuclei and its templates to enable this stage."},
 		}, nil
 	}
 
@@ -157,6 +158,10 @@ func (n *NucleiScanner) Run(ctx context.Context, sc *scanner.ScanContext) (scann
 	if err != nil {
 		return scanner.StageResult{}, fmt.Errorf("creating nuclei stdout pipe: %w", err)
 	}
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
 	if err := cmd.Start(); err != nil {
 		return scanner.StageResult{}, fmt.Errorf("starting nuclei: %w", err)
 	}
@@ -180,7 +185,17 @@ func (n *NucleiScanner) Run(ctx context.Context, sc *scanner.ScanContext) (scann
 
 	waitErr := cmd.Wait()
 	if waitErr != nil {
-		warnings = append(warnings, fmt.Sprintf("nuclei exited with an error (results captured so far are still included): %v", waitErr))
+		msg := strings.TrimSpace(stderr.String())
+		if msg != "" {
+			// Keep the diagnostic compact for terminal/report output.
+			msg = strings.Join(strings.Fields(msg), " ")
+			if len(msg) > 500 {
+				msg = msg[:500] + "..."
+			}
+			warnings = append(warnings, fmt.Sprintf("nuclei exited with an error (results captured so far are still included): %v — %s", waitErr, msg))
+		} else {
+			warnings = append(warnings, fmt.Sprintf("nuclei exited with an error (results captured so far are still included): %v", waitErr))
+		}
 	}
 
 	return scanner.StageResult{Findings: findings, Warnings: warnings}, nil

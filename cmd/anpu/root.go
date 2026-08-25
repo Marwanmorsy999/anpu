@@ -26,6 +26,9 @@ ANPU must only be used against targets you own or are explicitly
 authorized to test.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 	}
 
 	root.PersistentFlags().StringVar(&flagConfigPath, "config", "", "path to a YAML config file (default: anpu.yaml in the current directory, if present)")

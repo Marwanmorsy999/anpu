@@ -31,16 +31,21 @@ func newShowCmd() *cobra.Command {
 			}
 
 			if exportPath != "" {
+				var exportErr error
 				switch format {
 				case "html":
-					return reporting.WriteHTML(summary, exportPath)
+					exportErr = reporting.WriteHTML(summary, exportPath)
 				case "json":
-					return reporting.WriteJSON(summary, exportPath)
+					exportErr = reporting.WriteJSON(summary, exportPath)
 				case "sarif":
-					return reporting.WriteSARIF(summary, exportPath)
+					exportErr = reporting.WriteSARIF(summary, exportPath)
 				default:
 					return fmt.Errorf("unknown --format %q: must be html, json, or sarif", format)
 				}
+				if exportErr == nil {
+					fmt.Fprintf(os.Stderr, "Wrote %s to %s\n", format, exportPath)
+				}
+				return exportErr
 			}
 
 			printScanDetail(summary)

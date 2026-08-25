@@ -69,10 +69,10 @@ type ScanConfig struct {
 	JSON      bool
 	HTML      bool
 	SARIF     bool
-	NoNuclei  bool
-	NoZAP     bool
-	Verbose   bool
-	Modules   ModuleConfig
+	NoZAP         bool
+	Verbose       bool
+	SkipPreCheck  bool
+	Modules       ModuleConfig
 }
 
 // ModuleConfig toggles individual pipeline stages, mirroring the
@@ -116,8 +116,9 @@ type ScanSummary struct {
 	Target      string    `json:"target"`
 	Profile     Profile   `json:"profile"`
 	StartedAt   time.Time `json:"started_at"`
-	CompletedAt time.Time `json:"completed_at"`
-	Status      string    `json:"status"` // running, completed, failed
+	CompletedAt  time.Time `json:"completed_at"`
+	Status       string    `json:"status"` // running, completed, failed
+	StatusReason string    `json:"status_reason,omitempty"`
 
 	Technologies []Technology `json:"technologies"`
 	Endpoints    []Endpoint   `json:"endpoints"`

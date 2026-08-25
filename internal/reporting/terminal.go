@@ -20,22 +20,27 @@ func PrintBanner(target string) {
 }
 
 // StageLine renders a single "Stage   ✓" / "Stage   ✗" / "Stage   -" line.
-func StageLine(label string, done, skipped bool, err error) string {
+func StageLine(label string, done, skipped bool, err error, verbose bool, findings, warnings int) string {
 	pad := 18
 	name := label
 	if len(name) < pad {
 		name = name + strings.Repeat(" ", pad-len(name))
 	}
+	var out string
 	switch {
 	case err != nil:
-		return fmt.Sprintf("%s✗ (%v)", name, err)
+		out = fmt.Sprintf("%s✗ (%v)", name, err)
 	case skipped:
-		return fmt.Sprintf("%s-", name)
+		out = fmt.Sprintf("%s-", name)
 	case done:
-		return fmt.Sprintf("%s✓", name)
+		out = fmt.Sprintf("%s✓", name)
 	default:
-		return name
+		out = name
 	}
+	if verbose && done {
+		out += fmt.Sprintf("  (+%d findings, %d warnings)", findings, warnings)
+	}
+	return out
 }
 
 // ProgressBar renders a simple textual progress bar.

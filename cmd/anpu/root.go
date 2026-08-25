@@ -24,11 +24,12 @@ combines the results into a single, understandable security report.
 
 ANPU must only be used against targets you own or are explicitly
 authorized to test.`,
-		SilenceUsage: true,
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 
 	root.PersistentFlags().StringVar(&flagConfigPath, "config", "", "path to a YAML config file (default: anpu.yaml in the current directory, if present)")
-	root.PersistentFlags().BoolVar(&flagVerbose, "verbose", false, "show detailed scanner output instead of the condensed terminal UI")
+	root.PersistentFlags().BoolVar(&flagVerbose, "verbose", false, "show per-stage finding and warning counts")
 
 	root.AddCommand(newScanCmd())
 	root.AddCommand(newHistoryCmd())

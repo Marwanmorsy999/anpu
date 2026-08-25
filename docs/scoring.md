@@ -11,7 +11,7 @@ Our scoring algorithm evaluates every finding based on a public formula, combini
 The risk score for a single finding is calculated as follows:
 
 ```
-Risk Score = (Severity × Confidence) + Exposure + Corroboration
+Risk Score = (Severity × Confidence) + Category Weight + Corroboration
 ```
 
 ### 1. Severity (1.0 to 10.0)
@@ -22,16 +22,22 @@ The base impact of the vulnerability if successfully exploited.
 - **High:** 7.0 - 8.9
 - **Critical:** 9.0 - 10.0
 
-### 2. Confidence (Multiplier: 0.1 to 1.0)
+### 2. Confidence (Multiplier: 0.55 to 1.0)
 How certain are we that this vulnerability exists, based on the evidence?
-- **Tentative (0.5):** Fingerprint matched, but no direct exploitation evidence.
-- **Firm (0.8):** Strong indicator of vulnerability, like an exposed config file.
-- **Certain (1.0):** Definitive proof, such as successful active exploitation or exact version matching a CVE.
+- **Low (0.55):** Fingerprint matched, but no direct exploitation evidence.
+- **Medium (0.75):** Suspected indicator of vulnerability.
+- **High (0.90):** Strong indicator of vulnerability, like an exposed config file.
+- **Confirmed (1.0):** Definitive proof, such as successful active exploitation or exact version matching a CVE.
 
-### 3. Exposure (Addition: 0.0 to +1.0)
-Where was the issue found?
-- **Internal/Admin endpoints:** +0.0 (baseline)
-- **Public-facing/Unauthenticated endpoints:** +1.0 (increases risk)
+### 3. Category Weight (Addition: 0.0 to +1.0)
+What category does the finding belong to? (Note: The output string retains the `exposure_weight` label for backward compatibility)
+- **Vulnerability:** +1.0
+- **Authentication:** +0.7
+- **TLS:** +0.5
+- **Endpoint/Configuration:** +0.3
+- **Cookies/Exposure:** +0.2
+- **Headers/Technology:** +0.1
+- **Other:** +0.0
 
 ### 4. Corroboration (Addition: 0.0 to +1.0)
 Did multiple tools flag this same issue?
@@ -48,19 +54,19 @@ Let's look at how a common finding gets scored.
 
 **Scenario:** A scanner detects that `https://example.com` does not return the `Strict-Transport-Security` header.
 - **Finding:** Missing HSTS Header
-- **Base Severity:** 4.0 (Medium) - It allows potential downgrade attacks.
+- **Base Severity:** 4.5 (Medium) - It allows potential downgrade attacks.
 
 **Calculation:**
-1. **Confidence:** We observed the HTTP response directly and the header is unequivocally absent. (Certain: `1.0`)
-2. **Exposure:** This is on the main public index page. (Public: `+0.5`)
+1. **Confidence:** We observed the HTTP response directly and the header is unequivocally absent. (Confirmed: `1.0`)
+2. **Category Weight:** This is a header configuration issue. (Headers: `+0.1`)
 3. **Corroboration:** Only the internal ANPU header analyzer flagged this. (Single source: `0.0`)
 
 ```
-Score = (4.0 × 1.0) + 0.5 + 0.0 = 4.5 (Medium)
+Score = (4.5 × 1.0) + 0.1 + 0.0 = 4.6 (Medium)
 ```
 
 ## Why Transparency Matters for Security Teams
 
-1. **Prioritization without the Noise:** When every tool cries "Critical," nothing is critical. By adjusting scores based on exposure and confidence, teams can focus on what actually matters.
+1. **Prioritization without the Noise:** When every tool cries "Critical," nothing is critical. By adjusting scores based on category and confidence, teams can focus on what actually matters.
 2. **Explainability to Stakeholders:** When a developer asks, "Why is this a high priority?", you can point to the exact math: "It has a high base severity, and we have 100% confidence it exists on a public-facing endpoint."
 3. **Reproducibility:** A deterministic formula means that the same scan, run in the same environment, will produce the same score every time. No opaque AI hallucinations.

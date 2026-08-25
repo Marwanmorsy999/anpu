@@ -31,10 +31,8 @@ var confidenceMultiplier = map[models.Confidence]float64{
 	models.ConfidenceLow:       0.55,
 }
 
-// exposureBonus adds a small amount for findings on categories that
-// typically represent internet-facing, easily reachable exposure versus
-// ones requiring more specific conditions.
-var categoryExposure = map[models.Category]float64{
+// categoryWeight adds a small score bonus for findings based on their category.
+var categoryWeight = map[models.Category]float64{
 	models.CategoryVulnerability:  1.0, // confirmed/near-confirmed vuln from a real scanner (Nuclei/ZAP)
 	models.CategoryAuthentication: 0.7,
 	models.CategoryTLS:            0.5,
@@ -59,7 +57,7 @@ func ScoreFinding(f models.Finding) models.Finding {
 	if !ok {
 		confMult = 0.5
 	}
-	exposure := categoryExposure[f.Category]
+	weight := categoryWeight[f.Category]
 
 	// Merged findings (confirmed by multiple independent scanners) get a
 	// small corroboration bonus, since independent agreement increases
@@ -70,7 +68,7 @@ func ScoreFinding(f models.Finding) models.Finding {
 		corroboration = math.Min(0.5, 0.15*float64(len(f.MergedFrom)-1))
 	}
 
-	raw := base*confMult + exposure + corroboration
+	raw := base*confMult + weight + corroboration
 	score := math.Round(math.Min(raw, 10.0)*10) / 10
 	if score < 0 {
 		score = 0
@@ -79,7 +77,7 @@ func ScoreFinding(f models.Finding) models.Finding {
 	f.RiskScore = score
 	f.ScoreExplanation = fmt.Sprintf(
 		"base=%.1f (severity=%s) × confidence_multiplier=%.2f (confidence=%s) + exposure_weight=%.2f (category=%s) + corroboration_bonus=%.2f (%d independent source(s)) = %.1f/10",
-		base, f.Severity, confMult, f.Confidence, exposure, f.Category, corroboration, maxInt(1, len(f.MergedFrom)), score,
+		base, f.Severity, confMult, f.Confidence, weight, f.Category, corroboration, maxInt(1, len(f.MergedFrom)), score,
 	)
 	return f
 }

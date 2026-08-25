@@ -3,18 +3,22 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/pkg/models"
 )
 
 // StageProgress is emitted after each pipeline stage completes, for the
 // terminal UI to render progress.
 type StageProgress struct {
-	StageName string
-	Done      bool
-	Skipped   bool
-	Err       error
+	StageName        string
+	Done             bool
+	Skipped          bool
+	Err              error
+	NewFindingsCount int
+	WarningsCount    int
 }
 
 // ProgressFunc is called after each stage. It may be nil.
@@ -31,6 +35,7 @@ type Stage struct {
 // Pipeline runs an ordered list of Stages against a validated target and
 // aggregates their output into a ScanSummary.
 type Pipeline struct {
+	Client *anpuhttp.Client
 	Stages []Stage
 }
 
@@ -63,6 +68,17 @@ func (p *Pipeline) Run(
 		Status:    "running",
 	}
 
+	if p.Client != nil && !cfg.SkipPreCheck {
+		ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		_, err := p.Client.HeadOrGet(ctxTimeout, target.Raw.String())
+		if err != nil && isNetworkError(err) {
+			summary.Status = "failed"
+			summary.StatusReason = fmt.Sprintf("connectivity check failed: %v", err)
+			return nil, fmt.Errorf("target is unreachable: %v", err)
+		}
+	}
+
 	for _, stage := range p.Stages {
 		if !stage.Enabled {
 			if progress != nil {
@@ -77,6 +93,8 @@ func (p *Pipeline) Run(
 			}
 			continue
 		}
+
+		preDedupCount := len(dedup(summary.Findings))
 
 		result, err := stage.Scanner.Run(ctx, sc)
 		if err != nil {
@@ -98,7 +116,13 @@ func (p *Pipeline) Run(
 		sc.Endpoints = summary.Endpoints
 
 		if progress != nil {
-			progress(StageProgress{StageName: stage.Label, Done: true})
+			postDedupCount := len(dedup(summary.Findings))
+			progress(StageProgress{
+				StageName:        stage.Label, 
+				Done:             true,
+				NewFindingsCount: postDedupCount - preDedupCount,
+				WarningsCount:    len(result.Warnings),
+			})
 		}
 	}
 
@@ -160,4 +184,16 @@ var scanIDCounter int64
 func newScanID() string {
 	scanIDCounter++
 	return fmt.Sprintf("scan-%d-%d", time.Now().Unix(), scanIDCounter)
+}
+
+func isNetworkError(err error) bool {
+	s := err.Error()
+	return strings.Contains(s, "no such host") ||
+		strings.Contains(s, "connection refused") ||
+		strings.Contains(s, "all resolved addresses failed") ||
+		strings.Contains(s, "i/o timeout") ||
+		strings.Contains(s, "network is unreachable") ||
+		strings.Contains(s, "context deadline exceeded") ||
+		strings.Contains(s, "refusing connection") ||
+		strings.Contains(s, "dial tcp")
 }

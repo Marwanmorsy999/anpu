@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+- **Breaking Change**: Added a connectivity pre-check. Scans now immediately abort with a non-zero exit code if the target is completely unreachable (e.g., DNS failure, connection refused). Use `--skip-pre-check` to bypass this behavior.
+- Fixed a bug where error messages were printed twice in the terminal.
+- Added path to output filenames (`target-path-date.html`) to prevent collisions on same-host scans.
+- Support config fallback for target URL when not passed via command line.
+- Fixed `show --export` silencing output on successful writes.
+- Upgraded `--verbose` output to show the true number of deduplicated findings each stage contributed.
+- Clarified scoring documentation to explicitly mention Category Weight over Exposure.
+
 ## 0.2.1
 
 - Clarified the status of OWASP ZAP integration (currently planned / interface defined) in documentation.

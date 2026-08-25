@@ -31,10 +31,11 @@ func newScanCmd() *cobra.Command {
 		jsonOut   bool
 		htmlOut   bool
 		sarifOut  bool
-		outputDir string
-		noNuclei  bool
-		noZAP     bool
-		failOn    string
+		outputDir    string
+		noNuclei     bool
+		noZAP        bool
+		failOn       string
+		skipPreCheck bool
 	)
 
 	cmd := &cobra.Command{
@@ -44,9 +45,13 @@ func newScanCmd() *cobra.Command {
 
 ANPU only performs active network requests against targets you own or
 are explicitly authorized to test.`,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runScan(cmd, args[0], profile, jsonOut, htmlOut, sarifOut, outputDir, noNuclei, noZAP, failOn)
+			var targetArg string
+			if len(args) > 0 {
+				targetArg = args[0]
+			}
+			return runScan(cmd, targetArg, profile, jsonOut, htmlOut, sarifOut, outputDir, noNuclei, noZAP, failOn, skipPreCheck)
 		},
 	}
 
@@ -58,11 +63,12 @@ are explicitly authorized to test.`,
 	cmd.Flags().BoolVar(&noNuclei, "no-nuclei", false, "disable the Nuclei integration for this scan")
 	cmd.Flags().BoolVar(&noZAP, "no-zap", false, "disable the ZAP integration for this scan (no-op in this MVP; ZAP is not yet implemented)")
 	cmd.Flags().StringVar(&failOn, "fail-on", "none", "return a non-zero exit status when findings meet/exceed this severity: none, low, medium, high, critical")
+	cmd.Flags().BoolVar(&skipPreCheck, "skip-pre-check", false, "skip the initial connectivity check (scan runs even if host appears down)")
 
 	return cmd
 }
 
-func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut, sarifOut bool, outputDir string, noNuclei, noZAP bool, failOn string) error {
+func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut, sarifOut bool, outputDir string, noNuclei, noZAP bool, failOn string, skipPreCheck bool) error {
 	profile := models.Profile(strings.ToLower(profileStr))
 	if !profile.Valid() {
 		return fmt.Errorf("invalid --profile %q: must be one of safe, standard, deep", profileStr)
@@ -74,15 +80,26 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 
 	fmt.Print(reporting.AuthorizationWarning)
 
+	cfgFile, err := config.Load(resolveConfigPath())
+	if err != nil {
+		return err
+	}
+
+	if targetArg == "" {
+		if cfgFile.Target.URL == "" {
+			return fmt.Errorf("no target specified: pass a URL or set target.url in anpu.yaml")
+		}
+		targetArg = cfgFile.Target.URL
+		if !strings.HasPrefix(targetArg, "http://") && !strings.HasPrefix(targetArg, "https://") {
+			targetArg = "https://" + targetArg // default to https for config targets
+		}
+	}
+
 	target, err := scanner.ValidateTarget(targetArg)
 	if err != nil {
 		return fmt.Errorf("target validation failed: %w", err)
 	}
 
-	cfgFile, err := config.Load(resolveConfigPath())
-	if err != nil {
-		return err
-	}
 	modules := config.ResolveModules(profile, cfgFile, noNuclei, noZAP)
 
 	cfg := models.ScanConfig{
@@ -90,12 +107,13 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		Profile:   profile,
 		OutputDir: outputDir,
 		JSON:      jsonOut,
-		HTML:      htmlOut,
-		SARIF:     sarifOut,
-		NoNuclei:  noNuclei,
-		NoZAP:     noZAP,
-		Verbose:   flagVerbose,
-		Modules:   modules,
+		HTML:          htmlOut,
+		SARIF:         sarifOut,
+		NoNuclei:      noNuclei,
+		NoZAP:         noZAP,
+		Verbose:       flagVerbose,
+		SkipPreCheck:  skipPreCheck,
+		Modules:       modules,
 	}
 
 	reporting.PrintBanner(target.Raw)
@@ -112,10 +130,10 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		scoring.AggregateScore,
 		func(p scanner.StageProgress) {
 			if p.Skipped {
-				fmt.Println(reporting.StageLine(p.StageName, false, true, nil))
+				fmt.Println(reporting.StageLine(p.StageName, false, true, nil, false, 0, 0))
 				return
 			}
-			fmt.Println(reporting.StageLine(p.StageName, p.Err == nil, false, p.Err))
+			fmt.Println(reporting.StageLine(p.StageName, p.Err == nil, false, p.Err, cfg.Verbose, p.NewFindingsCount, p.WarningsCount))
 		},
 	)
 	if err != nil {
@@ -127,8 +145,12 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 	}
 
 	reportPath := ""
-	slug := sanitizeForFilename(target.Host)
-	dateStr := time.Now().Format("2006-01-02")
+	slugBase := target.Host
+	if target.Raw.Path != "" && target.Raw.Path != "/" {
+		slugBase += target.Raw.Path
+	}
+	slug := sanitizeForFilename(slugBase)
+	dateStr := time.Now().Format("2006-01-02-150405")
 
 	if htmlOut {
 		p := filepath.Join(outputDir, fmt.Sprintf("%s-%s.html", slug, dateStr))
@@ -183,6 +205,7 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig) *scanne
 	zap := integrations.NewZapScanner()
 
 	return &scanner.Pipeline{
+		Client: client,
 		Stages: []scanner.Stage{
 			{Label: "Recon", Enabled: modules.Recon, Scanner: recon.New(client)},
 			{Label: "Technology", Enabled: modules.Technology, Scanner: technology.New(client)},

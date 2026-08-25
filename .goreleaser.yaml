@@ -1,0 +1,55 @@
+version: 2
+
+project_name: anpu
+
+before:
+  hooks:
+    - go build ./...
+
+builds:
+  - id: anpu
+    main: ./cmd/anpu
+    binary: anpu
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: darwin
+        goarch: arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}}
+
+archives:
+  - id: anpu
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    files:
+      - README.md
+      - LICENSE
+      - anpu.example.yaml
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: Marwanmorsy999
+    name: anpu
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"

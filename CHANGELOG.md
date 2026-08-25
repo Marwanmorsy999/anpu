@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.1
+
+- **CI self-test fix**: `.github/workflows/scan.yml` uploaded a SARIF file that never existed (`reports/anpu-report.sarif`) while the scanner writes `<host>-<timestamp>.sarif`. The workflow now uploads `./reports/*.sarif`, declares the required `security-events: write` permission, pins Go via `go-version-file: go.mod` instead of a hardcoded version, adds job timeout/concurrency controls, and asserts SARIF validity before upload.
+- The security scan now targets a self-hosted OWASP Juice Shop fixture on loopback (`http://127.0.0.1:3000`, enabled via `ANPU_ALLOW_LOCAL_NETWORK=1`) with the passive `safe` profile, replacing the third-party `example.com` target and its flaky external dependencies. No CI job or default test run sends requests to third-party websites anymore; the opt-in live integration test (`ANPU_LIVE_TESTS=1`) is unchanged.
+- Removed the Nuclei install step from CI; ANPU gracefully degrades without it.
+- **Test integrity**: the output directory is now created and *write-probed* before the scan pipeline runs in `anpu scan`, so unwritable output paths — including pre-existing read-only directories, which `MkdirAll` alone cannot catch — fail fast with zero network I/O. This makes `go test ./cmd/anpu` fully offline-safe (previously an exit-code test triggered live HTTP requests).
+- CI hygiene: gofmt verification no longer relies on fragile word-splitting of `find` output (and now lists offending files), `govulncheck` runs on every build pinned to a fixed version instead of `@latest`, and SARIF uploads are skipped on fork pull requests where the token is read-only.
+- Build/supply-chain: added `.dockerignore`, reordered the Dockerfile to cache `go mod download` independently of source changes with the Go version overridable via a build arg to match `go.mod`, and enabled weekly Dependabot updates for Go modules and GitHub Actions.
+- Fixed stale repository URIs pointing at a non-existent repo: SARIF reports (`tool.driver.informationUri`), the outbound HTTP User-Agent string, and the contributing docs clone URL now reference this repository. The downstream-user workflow template in `docs/ci-cd.md` builds ANPU from source because `go install <repo>/cmd/anpu@latest` cannot resolve while the module path differs from the repo URL.
+
 ## 0.3.0
 
 - **Repo cleanup**: removed the entire vendored `third_party/` tree (~106 files of upstream cobra/pflag/yaml.v3/mousetrap sources and their replace directives). Dependencies now resolve normally from the Go module proxy, pinned by `go.sum`.

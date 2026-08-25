@@ -121,6 +121,12 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		Modules:      modules,
 	}
 
+	// Validate the output directory before any network I/O happens so an
+	// unwritable path fails fast instead of after a full pipeline run.
+	if err := ensureWritableDir(outputDir); err != nil {
+		return err
+	}
+
 	reporting.PrintBanner(target.Raw)
 
 	client := anpuhttp.NewClientWithLocalNetworkAllowed(scanner.AllowLocalNetwork)
@@ -143,10 +149,6 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 	)
 	if err != nil {
 		return fmt.Errorf("scan pipeline failed: %w", err)
-	}
-
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return fmt.Errorf("creating output directory: %w", err)
 	}
 
 	reportPath := ""
@@ -242,6 +244,25 @@ func sanitizeForFilename(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// ensureWritableDir creates dir if needed and proves it actually accepts
+// writes, so unwritable output fails before any network I/O. MkdirAll
+// alone is not sufficient: it returns nil for an already-existing
+// directory without checking permissions.
+func ensureWritableDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("creating output directory %s: %w", dir, err)
+	}
+	probe := filepath.Join(dir, ".anpu-write-probe")
+	f, err := os.OpenFile(probe, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("output directory %s is not writable: %w", dir, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("output directory %s is not writable: %w", dir, err)
+	}
+	return os.Remove(probe)
 }
 
 func parseFailOn(raw string) (models.Severity, error) {

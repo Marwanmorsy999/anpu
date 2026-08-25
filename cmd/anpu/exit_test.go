@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -82,5 +83,50 @@ func TestExitCodes(t *testing.T) {
 				t.Errorf("got exit code %d, want %d", gotExit, tt.want)
 			}
 		})
+	}
+}
+
+// TestExitCodesReadOnlyOutputDir covers the case MkdirAll alone cannot
+// catch: the output directory already exists but is not writable. The
+// scan must still fail fast (exit 1) via the write-probe check.
+func TestExitCodesReadOnlyOutputDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits do not block writes on Windows")
+	}
+	tmpDir := t.TempDir()
+	binPath := filepath.Join(tmpDir, "anpu")
+
+	buildCmd := exec.Command("go", "build", "-o", binPath, ".")
+	if err := buildCmd.Run(); err != nil {
+		t.Fatalf("failed to build binary: %v", err)
+	}
+
+	roDir := filepath.Join(tmpDir, "ro-output")
+	if err := os.Mkdir(roDir, 0o755); err != nil {
+		t.Fatalf("failed to create output dir: %v", err)
+	}
+	if err := os.Chmod(roDir, 0o555); err != nil {
+		t.Fatalf("failed to chmod output dir: %v", err)
+	}
+	defer func() {
+		if err := os.Chmod(roDir, 0o755); err != nil {
+			t.Logf("failed to restore permissions on %s: %v", roDir, err)
+		}
+	}()
+
+	cmd := exec.Command(binPath, "scan", "http://example.com", "--output", roDir)
+	cmd.Env = append(os.Environ(), "HOME="+tmpDir, "USERPROFILE="+tmpDir)
+	err := cmd.Run()
+
+	gotExit := 0
+	if err != nil {
+		exitErr, ok := err.(*exec.ExitError)
+		if !ok {
+			t.Fatalf("failed to run command: %v", err)
+		}
+		gotExit = exitErr.ExitCode()
+	}
+	if gotExit != 1 {
+		t.Errorf("got exit code %d, want 1 for read-only output dir", gotExit)
 	}
 }

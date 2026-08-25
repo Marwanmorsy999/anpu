@@ -6,11 +6,35 @@ on:
   pull_request:
     branches: [ "main" ]
   schedule:
-    - cron: '0 2 * * *' # Daily at 2am
+    # Weekly (Mondays at 03:00 UTC): catches tool/image drift without
+    # re-scanning an unchanged local fixture every day.
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   security-scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Self-hosted vulnerable fixture: OWASP Juice Shop served on the
+    # runner's own loopback. The scan never targets third-party hosts.
+    # NOTE: the health check relies on busybox wget inside the image
+    # (true while it stays Alpine-based); revisit if the base image changes.
+    services:
+      juice-shop:
+        image: bkimminich/juice-shop:latest
+        ports: [ "3000:3000" ]
+        options: >-
+          --health-cmd "wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1"
+          --health-interval 10s --health-timeout 5s --health-retries 12
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -18,28 +42,46 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
-          
-      - name: Install Nuclei (Optional)
-        run: |
-          go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
-          
+          go-version-file: go.mod
+
       - name: Build ANPU
         run: go build -o anpu ./cmd/anpu
-        
-      - name: Run ANPU Scan
-        # Replace the target URL with your staging or local testing environment
+
+      - name: Run ANPU Scan (self-test against local fixture)
+        env:
+          # Required by internal/scanner/target.go to permit loopback targets.
+          # NEVER enable this against hosts you do not own.
+          ANPU_ALLOW_LOCAL_NETWORK: "1"
         run: |
-          ./anpu scan https://example.com \
-            --profile standard \
-            --fail-on high \
-            --sarif \
+          ./anpu scan http://127.0.0.1:3000 \
+            --profile safe \
+            --sarif --json --html=false \
             --output ./reports/
 
+      - name: Assert SARIF Report Validity
+        if: always()
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          sarif_files=(./reports/*.sarif)
+          if [ "${#sarif_files[@]}" -ne 1 ]; then
+            echo "Expected exactly one SARIF file in ./reports/, found ${#sarif_files[@]}" >&2
+            ls -la ./reports/ || true
+            exit 1
+          fi
+          jq -e '.runs[0].tool.driver.name == "ANPU"' "${sarif_files[0]}"
+          # The TLS stage deterministically emits findings against a
+          # plain-HTTP fixture, so results are guaranteed non-empty.
+          jq -e '.runs[0].results | length >= 1' "${sarif_files[0]}"
+
       - name: Upload SARIF Report
-        if: always() # Upload report even if the scan failed (found vulnerabilities)
+        # Runs even when scan/assertions failed so partial results still
+        # reach the Security tab. Skipped for fork PRs, which receive a
+        # read-only token (upload would 403).
+        # If this repo ever becomes private without GHAS, swap this step
+        # for actions/upload-artifact (upload-sarif requires code scanning).
+        if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: ./reports/anpu-report.sarif
+          sarif_file: ./reports/*.sarif
           category: anpu-scan

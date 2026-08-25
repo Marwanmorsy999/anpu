@@ -29,7 +29,7 @@ are especially welcome.
 ## Development setup
 
 ```bash
-git clone https://github.com/anpu-project/anpu
+git clone https://github.com/Marwanmorsy999/anpu.git
 cd anpu
 go build ./...
 go test ./...

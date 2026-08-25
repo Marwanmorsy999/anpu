@@ -26,7 +26,7 @@ const (
 	MaxBodyBytes = 5 * 1024 * 1024 // 5MB
 	// UserAgent identifies ANPU truthfully to the target so operators can
 	// see it in their logs — no user-agent spoofing.
-	UserAgent = "anpu-security-scanner/0.1 (+https://github.com/anpu-project/anpu)"
+	UserAgent = "anpu-security-scanner/0.1 (+https://github.com/Marwanmorsy999/anpu)"
 )
 
 // Client wraps *http.Client with ANPU's safety defaults.

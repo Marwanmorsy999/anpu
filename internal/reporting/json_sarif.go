@@ -149,7 +149,7 @@ func WriteSARIF(summary *models.ScanSummary, path string) error {
 		Runs: []sarifRun{{
 			Tool: sarifTool{Driver: sarifDriver{
 				Name:           "ANPU",
-				InformationURI: "https://github.com/anpu-project/anpu",
+				InformationURI: "https://github.com/Marwanmorsy999/anpu",
 				Version:        version.Version,
 				Rules:          rules,
 			}},

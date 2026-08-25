@@ -2,6 +2,8 @@
 
 ## 0.3.1 (Unreleased)
 
+- **Release targets**: GoReleaser now produces native archives for Linux amd64/arm64, Windows amd64/arm64, and macOS amd64/arm64.
+- **Release smoke test**: the release workflow downloads the published Linux amd64 archive and verifies `anpu --version` and `anpu --help` before the workflow completes.
 - **CI self-test**: security scanning now runs only against a pinned local OWASP Juice Shop fixture and uploads generated reports as workflow artifacts instead of GitHub Code Scanning.
 - **SARIF validation**: CI verifies SARIF 2.1.0 structure, ANPU tool identity, and non-empty results before archiving reports.
 - **CI reliability**: workflow uses the Go version declared in `go.mod`, adds concurrency/timeout controls, and removes the floating Nuclei installation from the security workflow.

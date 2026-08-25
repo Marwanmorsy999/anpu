@@ -11,7 +11,7 @@ builds:
     main: ./cmd/anpu
     binary: anpu
     env:
-      - CGO_ENABLED=1
+      - CGO_ENABLED=0
     goos:
       - linux
     goarch:

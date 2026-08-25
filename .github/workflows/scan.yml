@@ -12,7 +12,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -39,10 +38,10 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
@@ -89,25 +88,16 @@ jobs:
             ls -la ./reports/ || true
             exit 1
           fi
+          jq -e '.version == "2.1.0"' "${sarif_files[0]}"
           jq -e '.runs[0].tool.driver.name == "ANPU"' "${sarif_files[0]}"
-          # The TLS stage deterministically emits findings against a
-          # plain-HTTP fixture, so results are guaranteed non-empty.
+          jq -e '.runs[0].results | type == "array"' "${sarif_files[0]}"
           jq -e '.runs[0].results | length >= 1' "${sarif_files[0]}"
 
-      - name: Upload SARIF Report
-        # Runs even when scan/assertions failed so partial results still
-        # reach the Security tab. Skipped for fork PRs, which receive a
-        # read-only token (upload would 403).
-        # If this repo ever becomes private without GHAS, swap this step
-        # for actions/upload-artifact (upload-sarif requires code scanning).
-        if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Upload Scan Reports
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          # `with:` values are passed to the action literally — there is
-          # no shell in between to expand a glob, so `./reports/*.sarif`
-          # was being interpreted as a file literally named "*.sarif"
-          # and never found. upload-sarif accepts a directory and
-          # auto-discovers the *.sarif file(s) inside it, so point it
-          # at the directory instead of a glob pattern.
-          sarif_file: ./reports/
-          category: anpu-scan
+          name: anpu-security-scan-${{ github.run_id }}
+          path: ./reports/
+          if-no-files-found: warn
+          retention-days: 14

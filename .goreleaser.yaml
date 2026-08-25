@@ -4,7 +4,7 @@ project_name: anpu
 
 before:
   hooks:
-    - go build ./...
+    - go test ./...
 
 builds:
   - id: anpu
@@ -14,8 +14,11 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
+      - windows
+      - darwin
     goarch:
       - amd64
+      - arm64
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}}
 

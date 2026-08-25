@@ -13,10 +13,6 @@ func TestSimilarity(t *testing.T) {
 		t.Fatalf("identical sets: got %v, want 1.0", got)
 	}
 
-	// Digits and punctuation are ignored; a page with rotated nonces and
-	// an embedded path must still read as near-identical. Uses a
-	// realistically-sized shell so the handful of dynamic tokens is
-	// diluted by shared content, mirroring production behavior.
 	shell := `<!DOCTYPE html> <html lang="en"> <head> <meta charset="utf-8">
 	<meta name="viewport" content="width=device-width initial-scale=1">
 	<title>Welcome to the Example Application Portal Home</title>
@@ -58,6 +54,29 @@ func TestWordSetIgnoresDigitsAndShortTokens(t *testing.T) {
 	}
 	if _, ok := w["123"]; ok {
 		t.Error("digit-only tokens must be excluded")
+	}
+}
+
+func TestRecordableStatus(t *testing.T) {
+	cases := []struct {
+		status int
+		want   bool
+	}{
+		{200, true},
+		{204, true},
+		{206, true},
+		{301, false},
+		{302, false},
+		{401, false},
+		{403, false},
+		{404, false},
+		{406, false},
+		{500, false},
+	}
+	for _, tc := range cases {
+		if got := recordableStatus(tc.status); got != tc.want {
+			t.Errorf("recordableStatus(%d) = %v, want %v", tc.status, got, tc.want)
+		}
 	}
 }
 

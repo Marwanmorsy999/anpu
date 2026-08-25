@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/anpu-project/anpu/pkg/version"
 	"github.com/spf13/cobra"
 )
 
@@ -32,8 +33,9 @@ var (
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "anpu",
-		Short: "ANPU — Guard what you build. Open-source web security intelligence.",
+		Use:     "anpu",
+		Short:   "ANPU — Guard what you build. Open-source web security intelligence.",
+		Version: version.Version,
 		Long: `ANPU is an authorized web security analysis and attack-surface
 intelligence tool. It orchestrates existing security tools (Nuclei,
 and in future OWASP ZAP) alongside its own passive analyzers, and

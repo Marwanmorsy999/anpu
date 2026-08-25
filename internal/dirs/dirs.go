@@ -12,10 +12,10 @@ package dirs
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"math/rand"
 	"regexp"
 	"strings"
 	"sync"
@@ -46,10 +46,10 @@ type probe struct {
 type severityClass int
 
 const (
-	classCriticalExposure severityClass = iota // .env, .git, backups, cloud creds
-	classServerInfo                            // phpinfo, server-status, debug
-	classAdmin                                 // admin panels, dashboards
-	classInteresting                           // misc config/docs worth a look
+	classCriticalExposure severityClass = iota
+	classServerInfo
+	classAdmin
+	classInteresting
 )
 
 var wordlist = []probe{
@@ -119,12 +119,6 @@ var wordlist = []probe{
 func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
 	base := strings.TrimRight(sc.Target.Raw, "/")
 
-	// Soft-404 calibration with TWO random baseline paths. Many hosts
-	// (SPAs, parked/shared hosting) answer every path with HTTP 200 and
-	// a page whose bytes differ per request (tokens, embedded paths), so
-	// exact hash/size matching is useless. Instead: if two random paths
-	// produce similar bodies, the server is a catch-all and probes are
-	// filtered by similarity against the baseline body.
 	baseA, err := d.client.Get(ctx, base+"/"+randHex(16))
 	if err != nil {
 		return scanner.StageResult{}, fmt.Errorf("fetching soft-404 baseline: %w", err)
@@ -145,10 +139,6 @@ func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		}
 	}
 
-	// Fingerprint of the site's own root/shell page: some servers (e.g.
-	// large SPAs) answer unknown paths with HTTP 200 and a copy of the
-	// application shell rather than a 404. Any probe whose body closely
-	// matches this shell is a soft-404 even when the status looks real.
 	rootResp, err := d.client.Get(ctx, base+"/")
 	rootWords := map[string]struct{}{}
 	if err == nil && rootResp != nil && len(rootResp.Body) > 0 {
@@ -179,18 +169,19 @@ func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			if err != nil || resp == nil {
 				return
 			}
-			// Only genuine success responses count as exposure; 401/403
-			// mean "exists but denied". Every other status (404, 406,
-			// 410, redirects to login pages aside) is a rejection of the
-			// probe itself — e.g. WAF 406 blocks — not a finding.
-			isSuccess := resp.StatusCode >= 200 && resp.StatusCode < 300
-			isProtected := resp.StatusCode == 401 || resp.StatusCode == 403
-			if !isSuccess && !isProtected {
+
+			// HTTP 2xx is positive evidence that the requested resource
+			// is reachable. 4xx/5xx responses are not evidence that the
+			// sensitive path exists: WAFs, CDNs and application routers
+			// commonly return generic 401/403/404/406 responses for both
+			// real and nonexistent paths. In particular, a generic 403
+			// must never be reported as "file exists" without independent
+			// corroboration.
+			if !recordableStatus(resp.StatusCode) {
 				return
 			}
+
 			if resp.StatusCode == notFoundStatus {
-				// Same status as the "not found" fingerprint: only keep it
-				// if the body is clearly NOT the same generic response.
 				if catchAll {
 					if similarity(wordSet(resp.Body), notFoundWords) >= 0.85 {
 						return
@@ -201,13 +192,12 @@ func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 					return
 				}
 			}
-			// App-shell detection: a 200 that essentially renders the
-			// site's own root page is routing fallback, not a file.
-			if isSuccess && p.Class != classInteresting &&
-				len(rootWords) > 0 &&
+
+			if len(rootWords) > 0 &&
 				similarity(wordSet(resp.Body), rootWords) >= 0.90 {
 				return
 			}
+
 			mu.Lock()
 			hits = append(hits, hit{p, resp})
 			mu.Unlock()
@@ -218,20 +208,10 @@ func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	var findings []models.Finding
 	for _, h := range hits {
 		sev, conf := classify(h.p.Class)
-		// A 401/403 means the resource exists but access is denied at
-		// the edge/WAF: downgrade to a "present but protected" note so
-		// reports distinguish real exposure from blocked probes.
-		protected := h.resp.StatusCode == 401 || h.resp.StatusCode == 403
-		if protected {
-			if sev.Rank() > models.SeverityLow.Rank() {
-				sev = models.SeverityLow
-			}
-			conf = models.ConfidenceMedium
-		}
 		findings = append(findings, models.Finding{
 			ID:          "dirs-exposed-" + slug(h.p.Path),
 			Title:       fmt.Sprintf("%s returned HTTP %d", h.p.Path, h.resp.StatusCode),
-			Description: protectedDescription(protected, h.p.Path, h.resp.StatusCode, h.p.Note),
+			Description: exposedDescription(h.p.Path, h.resp.StatusCode, h.p.Note),
 			Severity:    sev,
 			Confidence:  conf,
 			Category:    models.CategoryExposure,
@@ -253,11 +233,16 @@ func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	return scanner.StageResult{Findings: findings}, nil
 }
 
-func protectedDescription(protected bool, path string, status int, note string) string {
-	if protected {
-		return fmt.Sprintf("The path %s answered with HTTP %d, meaning it exists but is denied by the server/WAF. It is not currently readable, but its presence confirms the file was deployed — remove sensitive files from build artifacts rather than relying on deny rules.", path, status)
-	}
-	return fmt.Sprintf("The path %s exists (HTTP %d) and appears to be %s. Paths like this are routinely probed by attackers; exposure may disclose configuration, credentials, or internal structure.", path, status, article(note))
+// recordableStatus returns true only when the probe received a successful
+// 2xx response. Denials and error responses are inconclusive because a WAF,
+// CDN or application router can emit the same status for existing and missing
+// resources.
+func recordableStatus(status int) bool {
+	return status >= 200 && status < 300
+}
+
+func exposedDescription(path string, status int, note string) string {
+	return fmt.Sprintf("The path %s returned HTTP %d and was therefore reachable. It appears to be %s. Paths like this are routinely probed by attackers; exposure may disclose configuration, credentials, or internal structure.", path, status, article(note))
 }
 
 func classify(c severityClass) (models.Severity, models.Confidence) {
@@ -267,7 +252,7 @@ func classify(c severityClass) (models.Severity, models.Confidence) {
 	case classServerInfo:
 		return models.SeverityMedium, models.ConfidenceMedium
 	case classAdmin:
-		return models.SeverityLow, models.ConfidenceLow // existence alone isn't a vuln
+		return models.SeverityLow, models.ConfidenceLow
 	default:
 		return models.SeverityInfo, models.ConfidenceMedium
 	}
@@ -276,7 +261,7 @@ func classify(c severityClass) (models.Severity, models.Confidence) {
 func cweFor(c severityClass) string {
 	switch c {
 	case classCriticalExposure:
-		return "CWE-538" // insertion of sensitive information into externally-accessible files
+		return "CWE-538"
 	case classServerInfo:
 		return "CWE-200"
 	case classAdmin:
@@ -344,13 +329,12 @@ func slug(p string) string {
 
 func randHex(n int) string {
 	buf := make([]byte, n)
-	rand.Read(buf) //nolint:errcheck // crypto/rand never fails on read
+	if _, err := rand.Read(buf); err != nil {
+		return hex.EncodeToString(buf)
+	}
 	return hex.EncodeToString(buf)
 }
 
-// wordSet builds the set of alphabetic tokens (length>=3) from a body,
-// ignoring digits and punctuation so dynamic nonces, counters, and
-// embedded paths don't defeat similarity comparison.
 func wordSet(body []byte) map[string]struct{} {
 	const cap = 100 << 10
 	if len(body) > cap {
@@ -366,7 +350,6 @@ func wordSet(body []byte) map[string]struct{} {
 
 var wordRe = regexp.MustCompile(`[a-z]{3,}`)
 
-// similarity returns the Jaccard coefficient of two word sets (0-1).
 func similarity(a, b map[string]struct{}) float64 {
 	if len(a) == 0 || len(b) == 0 {
 		return 0

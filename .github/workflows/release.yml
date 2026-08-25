@@ -28,3 +28,26 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download published Linux amd64 artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/anpu-release
+          gh release download "$RELEASE_TAG" \
+            --repo "${{ github.repository }}" \
+            --pattern "anpu_*_linux_amd64.tar.gz" \
+            --dir /tmp/anpu-release
+          test -n "$(find /tmp/anpu-release -name 'anpu_*_linux_amd64.tar.gz' -print -quit)"
+
+      - name: Smoke test published artifact
+        run: |
+          set -euo pipefail
+          archive="$(find /tmp/anpu-release -name 'anpu_*_linux_amd64.tar.gz' -print -quit)"
+          rm -rf /tmp/anpu-bin
+          mkdir -p /tmp/anpu-bin
+          tar -xzf "$archive" -C /tmp/anpu-bin
+          /tmp/anpu-bin/anpu --version
+          /tmp/anpu-bin/anpu --help >/dev/null

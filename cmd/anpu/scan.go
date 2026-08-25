@@ -254,15 +254,19 @@ func ensureWritableDir(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating output directory %s: %w", dir, err)
 	}
-	probe := filepath.Join(dir, ".anpu-write-probe")
-	f, err := os.OpenFile(probe, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o600)
+	// The probe file gets a unique name so two scans sharing an output
+	// directory cannot collide on it (a fixed name would make the second
+	// scan fail spuriously even though the directory is writable).
+	f, err := os.CreateTemp(dir, ".anpu-write-probe-*")
 	if err != nil {
 		return fmt.Errorf("output directory %s is not writable: %w", dir, err)
 	}
+	name := f.Name()
 	if err := f.Close(); err != nil {
+		os.Remove(name) // don't leak the probe file if closing failed
 		return fmt.Errorf("output directory %s is not writable: %w", dir, err)
 	}
-	return os.Remove(probe)
+	return os.Remove(name)
 }
 
 func parseFailOn(raw string) (models.Severity, error) {

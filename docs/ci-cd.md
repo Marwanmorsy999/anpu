@@ -44,7 +44,9 @@ permissions:
 
 services:
   juice-shop:
-    image: bkimminich/juice-shop:latest
+    # Pinned to an immutable digest (Juice Shop v20.2.0; matches
+    # .github/workflows/scan.yml).
+    image: bkimminich/juice-shop@sha256:73c53fbf442e8337b3ea3d98c7e8550308854701ebdfce4cc39768f36b75430e
     ports: [ "3000:3000" ]
     options: >-
       --health-cmd "wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1"

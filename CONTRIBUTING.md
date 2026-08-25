@@ -35,11 +35,12 @@ go build ./...
 go test ./...
 ```
 
-ANPU vendors its (small) dependency set under `third_party/` via `go.mod`
-replace directives, so `go build`/`go test` work fully offline once
-cloned — no `go mod download` step is required. If you need to update a
-vendored dependency, update the corresponding directory under
-`third_party/` and its `go.mod`/version comment.
+Dependencies are declared in `go.mod` and pinned by `go.sum`; they
+resolve normally from the Go module proxy on the first `go build` /
+`go test` run (no vendored tree is kept in the repository). To add or
+update a dependency, run `go get <module>@<version>` followed by
+`go mod tidy`, then commit the resulting `go.mod`/`go.sum` changes.
+Once the module cache is populated, builds also work offline.
 
 ## Project structure
 

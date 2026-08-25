@@ -113,6 +113,16 @@ func TestExitCodesReadOnlyOutputDir(t *testing.T) {
 			t.Logf("failed to restore permissions on %s: %v", roDir, err)
 		}
 	}()
+	// Root (and other environments with CAP_DAC_OVERRIDE) can write
+	// through 0o555 permission bits, so chmod alone does not guarantee a
+	// read-only directory here. Probe with a real write and skip when it
+	// succeeds rather than reporting a spurious failure.
+	if f, perr := os.CreateTemp(roDir, ".write-probe-*"); perr == nil {
+		probePath := f.Name()
+		f.Close()
+		os.Remove(probePath)
+		t.Skip("process can still write to the read-only output dir (e.g. running as root)")
+	}
 
 	cmd := exec.Command(binPath, "scan", "http://example.com", "--output", roDir)
 	cmd.Env = append(os.Environ(), "HOME="+tmpDir, "USERPROFILE="+tmpDir)

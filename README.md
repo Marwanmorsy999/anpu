@@ -72,7 +72,13 @@ ANPU is **not** a from-scratch replacement for every security scanner. Its value
 
 The Releases page contains published release artifacts. The `main` branch may be ahead of the latest published release; check the release notes when choosing a version for production use.
 
-Linux amd64 is currently the published native binary target. Other platforms can use Docker or build from source.
+Published native archives target:
+
+- Linux amd64 / arm64
+- Windows amd64 / arm64
+- macOS (darwin) amd64 / arm64
+
+For Unix-like systems, extract the matching `tar.gz` archive and run `anpu`. Windows releases are packaged with the `.exe` binary in the archive.
 
 ```sh
 tar -xzf anpu_*.tar.gz

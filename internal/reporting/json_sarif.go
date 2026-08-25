@@ -62,10 +62,20 @@ type sarifMultiformatMsg struct {
 }
 
 type sarifResult struct {
-	RuleID     string                 `json:"ruleId"`
-	Level      string                 `json:"level"`
-	Message    sarifMultiformatMsg    `json:"message"`
-	Locations  []sarifLocation        `json:"locations"`
+	RuleID  string              `json:"ruleId"`
+	Level   string              `json:"level"`
+	Message sarifMultiformatMsg `json:"message"`
+	// Locations is intentionally omitted (omitempty) rather than always
+	// present. ANPU's findings are about a live URL, not a file that
+	// was checked out in the analyzed repository -- code scanning's
+	// physicalLocation.artifactLocation.uri specifically means the
+	// latter. Reporting an http(s) URL there is a URI scheme mismatch
+	// against the checkout's file:// source root and causes GitHub to
+	// reject the *entire* SARIF upload ("SARIF URI scheme \"http\" did
+	// not match the checkout URI scheme \"file\""). The target URL is
+	// preserved in Properties["target_url"] and prefixed onto the
+	// message text instead, which have no such constraint.
+	Locations  []sarifLocation        `json:"locations,omitempty"`
 	Properties map[string]interface{} `json:"properties,omitempty"`
 }
 
@@ -127,18 +137,25 @@ func WriteSARIF(summary *models.ScanSummary, path string) error {
 		if uri == "" {
 			uri = f.Target
 		}
+		// No physicalLocation: uri is a live scan target (http/https),
+		// never a file in the repo checkout, so it can't be reported as
+		// an artifactLocation without violating code scanning's
+		// same-scheme-as-checkout rule (see the Locations field doc
+		// above). Fold it into the message and properties instead, so
+		// the target is still shown on the alert without risking a
+		// rejected upload.
+		msg := f.Description
+		if uri != "" {
+			msg = fmt.Sprintf("Target: %s\n\n%s", uri, f.Description)
+		}
 		results = append(results, sarifResult{
 			RuleID:  f.ID,
 			Level:   severityToSarifLevel(f.Severity),
-			Message: sarifMultiformatMsg{Text: f.Description},
-			Locations: []sarifLocation{{
-				PhysicalLocation: sarifPhysicalLocation{
-					ArtifactLocation: sarifArtifactLocation{URI: uri},
-				},
-			}},
+			Message: sarifMultiformatMsg{Text: msg},
 			Properties: map[string]interface{}{
 				"confidence": f.Confidence,
 				"risk_score": f.RiskScore,
+				"target_url": uri,
 			},
 		})
 	}

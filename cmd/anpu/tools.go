@@ -3,7 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -47,7 +51,7 @@ they are compiled into the anpu binary.`,
 				label  string
 				hint   string
 			}{
-				{"nuclei", "Nuclei", "go install -v github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest && nuclei -update-templates"},
+				{"nuclei", "Nuclei", "go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest && nuclei -update-templates"},
 				{"zap-cli", "OWASP ZAP", "https://www.zaproxy.org/download/ (integration ships in a future release)"},
 			}
 			for _, t := range ext {
@@ -72,8 +76,45 @@ they are compiled into the anpu binary.`,
 	}
 }
 
+// externalToolPath resolves a tool using PATH first, then common Go/bin
+// locations. This keeps Windows installations working even when the
+// Go bin directory is not on PATH.
+func externalToolPath(binary string) (string, error) {
+	if path, err := exec.LookPath(binary); err == nil {
+		return path, nil
+	}
+
+	names := []string{binary}
+	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(binary), ".exe") {
+		names = append(names, binary+".exe")
+	}
+
+	candidates := make([]string, 0, 6)
+	if gobin := strings.TrimSpace(os.Getenv("GOBIN")); gobin != "" {
+		for _, name := range names {
+			candidates = append(candidates, filepath.Join(gobin, name))
+		}
+	}
+	if gopath := strings.TrimSpace(os.Getenv("GOPATH")); gopath != "" {
+		first := strings.FieldsFunc(gopath, func(r rune) bool { return r == os.PathListSeparator })
+		for _, gp := range first {
+			for _, name := range names {
+				candidates = append(candidates, filepath.Join(gp, "bin", name))
+			}
+		}
+	}
+
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate, nil
+		}
+	}
+
+	return "", fmt.Errorf("%s not found on PATH or Go bin directories", binary)
+}
+
 func externalToolAvailable(binary string) bool {
-	path, err := exec.LookPath(binary)
+	path, err := externalToolPath(binary)
 	if err != nil {
 		return false
 	}

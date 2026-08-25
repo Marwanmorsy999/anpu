@@ -103,5 +103,11 @@ jobs:
         if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: ./reports/*.sarif
+          # `with:` values are passed to the action literally — there is
+          # no shell in between to expand a glob, so `./reports/*.sarif`
+          # was being interpreted as a file literally named "*.sarif"
+          # and never found. upload-sarif accepts a directory and
+          # auto-discovers the *.sarif file(s) inside it, so point it
+          # at the directory instead of a glob pattern.
+          sarif_file: ./reports/
           category: anpu-scan

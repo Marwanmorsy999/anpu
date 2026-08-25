@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/anpu-logo.png" alt="ANPU Logo" width="180">
+  <img src="anpu-og.png" alt="ANPU Logo" width="180">
 </p>
 
 # ANPU

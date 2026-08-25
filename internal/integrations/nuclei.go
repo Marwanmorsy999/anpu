@@ -96,11 +96,10 @@ func (n *NucleiScanner) Available(ctx context.Context) bool {
 	return cmd.Run() == nil
 }
 
-// nucleiTemplateTagsForProfile returns the -tags argument used to keep
-// Nuclei scoped to safe/appropriate templates for the given profile.
-// "safe" restricts to passive/low-impact template tags; "standard" and
-// "deep" progressively widen scope. ANPU never runs Nuclei's intrusive
-// or fuzzing-heavy template categories automatically.
+// nucleiTemplateTagsForProfile returns a bounded -tags/-severity argument
+// set for each profile. Deep deliberately uses an explicit tag set instead
+// of the entire Nuclei template catalog so ANPU remains predictable and
+// does not accidentally invoke unrelated fuzzing/external-service flows.
 func nucleiTemplateTagsForProfile(p models.Profile) []string {
 	switch p {
 	case models.ProfileSafe:
@@ -108,9 +107,9 @@ func nucleiTemplateTagsForProfile(p models.Profile) []string {
 	case models.ProfileStandard:
 		return []string{"-tags", "exposure,misconfig,tech,ssl,cve", "-severity", "info,low,medium,high"}
 	case models.ProfileDeep:
-		return []string{"-severity", "info,low,medium,high,critical"}
+		return []string{"-tags", "exposure,misconfig,tech,ssl,cve", "-severity", "info,low,medium,high,critical"}
 	default:
-		return []string{"-tags", "exposure,misconfig,tech,ssl"}
+		return []string{"-tags", "exposure,misconfig,tech,ssl", "-severity", "info,low,medium"}
 	}
 }
 
@@ -181,6 +180,10 @@ func (n *NucleiScanner) Run(ctx context.Context, sc *scanner.ScanContext) (scann
 			continue
 		}
 		findings = append(findings, convertNucleiFinding(nl, sc.Target.Raw))
+	}
+
+	if scanErr := scanner_.Err(); scanErr != nil {
+		warnings = append(warnings, fmt.Sprintf("nuclei output stream error: %v", scanErr))
 	}
 
 	waitErr := cmd.Wait()

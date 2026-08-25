@@ -207,6 +207,31 @@ func (c *Client) guardRedirectTarget(req *stdhttp.Request) error {
 	return nil
 }
 
+// ValidateHostPublic reports whether host is safe to contact directly:
+// not loopback/private/link-local/special-purpose, per the same policy
+// the shared client enforces at dial time. Engines that open their own
+// sockets (port scanner, DNS prober) must call this first unless
+// AllowLocalNetwork-style test overrides apply to them.
+func ValidateHostPublic(host string) error {
+	lower := strings.ToLower(strings.TrimSuffix(host, "."))
+	if lower == "localhost" || strings.HasSuffix(lower, ".localhost") || lower == "metadata.google.internal" {
+		return fmt.Errorf("refusing to contact local/internal host %s", host)
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return checkIPNotPrivate(ip, host)
+	}
+	ips, err := net.DefaultResolver.LookupIP(context.Background(), "ip", host)
+	if err != nil {
+		return fmt.Errorf("resolving %q: %w", host, err)
+	}
+	for _, ip := range ips {
+		if err := checkIPNotPrivate(ip, host); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // checkIPNotPrivate is intentionally stricter than net.IP.IsPrivate. It also
 // rejects multicast and common special-purpose ranges that should not be
 // treated as ordinary public scan targets.
@@ -282,6 +307,45 @@ func (c *Client) Get(ctx context.Context, rawURL string) (*Response, error) {
 		return nil, fmt.Errorf("reading response body: %w", err)
 	}
 
+	out := &Response{
+		StatusCode: resp.StatusCode,
+		Header:     resp.Header,
+		Body:       body,
+		FinalURL:   resp.Request.URL.String(),
+		Elapsed:    time.Since(start),
+	}
+	if resp.TLS != nil {
+		out.TLS = resp.TLS
+	}
+	return out, nil
+}
+
+// DoWithHeaders issues a GET with extra headers through the same safety
+// settings (redirect guard, safe dialing) and returns the captured
+// response. Engines that need custom probes (CORS origin tests, OPTIONS
+// audits) must use this instead of building their own clients so the
+// local-network protections stay enforced in one place.
+func (c *Client) DoWithHeaders(ctx context.Context, method, rawURL string, headers map[string]string) (*Response, error) {
+	req, err := stdhttp.NewRequestWithContext(ctx, method, rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("building request: %w", err)
+	}
+	req.Header.Set("User-Agent", UserAgent)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	start := time.Now()
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %w", err)
+	}
 	out := &Response{
 		StatusCode: resp.StatusCode,
 		Header:     resp.Header,

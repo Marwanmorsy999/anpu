@@ -16,6 +16,14 @@ func TestExitCodes(t *testing.T) {
 		t.Fatalf("failed to build binary: %v", err)
 	}
 
+	// A path that is unwritable on every OS: its parent is an existing
+	// file, so os.MkdirAll must fail (a plain "/invalid/..." path would
+	// actually be creatable on Windows drives that allow root writes).
+	blockerPath := filepath.Join(tmpDir, "blocker.txt")
+	if err := os.WriteFile(blockerPath, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("failed to create blocker file: %v", err)
+	}
+
 	tests := []struct {
 		name string
 		args []string
@@ -33,7 +41,7 @@ func TestExitCodes(t *testing.T) {
 		},
 		{
 			name: "unwriteable output path",
-			args: []string{"scan", "http://example.com", "--output", "/invalid/path/that/does/not/exist/999"},
+			args: []string{"scan", "http://example.com", "--output", filepath.Join(blockerPath, "reports")},
 			want: 1,
 		},
 		{
@@ -49,7 +57,8 @@ func TestExitCodes(t *testing.T) {
 		{
 			name: "unreachable target",
 			args: []string{"scan", "http://nonexistent.invalid"},
-			// This will fail (exit 0) until Bug 8 is fixed, validating our fix.
+			// The connectivity pre-check must fail the scan (exit 1),
+			// not silently produce an empty "completed" report.
 			want: 1,
 		},
 	}

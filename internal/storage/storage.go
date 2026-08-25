@@ -7,9 +7,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	// Pure-Go SQLite driver: keeps builds CGO-free so ANPU compiles into
+	// working executables on every platform without a C toolchain.
+	_ "modernc.org/sqlite"
 
 	"github.com/anpu-project/anpu/pkg/models"
 )
@@ -86,10 +89,14 @@ type Store struct {
 // Open opens (creating if necessary) the SQLite database at path and
 // ensures the schema exists.
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite3", path+"?_foreign_keys=on")
+	dsn := "file:" + filepath.ToSlash(path) + "?_pragma=foreign_keys(1)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
+	// SQLite serializes writers; a single connection avoids transient
+	// SQLITE_BUSY errors between the write transaction and read paths.
+	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initializing schema: %w", err)

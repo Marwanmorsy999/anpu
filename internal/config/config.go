@@ -29,6 +29,12 @@ type ModulesFileConfig struct {
 	Headers    *bool `yaml:"headers"`
 	Cookies    *bool `yaml:"cookies"`
 	Endpoints  *bool `yaml:"endpoints"`
+	Subdomains *bool `yaml:"subdomains"`
+	PortScan   *bool `yaml:"portscan"`
+	Dirs       *bool `yaml:"dirs"`
+	Secrets    *bool `yaml:"secrets"`
+	CORS       *bool `yaml:"cors"`
+	Methods    *bool `yaml:"methods"`
 	Nuclei     *bool `yaml:"nuclei"`
 	ZAP        *bool `yaml:"zap"`
 }
@@ -85,6 +91,12 @@ func ResolveModules(profile models.Profile, f *File, noNuclei, noZAP bool) model
 		applyBool(&mc.Headers, f.Modules.Headers)
 		applyBool(&mc.Cookies, f.Modules.Cookies)
 		applyBool(&mc.Endpoints, f.Modules.Endpoints)
+		applyBool(&mc.Subdomains, f.Modules.Subdomains)
+		applyBool(&mc.PortScan, f.Modules.PortScan)
+		applyBool(&mc.Dirs, f.Modules.Dirs)
+		applyBool(&mc.Secrets, f.Modules.Secrets)
+		applyBool(&mc.CORS, f.Modules.CORS)
+		applyBool(&mc.Methods, f.Modules.Methods)
 		applyBool(&mc.Nuclei, f.Modules.Nuclei)
 		applyBool(&mc.ZAP, f.Modules.ZAP)
 	}

@@ -1,14 +1,15 @@
 # syntax=docker/dockerfile:1
 
 # --- build stage ---
-FROM golang:1.22-bookworm AS build
+FROM golang:1.25-bookworm AS build
 WORKDIR /src
 
-# Copy the whole module (including vendored third_party/) — ANPU builds
-# fully offline, so no separate `go mod download` layer is needed.
+# Copy the whole module; `go mod download` runs inside the build and is
+# cached by Docker layer caching.
 COPY . .
 
-RUN CGO_ENABLED=1 go build -trimpath -o /out/anpu ./cmd/anpu
+# Pure-Go SQLite (modernc.org/sqlite) means no C toolchain is required.
+RUN CGO_ENABLED=0 go build -trimpath -o /out/anpu ./cmd/anpu
 
 # --- runtime stage ---
 FROM debian:bookworm-slim

@@ -1,23 +1,25 @@
 module github.com/anpu-project/anpu
 
-go 1.22
+go 1.25.0
 
-require (
-	github.com/mattn/go-sqlite3 v1.14.22
-	github.com/spf13/cobra v1.8.1
-)
+require github.com/spf13/cobra v1.8.1
 
 require github.com/spf13/pflag v1.0.5 // indirect
 
-require github.com/inconshreveable/mousetrap v1.1.0 // indirect
+require (
+	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/mattn/go-isatty v0.0.24 // indirect
+	github.com/ncruces/go-strftime v1.0.0 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	modernc.org/libc v1.74.4 // indirect
+	modernc.org/mathutil v1.7.1 // indirect
+	modernc.org/memory v1.11.0 // indirect
+)
 
-replace github.com/spf13/cobra => ./third_party/cobra
-
-replace github.com/spf13/pflag => ./third_party/pflag
-
-replace github.com/mattn/go-sqlite3 => ./third_party/go-sqlite3
-
-replace github.com/inconshreveable/mousetrap => ./third_party/mousetrap
-
-require gopkg.in/yaml.v3 v3.0.1
-replace gopkg.in/yaml.v3 => ./third_party/yaml
+require (
+	gopkg.in/yaml.v3 v3.0.1
+	modernc.org/sqlite v1.57.0
+)

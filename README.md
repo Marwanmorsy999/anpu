@@ -93,7 +93,7 @@ to:
 
 ## 3. Installation
 
-Requires Go 1.22+.
+Requires Go 1.25+.
 
 ```bash
 git clone https://github.com/Marwanmorsy999/anpu
@@ -102,14 +102,12 @@ go build -o anpu ./cmd/anpu
 ./anpu --help
 ```
 
-ANPU's (small) dependency set — Cobra, pflag, go-sqlite3, and
-yaml.v3 — is vendored under `third_party/` via `go.mod` replace
-directives, so this builds fully offline once you have the repository;
-no `go mod download` step, no external module proxy required.
-
-`go-sqlite3` uses cgo, so a C compiler (`gcc`/`clang`) must be
-available at build time. A prebuilt Docker image is also provided (see
-below) if you'd rather not install a toolchain locally.
+Dependencies (Cobra, pflag, yaml.v3, and the pure-Go SQLite driver) are
+resolved normally through the Go module proxy on first build; `go.sum`
+pins every version. ANPU uses a pure-Go SQLite driver
+(`modernc.org/sqlite`), so **no C compiler (cgo) is needed** — `go build`
+works out of the box on Windows, macOS, and Linux. A prebuilt Docker
+image is also provided (see below).
 
 ### Docker
 
@@ -121,12 +119,20 @@ docker run --rm -v "$(pwd)/reports:/reports" anpu scan https://example.com --out
 ## 4. Quick start
 
 ```bash
+# See every engine and what each profile enables
+./anpu tools
+
 # Safe (default) profile — passive analysis only, HTML report
 ./anpu scan https://example.com
 
-# Standard profile — adds Nuclei's exposure/misconfig/CVE templates,
-# if nuclei is installed
+# Standard profile — + sensitive-path probing, JS secrets hunt,
+# CORS/method audits, subdomain CT-log enumeration, and Nuclei
+# templates if nuclei is installed
 ./anpu scan https://example.com --profile standard --json --sarif
+
+# Deep profile — everything above + DNS brute-force of common
+# subdomains and a TCP connect scan of common ports
+./anpu scan https://example.com --profile deep --html
 
 # View past scans
 ./anpu history
@@ -138,10 +144,60 @@ docker run --rm -v "$(pwd)/reports:/reports" anpu scan https://example.com --out
 ./anpu diff scan-old scan-new
 ```
 
+### Built-in engines
+
+| Engine        | What it does | Profile |
+|---------------|--------------|---------|
+| Recon         | DNS, robots.txt, sitemap.xml, redirect chain, source maps | all |
+| Technology    | passive stack fingerprinting (headers/cookies/HTML/JS) | all |
+| TLS           | certificate validity/expiry, protocol versions, HTTPS redirect | all |
+| Headers       | security-header presence & quality | all |
+| Cookies       | Secure / HttpOnly / SameSite audit | all |
+| Endpoints     | link/form/script/API discovery from HTML+JS | all |
+| Subdomains    | Certificate-Transparency enumeration (+ DNS brute on deep) | standard+ |
+| PortScan      | TCP connect scan of ~36 common service ports | deep |
+| Dirs          | sensitive-path probing (`.env`, `.git`, backups…) with soft-404 baseline | standard+ |
+| Secrets       | AWS/GCP/GitHub/Slack keys, JWTs, private-key blocks in served assets | standard+ |
+| CORS          | origin-reflection + credentials misconfiguration | standard+ |
+| Methods       | OPTIONS audit with live TRACE/XST verification | standard+ |
+| Nuclei        | template-based vuln scanning (optional external binary) | standard+ |
+
+All engines run behind the same SSRF/local-network guard as the core
+scanner. When a CDN (Cloudflare, CloudFront, …) is fingerprinted,
+port-scan results are annotated to note they may reflect the CDN edge
+rather than your origin.
+
+### Accuracy engineering
+
+Content-discovery results are filtered through several false-positive
+defenses, each validated against real sites:
+
+- **Soft-404 baselines** — two random probe paths calibrate what this
+  server's "not found" looks like; catch-all routers (SPAs, parked
+  hosting) are detected via body similarity.
+- **App-shell detection** — sites that answer unknown paths with HTTP 200
+  and a copy of their own homepage (e.g. github.com's shell) are filtered
+  by Jaccard word-similarity against the root page.
+- **WAF rejection handling** — only 2xx counts as exposure and 401/403 as
+  "present but protected"; other rejections (406 WAF blocks, 410 gone)
+  are ignored rather than inflated into findings.
+- **Port-scan sanity probe** — if ports 1/9 accept connections (a
+  transparent proxy answering for everything), scan results are
+  suppressed with a warning instead of reported.
+
+### Testing
+
+```bash
+go test ./...                       # full offline suite
+
+# Live-site integration test (hits https://example.com over the network):
+ANPU_LIVE_TESTS=1 go test -run TestLiveScanExample -v ./cmd/anpu
+```
+
 ## 5. Architecture
 
 ```
-cmd/anpu/              CLI entry point (Cobra commands: scan, history, show)
+cmd/anpu/              CLI entry point (Cobra commands: scan, history, show, diff, tools)
 
 internal/
   scanner/              Scanner interface, target validation, pipeline orchestrator
@@ -152,6 +208,12 @@ internal/
   tls/                  Passive TLS analysis
   headers/              Security headers + cookie analysis
   endpoints/             Endpoint discovery/normalization
+  subdomains/            Subdomain enumeration (CT logs + DNS brute-force)
+  portscan/              TCP connect scan of common ports
+  dirs/                  Sensitive-path content discovery with soft-404 baseline
+  secrets/               API-key/token/private-key scanning of discovered assets
+  cors/                  CORS misconfiguration detection
+  methods/               HTTP method / XST auditing
   findings/              Deduplication engine
   scoring/               Transparent risk scoring
   storage/                SQLite persistence (scan history)
@@ -162,7 +224,7 @@ internal/
 pkg/models/             Shared, scanner-agnostic data model (Finding, Technology,
                         Endpoint, ScanSummary, ...)
 
-third_party/            Vendored dependencies (cobra, pflag, go-sqlite3, yaml.v3)
+third_party/            (removed — dependencies come from the Go module proxy)
 rules/                  Reserved for future custom detection rules
 tests/                  Shared test fixtures/helpers
 docs/                   Additional documentation
@@ -265,7 +327,7 @@ output can be consumed by GitHub code scanning workflows or other SARIF-compatib
 go build ./...
 go vet ./...
 go test ./...
-gofmt -l $(find . -name '*.go' | grep -v third_party)   # should print nothing
+gofmt -l $(find . -name '*.go')   # should print nothing
 ```
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full guide, including

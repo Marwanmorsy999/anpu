@@ -99,9 +99,11 @@ func severityToSarifLevel(s models.Severity) string {
 // WriteSARIF renders the scan's findings as a SARIF 2.1.0 log, suitable
 // for upload to GitHub code scanning or other SARIF-consuming tools.
 func WriteSARIF(summary *models.ScanSummary, path string) error {
+	// Initialize as empty (not nil) so an empty scan serializes as []
+	// rather than null, which the SARIF 2.1.0 schema does not allow.
+	rules := []sarifRule{}
 	rulesSeen := map[string]bool{}
-	var rules []sarifRule
-	var results []sarifResult
+	results := []sarifResult{}
 
 	for _, f := range summary.Findings {
 		if !rulesSeen[f.ID] {

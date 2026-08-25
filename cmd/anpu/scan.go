@@ -10,16 +10,22 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/anpu-project/anpu/internal/config"
+	"github.com/anpu-project/anpu/internal/cors"
+	"github.com/anpu-project/anpu/internal/dirs"
 	"github.com/anpu-project/anpu/internal/endpoints"
 	"github.com/anpu-project/anpu/internal/findings"
 	"github.com/anpu-project/anpu/internal/headers"
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/integrations"
+	"github.com/anpu-project/anpu/internal/methods"
+	"github.com/anpu-project/anpu/internal/portscan"
 	"github.com/anpu-project/anpu/internal/recon"
 	"github.com/anpu-project/anpu/internal/reporting"
 	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/internal/scoring"
+	"github.com/anpu-project/anpu/internal/secrets"
 	"github.com/anpu-project/anpu/internal/storage"
+	"github.com/anpu-project/anpu/internal/subdomains"
 	"github.com/anpu-project/anpu/internal/technology"
 	"github.com/anpu-project/anpu/internal/tls"
 	"github.com/anpu-project/anpu/pkg/models"
@@ -212,6 +218,14 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig) *scanne
 			{Label: "Headers", Enabled: modules.Headers, Scanner: headers.New(client)},
 			{Label: "Cookies", Enabled: modules.Cookies, Scanner: headers.NewCookieAnalyzer(client)},
 			{Label: "Endpoints", Enabled: modules.Endpoints, Scanner: endpoints.New(client)},
+			{Label: "Subdomains", Enabled: modules.Subdomains, Scanner: subdomains.New()},
+			{Label: "PortScan", Enabled: modules.PortScan, Scanner: portscan.New()},
+			{Label: "Dirs", Enabled: modules.Dirs, Scanner: dirs.New(client)},
+			// Secrets consumes the endpoints discovered above, so it must
+			// stay after the Endpoints stage.
+			{Label: "Secrets", Enabled: modules.Secrets, Scanner: secrets.New(client)},
+			{Label: "CORS", Enabled: modules.CORS, Scanner: cors.New(client)},
+			{Label: "Methods", Enabled: modules.Methods, Scanner: methods.New(client)},
 			{Label: "Nuclei", Enabled: modules.Nuclei, Scanner: nuclei},
 			{Label: "ZAP", Enabled: modules.ZAP, Scanner: zap},
 		},

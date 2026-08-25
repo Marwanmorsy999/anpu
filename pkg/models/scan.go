@@ -84,11 +84,25 @@ type ModuleConfig struct {
 	Headers    bool
 	Cookies    bool
 	Endpoints  bool
+	Subdomains bool
+	PortScan   bool
+	Dirs       bool
+	Secrets    bool
+	CORS       bool
+	Methods    bool
 	Nuclei     bool
 	ZAP        bool
 }
 
 // DefaultModuleConfig returns the module set enabled for a given profile.
+// Profiles form an intensity ladder:
+//
+//	safe     — passive analysis only (nothing a target would notice)
+//	standard — + active but polite checks (sensitive-path probing,
+//	           CORS/method audits, secrets scan of discovered assets,
+//	           passive subdomain enumeration via CT logs)
+//	deep     — everything, including DNS brute-force and a TCP port
+//	           scan of common ports (most intrusive)
 func DefaultModuleConfig(p Profile) ModuleConfig {
 	mc := ModuleConfig{
 		Recon:      true,
@@ -101,11 +115,27 @@ func DefaultModuleConfig(p Profile) ModuleConfig {
 		ZAP:        false, // never enabled by default; MVP has no ZAP implementation
 	}
 	if p == ProfileSafe {
-		// Safe profile still runs passive analysis, but Nuclei (which
-		// sends templated requests) is left to standard/deep unless the
-		// user explicitly re-enables it via config.
+		// Safe profile stays fully passive: Nuclei (which sends templated
+		// requests) and every active engine are left off unless the user
+		// explicitly re-enables them via config.
 		mc.Nuclei = false
+		return mc
 	}
+
+	// standard and deep both run the active-but-polite engines.
+	mc.Secrets = true
+	mc.CORS = true
+	mc.Methods = true
+	mc.Dirs = true
+	mc.Subdomains = true
+
+	if p == ProfileStandard {
+		// Standard stops short of the intrusive engines.
+		return mc
+	}
+
+	// deep: everything on.
+	mc.PortScan = true
 	return mc
 }
 

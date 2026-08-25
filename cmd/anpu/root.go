@@ -35,6 +35,7 @@ authorized to test.`,
 	root.AddCommand(newHistoryCmd())
 	root.AddCommand(newShowCmd())
 	root.AddCommand(newDiffCmd())
+	root.AddCommand(newToolsCmd())
 
 	return root
 }

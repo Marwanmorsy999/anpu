@@ -63,16 +63,16 @@ type Endpoint struct {
 
 // ScanConfig captures the resolved options for a single scan run.
 type ScanConfig struct {
-	Target    string
-	Profile   Profile
-	OutputDir string
-	JSON      bool
-	HTML      bool
-	SARIF     bool
-	NoZAP         bool
-	Verbose       bool
-	SkipPreCheck  bool
-	Modules       ModuleConfig
+	Target       string
+	Profile      Profile
+	OutputDir    string
+	JSON         bool
+	HTML         bool
+	SARIF        bool
+	NoZAP        bool
+	Verbose      bool
+	SkipPreCheck bool
+	Modules      ModuleConfig
 }
 
 // ModuleConfig toggles individual pipeline stages, mirroring the
@@ -112,10 +112,10 @@ func DefaultModuleConfig(p Profile) ModuleConfig {
 // ScanSummary is the top-level record of a completed (or in-progress)
 // scan, as stored in SQLite and rendered in reports.
 type ScanSummary struct {
-	ID          string    `json:"id"`
-	Target      string    `json:"target"`
-	Profile     Profile   `json:"profile"`
-	StartedAt   time.Time `json:"started_at"`
+	ID           string    `json:"id"`
+	Target       string    `json:"target"`
+	Profile      Profile   `json:"profile"`
+	StartedAt    time.Time `json:"started_at"`
 	CompletedAt  time.Time `json:"completed_at"`
 	Status       string    `json:"status"` // running, completed, failed
 	StatusReason string    `json:"status_reason,omitempty"`

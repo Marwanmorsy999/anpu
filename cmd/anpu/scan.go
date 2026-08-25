@@ -27,10 +27,10 @@ import (
 
 func newScanCmd() *cobra.Command {
 	var (
-		profile   string
-		jsonOut   bool
-		htmlOut   bool
-		sarifOut  bool
+		profile      string
+		jsonOut      bool
+		htmlOut      bool
+		sarifOut     bool
 		outputDir    string
 		noNuclei     bool
 		noZAP        bool
@@ -103,17 +103,17 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 	modules := config.ResolveModules(profile, cfgFile, noNuclei, noZAP)
 
 	cfg := models.ScanConfig{
-		Target:    target.Raw,
-		Profile:   profile,
-		OutputDir: outputDir,
-		JSON:      jsonOut,
-		HTML:          htmlOut,
-		SARIF:         sarifOut,
-		NoNuclei:      noNuclei,
-		NoZAP:         noZAP,
-		Verbose:       flagVerbose,
-		SkipPreCheck:  skipPreCheck,
-		Modules:       modules,
+		Target:       target.Raw,
+		Profile:      profile,
+		OutputDir:    outputDir,
+		JSON:         jsonOut,
+		HTML:         htmlOut,
+		SARIF:        sarifOut,
+		NoNuclei:     noNuclei,
+		NoZAP:        noZAP,
+		Verbose:      flagVerbose,
+		SkipPreCheck: skipPreCheck,
+		Modules:      modules,
 	}
 
 	reporting.PrintBanner(target.Raw)

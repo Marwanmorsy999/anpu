@@ -9,7 +9,7 @@ import (
 func TestExitCodes(t *testing.T) {
 	tmpDir := t.TempDir()
 	binPath := filepath.Join(tmpDir, "anpu.exe")
-	
+
 	buildCmd := exec.Command("go", "build", "-o", binPath, ".")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("failed to build binary: %v", err)
@@ -49,7 +49,7 @@ func TestExitCodes(t *testing.T) {
 			name: "unreachable target",
 			args: []string{"scan", "http://nonexistent.invalid"},
 			// This will fail (exit 0) until Bug 8 is fixed, validating our fix.
-			want: 1, 
+			want: 1,
 		},
 	}
 
@@ -58,7 +58,7 @@ func TestExitCodes(t *testing.T) {
 			cmd := exec.Command(binPath, tt.args...)
 			cmd.Env = append(os.Environ(), "HOME="+tmpDir, "USERPROFILE="+tmpDir)
 			err := cmd.Run()
-			
+
 			gotExit := 0
 			if err != nil {
 				if exitErr, ok := err.(*exec.ExitError); ok {

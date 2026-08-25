@@ -71,7 +71,7 @@ func (p *Pipeline) Run(
 	if p.Client != nil && !cfg.SkipPreCheck {
 		ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		_, err := p.Client.HeadOrGet(ctxTimeout, target.Raw.String())
+		_, err := p.Client.HeadOrGet(ctxTimeout, target.Raw)
 		if err != nil && isNetworkError(err) {
 			summary.Status = "failed"
 			summary.StatusReason = fmt.Sprintf("connectivity check failed: %v", err)
@@ -118,7 +118,7 @@ func (p *Pipeline) Run(
 		if progress != nil {
 			postDedupCount := len(dedup(summary.Findings))
 			progress(StageProgress{
-				StageName:        stage.Label, 
+				StageName:        stage.Label,
 				Done:             true,
 				NewFindingsCount: postDedupCount - preDedupCount,
 				WarningsCount:    len(result.Warnings),

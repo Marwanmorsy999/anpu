@@ -25,8 +25,10 @@ jobs:
 
     # Self-hosted vulnerable fixture: OWASP Juice Shop served on the
     # runner's own loopback. The scan never targets third-party hosts.
-    # NOTE: the health check relies on busybox wget inside the image
-    # (true while it stays Alpine-based); revisit if the base image changes.
+    # NOTE: Juice Shop v20+ images are distroless (no shell/wget/curl), so
+    # an in-container health check is impossible. Readiness is enforced
+    # host-side by the wait step below. The pinned digest prevents fixture
+    # drift from breaking the self-test.
     services:
       juice-shop:
         # Pinned to an immutable digest (OWASP Juice Shop v20.2.0) so
@@ -34,9 +36,6 @@ jobs:
         # new image, then swap the digest below.
         image: bkimminich/juice-shop@sha256:73c53fbf442e8337b3ea3d98c7e8550308854701ebdfce4cc39768f36b75430e
         ports: [ "3000:3000" ]
-        options: >-
-          --health-cmd "wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1"
-          --health-interval 10s --health-timeout 5s --health-retries 12
 
     steps:
       - name: Checkout Code
@@ -50,12 +49,30 @@ jobs:
       - name: Build ANPU
         run: go build -o anpu ./cmd/anpu
 
+      - name: Wait for Juice Shop (host-side readiness)
+        run: |
+          set -euo pipefail
+          ok=""
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/ >/dev/null 2>&1; then
+              echo "juice-shop is up (attempt $i)"; ok=1; break
+            fi
+            echo "waiting for juice-shop ($i/30)..."; sleep 2
+          done
+          if [ -z "$ok" ]; then
+            echo "::error::juice-shop did not become ready in 60s"
+            cid=$(docker ps -q --filter ancestor=bkimminich/juice-shop@sha256:73c53fbf442e8337b3ea3d98c7e8550308854701ebdfce4cc39768f36b75430e || true)
+            [ -n "$cid" ] && docker logs "$cid" || true
+            exit 1
+          fi
+
       - name: Run ANPU Scan (self-test against local fixture)
         env:
           # Required by internal/scanner/target.go to permit loopback targets.
           # NEVER enable this against hosts you do not own.
           ANPU_ALLOW_LOCAL_NETWORK: "1"
         run: |
+          mkdir -p ./reports
           ./anpu scan http://127.0.0.1:3000 \
             --profile safe \
             --sarif --json --html=false \

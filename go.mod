@@ -1,6 +1,6 @@
 module github.com/anpu-project/anpu
 
-go 1.25.0
+go 1.26.7
 
 require github.com/spf13/cobra v1.8.1
 

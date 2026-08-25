@@ -2,7 +2,7 @@
 
 # Keep in sync with go.mod. CI workflows derive their toolchain from
 # `go-version-file: go.mod`, so bump both together to avoid drift.
-ARG GO_VERSION=1.25
+ARG GO_VERSION=1.26.7
 
 # --- build stage ---
 FROM golang:${GO_VERSION}-bookworm AS build

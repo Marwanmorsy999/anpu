@@ -84,7 +84,7 @@ ANPU is **not** another from-scratch vulnerability scanner. Its job is to:
 
 ### Pre-built binaries (recommended)
 
-Download the latest release for your platform from the [Releases page](https://github.com/Marwanmorsy999/anpu/releases).
+Linux (amd64) binaries are available on the [Releases page](https://github.com/Marwanmorsy999/anpu/releases). macOS and other architectures: use Docker below, or build from source — official cross-platform binaries are on the roadmap.
 
 ```sh
 # macOS / Linux — extract and run

@@ -53,7 +53,10 @@ func (a *Analyzer) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.St
 func headerEvidence(h http.Header, name string) models.Evidence {
 	v := h.Get(name)
 	if v == "" {
-		return models.Evidence{Unavailable: true, Location: "HTTP response headers"}
+		return models.Evidence{
+			Observed: fmt.Sprintf("%s: <absent>", name),
+			Location: "HTTP response headers",
+		}
 	}
 	return models.Evidence{
 		Observed: fmt.Sprintf("%s: %s", name, v),
@@ -108,9 +111,6 @@ func checkHSTS(resp *anpuhttp.Response, target string, isHTTPS bool) []models.Fi
 		return nil
 	}
 	if !isHTTPS {
-		// Missing HSTS on a plain-HTTP response is expected/unremarkable
-		// (the header only takes effect over HTTPS); don't flag it, or
-		// flag informationally only.
 		return []models.Finding{finding(
 			"headers-missing-hsts-http",
 			"Strict-Transport-Security not applicable (site served over HTTP)",
@@ -238,9 +238,6 @@ func checkServerDisclosure(resp *anpuhttp.Response, target string) []models.Find
 	return out
 }
 
-// looksLikeVersionDisclosure does a light heuristic check for a
-// digit-dot-digit pattern in a Server header value, without claiming
-// certainty about the exact version.
 func looksLikeVersionDisclosure(v string) bool {
 	digits := 0
 	dots := 0

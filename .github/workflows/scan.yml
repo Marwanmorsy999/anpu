@@ -6,40 +6,88 @@ on:
   pull_request:
     branches: [ "main" ]
   schedule:
-    - cron: '0 2 * * *' # Daily at 2am
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   security-scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Safe, deterministic DAST fixture. ANPU never scans a third-party host in CI.
+    services:
+      juice-shop:
+        image: bkimminich/juice-shop@sha256:73c53fbf442e8337b3ea3d98c7e8550308854701ebdfce4cc39768f36b75430e
+        ports: [ "3000:3000" ]
+
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: '1.22'
-          
-      - name: Install Nuclei (Optional)
-        run: |
-          go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
-          
+          go-version-file: go.mod
+
       - name: Build ANPU
         run: go build -o anpu ./cmd/anpu
-        
-      - name: Run ANPU Scan
-        # Replace the target URL with your staging or local testing environment
+
+      - name: Wait for Juice Shop
         run: |
-          ./anpu scan https://example.com \
-            --profile standard \
-            --fail-on high \
-            --sarif \
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/ >/dev/null 2>&1; then
+              echo "juice-shop is ready (attempt $i)"
+              exit 0
+            fi
+            echo "waiting for juice-shop ($i/30)..."
+            sleep 2
+          done
+          echo "::error::juice-shop did not become ready in 60s"
+          docker ps -a || true
+          exit 1
+
+      - name: Run ANPU Scan
+        env:
+          # Only for the local CI fixture; never set this for arbitrary targets.
+          ANPU_ALLOW_LOCAL_NETWORK: "1"
+        run: |
+          mkdir -p ./reports
+          ./anpu scan http://127.0.0.1:3000 \
+            --profile safe \
+            --sarif --json --html=false \
             --output ./reports/
 
-      - name: Upload SARIF Report
-        if: always() # Upload report even if the scan failed (found vulnerabilities)
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Validate SARIF
+        if: always()
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(./reports/*.sarif)
+          if [ "${#files[@]}" -ne 1 ]; then
+            echo "Expected exactly one SARIF file; found ${#files[@]}" >&2
+            ls -la ./reports/ || true
+            exit 1
+          fi
+          jq -e '.version == "2.1.0"' "${files[0]}"
+          jq -e '.runs[0].tool.driver.name == "ANPU"' "${files[0]}"
+          jq -e '.runs[0].results | type == "array"' "${files[0]}"
+          jq -e '.runs[0].results | length >= 1' "${files[0]}"
+
+      # ANPU is a DAST/web scanner: findings point at live URLs, not repository
+      # source files. GitHub Code Scanning's upload-sarif rejects such locations,
+      # so preserve the complete SARIF as a normal workflow artifact instead.
+      - name: Upload Scan Reports
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          sarif_file: ./reports/anpu-report.sarif
-          category: anpu-scan
+          name: anpu-security-scan-${{ github.run_id }}
+          path: ./reports/
+          if-no-files-found: warn
+          retention-days: 14

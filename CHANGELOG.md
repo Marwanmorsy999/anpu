@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1
+
+- **CI self-test**: security scanning now runs only against a pinned local OWASP Juice Shop fixture and uploads generated reports as workflow artifacts instead of GitHub Code Scanning.
+- **SARIF validation**: CI verifies SARIF 2.1.0 structure, ANPU tool identity, and non-empty results before archiving reports.
+- **CI reliability**: workflow uses the Go version declared in `go.mod`, adds concurrency/timeout controls, and removes the floating Nuclei installation from the security workflow.
+- **Build/supply-chain**: pure-Go SQLite via `modernc.org/sqlite`, reproducible Docker build settings, and automated vulnerability checking remain enabled.
+- **Scanner engines**: added subdomain enumeration, port scanning, directory discovery, secret detection, CORS checks, and HTTP-method auditing with profile gating and accuracy safeguards.
+
 ## 0.3.0
 
 - **Repo cleanup**: removed the entire vendored `third_party/` tree (~106 files of upstream cobra/pflag/yaml.v3/mousetrap sources and their replace directives). Dependencies now resolve normally from the Go module proxy, pinned by `go.sum`.
@@ -26,7 +34,8 @@
 
 - Clarified the status of OWASP ZAP integration (currently planned / interface defined) in documentation.
 - Added comprehensive CI/CD documentation and example GitHub Actions workflow (`docs/ci-cd.md`).
-- Added documentation for the transparent risk scoring algorithm (`docs/scoring.md`).
+- Added documentation for the transparent risk scoring algorithm (docs/ci-cd.md).
+- Added documentation for the transparent risk scoring algorithm (docs/scoring.md).
 - Improved error messaging for local-network scanning attempts.
 - Updated security policy with a vulnerability response timeline and PGP key placeholder.
 

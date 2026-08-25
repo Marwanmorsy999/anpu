@@ -8,6 +8,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const startupBanner = `
+	        /\\                 /\\
+	       /  \\_______________/  \\
+	      /                       \\
+	     /      .--.       .--.    \\
+	    |      /    \\_____/    \\    |
+	    |     |   ●        ●   |    |
+	    |      \\      /\\      /     |
+	     \\      '.___/  \\__.'      /
+	      \\_______________________/
+	          ||    A N P U    ||
+	          ||  WEB SECURITY ||
+	          ||_______________||
+
+	        Guard what you build.
+`
+
 var (
 	flagConfigPath string
 	flagVerbose    bool
@@ -27,6 +44,7 @@ authorized to test.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Print(startupBanner)
 			return cmd.Help()
 		},
 	}

@@ -1,4 +1,4 @@
-module github.com/Marwanmorsy999/anpu
+module github.com/anpu-project/anpu
 
 go 1.25.0
 

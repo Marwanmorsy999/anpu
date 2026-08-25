@@ -13,13 +13,15 @@ import (
 	"github.com/anpu-project/anpu/pkg/models"
 )
 
-// severityBase maps severity to its base score contribution (0-10 scale).
+// severityBase maps security severity to its base score contribution (0-10 scale).
+// Informational observations are intentionally score-neutral: they describe
+// attack-surface facts, not security risk by themselves.
 var severityBase = map[models.Severity]float64{
 	models.SeverityCritical: 9.0,
 	models.SeverityHigh:     7.0,
 	models.SeverityMedium:   4.5,
 	models.SeverityLow:      2.0,
-	models.SeverityInfo:     0.5,
+	models.SeverityInfo:     0.0,
 }
 
 // confidenceMultiplier discounts the score for less-certain findings.
@@ -49,6 +51,12 @@ var categoryWeight = map[models.Category]float64{
 // human-readable explanation of how that score was derived. It mutates
 // and returns the passed finding for convenience.
 func ScoreFinding(f models.Finding) models.Finding {
+	if f.Severity == models.SeverityInfo {
+		f.RiskScore = 0
+		f.ScoreExplanation = "severity=info — informational observation; excluded from security risk scoring"
+		return f
+	}
+
 	base, ok := severityBase[f.Severity]
 	if !ok {
 		base = 1.0
@@ -91,10 +99,10 @@ func ScoreAll(fs []models.Finding) []models.Finding {
 }
 
 // AggregateScore computes the overall scan risk score (0-10) from a set
-// of already-scored findings. It is dominated by the single worst
-// finding but factors in the overall volume of medium+ severity issues,
-// so that "one high" and "one high plus twenty mediums" don't score
-// identically.
+// of already-scored findings. It is dominated by the single worst finding
+// but factors in the overall volume of medium+ severity issues, so that
+// "one high" and "one high plus twenty mediums" don't score identically.
+// Informational observations never affect the aggregate score.
 func AggregateScore(fs []models.Finding) float64 {
 	if len(fs) == 0 {
 		return 0

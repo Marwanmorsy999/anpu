@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/anpu-logo.png" alt="ANPU Logo" width="180">
+</p>
+
 # ANPU
 
 **Guard what you build.** *Authorized web security analysis and attack-surface intelligence CLI.*

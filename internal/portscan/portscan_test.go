@@ -6,6 +6,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/pkg/models"
@@ -62,6 +63,7 @@ func (*fakeConn) RemoteAddr() net.Addr { return fakeAddr("remote") }
 func (*fakeConn) SetDeadline(time.Time) error { return nil }
 func (*fakeConn) SetReadDeadline(time.Time) error { return nil }
 func (*fakeConn) SetWriteDeadline(time.Time) error { return nil }
+
 type fakeAddr string
 func (a fakeAddr) Network() string { return "tcp" }
 func (a fakeAddr) String() string { return string(a) }

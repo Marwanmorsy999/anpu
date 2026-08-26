@@ -37,7 +37,7 @@ func New() *Scanner {
 	return &Scanner{resolver: net.DefaultResolver, client: &http.Client{Timeout: 20 * time.Second}}
 }
 
-func (s *Scanner) Name() string { return "subdomains" }
+func (s *Scanner) Name() string                       { return "subdomains" }
 func (s *Scanner) Available(ctx context.Context) bool { return true }
 
 var dnsBruteWords = []string{
@@ -53,15 +53,19 @@ var dnsBruteWords = []string{
 	"media", "files", "download", "downloads", "internal", "corp", "lab",
 }
 
-type crtshResponse struct { NameValue string `json:"name_value"` }
+type crtshResponse struct {
+	NameValue string `json:"name_value"`
+}
 
 func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
 	host := strings.ToLower(strings.TrimSuffix(sc.Target.Host, "."))
-	if host == "" || !strings.Contains(host, ".") { return scanner.StageResult{}, nil }
+	if host == "" || !strings.Contains(host, ".") {
+		return scanner.StageResult{}, nil
+	}
 
 	var (
-		found = map[string]bool{}
-		mu sync.Mutex
+		found    = map[string]bool{}
+		mu       sync.Mutex
 		warnings []string
 	)
 	collect := func(names []string) {
@@ -71,13 +75,17 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			n = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(n), "."))
 			if n == host || strings.HasSuffix(n, "."+host) {
 				n = strings.TrimPrefix(n, "*.")
-				if n != "" && net.ParseIP(n) == nil && strings.Contains(n, ".") { found[n] = true }
+				if n != "" && net.ParseIP(n) == nil && strings.Contains(n, ".") {
+					found[n] = true
+				}
 			}
 		}
 	}
 
 	ctNames, ctWarn := s.queryCTLogs(ctx, host)
-	if ctWarn != "" { warnings = append(warnings, ctWarn) }
+	if ctWarn != "" {
+		warnings = append(warnings, ctWarn)
+	}
 	collect(ctNames)
 
 	// dnsBrute is already internally concurrent; wait for it before taking
@@ -87,40 +95,54 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	}
 
 	live := s.resolveAll(ctx, foundMapKeys(found))
-	if len(live) == 0 { return scanner.StageResult{Warnings: warnings}, nil }
+	if len(live) == 0 {
+		return scanner.StageResult{Warnings: warnings}, nil
+	}
 
 	sort.Strings(live)
 	shown, extra := live, 0
-	if len(live) > 50 { shown, extra = live[:50], len(live)-50 }
+	if len(live) > 50 {
+		shown, extra = live[:50], len(live)-50
+	}
 	findings := []models.Finding{{
-		ID: "subdomains-discovered",
-		Title: fmt.Sprintf("%d live subdomain(s) discovered", len(live)),
-		Description: fmt.Sprintf("Certificate Transparency logs%s revealed hostnames under %q that resolve in public DNS. Each is part of the organization's internet-facing attack surface and should be inventoried and kept patched.", dnsBruteSuffix(sc.Config.Profile), host),
-		Severity: models.SeverityLow,
-		Confidence: models.ConfidenceHigh,
-		Category: models.CategoryExposure,
-		Target: sc.Target.Raw,
-		URL: sc.Target.Raw,
-		Evidence: models.Evidence{Observed: strings.Join(shown, "\n") + extraSuffix(extra), Location: "DNS resolution + Certificate Transparency logs"},
-		Source: models.SourceCustom,
+		ID:              "subdomains-discovered",
+		Title:           fmt.Sprintf("%d live subdomain(s) discovered", len(live)),
+		Description:     fmt.Sprintf("Certificate Transparency logs%s revealed hostnames under %q that resolve in public DNS. Each is part of the organization's internet-facing attack surface and should be inventoried and kept patched.", dnsBruteSuffix(sc.Config.Profile), host),
+		Severity:        models.SeverityLow,
+		Confidence:      models.ConfidenceHigh,
+		Category:        models.CategoryExposure,
+		Target:          sc.Target.Raw,
+		URL:             sc.Target.Raw,
+		Evidence:        models.Evidence{Observed: strings.Join(shown, "\n") + extraSuffix(extra), Location: "DNS resolution + Certificate Transparency logs"},
+		Source:          models.SourceCustom,
 		DetectionMethod: "subdomain enumeration (CT logs + DNS)",
-		Impact: "Forgotten or unmonitored subdomains frequently run outdated software and are a common initial-access path.",
-		Remediation: "Inventory all subdomains; decommission unused hosts and keep remaining ones behind the same patching/monitoring regime as primary assets.",
+		Impact:          "Forgotten or unmonitored subdomains frequently run outdated software and are a common initial-access path.",
+		Remediation:     "Inventory all subdomains; decommission unused hosts and keep remaining ones behind the same patching/monitoring regime as primary assets.",
 	}}
 	return scanner.StageResult{Findings: findings, Warnings: warnings}, nil
 }
 
 func (s *Scanner) queryCTLogs(ctx context.Context, host string) ([]string, string) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://crt.sh/?q=%%25.%s&output=json", host), nil)
-	if err != nil { return nil, "" }
+	if err != nil {
+		return nil, ""
+	}
 	resp, err := s.client.Do(req)
-	if err != nil { return nil, fmt.Sprintf("crt.sh query failed (continuing with other sources): %v", err) }
+	if err != nil {
+		return nil, fmt.Sprintf("crt.sh query failed (continuing with other sources): %v", err)
+	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK { return nil, fmt.Sprintf("crt.sh returned status %d (continuing with other sources)", resp.StatusCode) }
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Sprintf("crt.sh returned status %d (continuing with other sources)", resp.StatusCode)
+	}
 	var rows []crtshResponse
-	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil { return nil, fmt.Sprintf("could not parse crt.sh output: %v", err) }
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+		return nil, fmt.Sprintf("could not parse crt.sh output: %v", err)
+	}
 	var out []string
-	for _, r := range rows { out = append(out, strings.Split(r.NameValue, "\n")...) }
+	for _, r := range rows {
+		out = append(out, strings.Split(r.NameValue, "\n")...)
+	}
 	return out, ""
 }
 
@@ -139,7 +161,9 @@ func (s *Scanner) dnsBrute(ctx context.Context, host string) []string {
 			cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 			defer cancel()
 			if ips, err := s.resolver.LookupIPAddr(cctx, name); err == nil && len(ips) > 0 {
-				mu.Lock(); out = append(out, name); mu.Unlock()
+				mu.Lock()
+				out = append(out, name)
+				mu.Unlock()
 			}
 		}(w)
 	}
@@ -155,25 +179,48 @@ func (s *Scanner) resolveAll(ctx context.Context, candidates []string) []string 
 	for _, c := range candidates {
 		wg.Add(1)
 		go func(name string) {
-			defer wg.Done(); sem <- struct{}{}; defer func() { <-sem }()
-			cctx, cancel := context.WithTimeout(ctx, 3*time.Second); defer cancel()
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			defer cancel()
 			if ips, err := s.resolver.LookupIPAddr(cctx, name); err == nil && len(ips) > 0 {
-				mu.Lock(); out = append(out, name); mu.Unlock()
+				mu.Lock()
+				out = append(out, name)
+				mu.Unlock()
 			}
 		}(c)
 	}
 	wg.Wait()
 	if !scanner.AllowLocalNetwork {
 		filtered := out[:0]
-		for _, name := range out { if httpx.ValidateHostPublic(name) == nil { filtered = append(filtered, name) } }
+		for _, name := range out {
+			if httpx.ValidateHostPublic(name) == nil {
+				filtered = append(filtered, name)
+			}
+		}
 		out = filtered
 	}
 	return out
 }
 
 func foundMapKeys(m map[string]bool) []string {
-	out := make([]string, 0, len(m)); for k := range m { out = append(out, k) }; return out
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
 
-func dnsBruteSuffix(p models.Profile) string { if p == models.ProfileDeep { return " and DNS brute-forcing" }; return "" }
-func extraSuffix(extra int) string { if extra > 0 { return fmt.Sprintf("\n… and %d more", extra) }; return "" }
+func dnsBruteSuffix(p models.Profile) string {
+	if p == models.ProfileDeep {
+		return " and DNS brute-forcing"
+	}
+	return ""
+}
+func extraSuffix(extra int) string {
+	if extra > 0 {
+		return fmt.Sprintf("\n… and %d more", extra)
+	}
+	return ""
+}

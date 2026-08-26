@@ -8,10 +8,11 @@
 
 [Install](#3-installation) · [Documentation](#5-architecture) · [Releases](https://github.com/Marwanmorsy999/anpu/releases)
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/Marwanmorsy999/anpu/ci.yml?branch=main&style=flat-square)](https://github.com/Marwanmorsy999/anpu/actions) [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://go.dev/) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](https://github.com/Marwanmorsy999/anpu/blob/main/LICENSE) [![SARIF](https://img.shields.io/badge/SARIF-Supported-success?style=flat-square)](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?style=flat-square&logo=docker)](https://docs.docker.com/)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/Marwanmorsy999/anpu/ci.yml?branch=main&style=flat-square)](https://github.com/Marwanmorsy999/anpu/actions) [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://go.dev/) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](https://github.com/Marwanmorsy999/anpu/blob/main/LICENSE) [![SARIF](https://img.shields.io/badge/SARIF-Supported-success?style=flat-square)](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?style=flat-square&logo=Docker)](https://docs.docker.com/)
 
 ### Quick links
 
+- [Release & Installation Guide](docs/releases.md)
 - [CLI Reference](docs/cli.md)
 - [Configuration Reference](docs/configuration.md)
 - [Scanner and Engine Reference](docs/scanners.md)
@@ -76,18 +77,9 @@ ANPU is **not** a from-scratch replacement for every security scanner. Its value
 
 The Releases page contains published release artifacts. The `main` branch may be ahead of the latest published release; check the release notes when choosing a version for production use.
 
-Published native archives target:
+Published native archives target Linux, Windows, and macOS on amd64 and arm64 where supported by the release matrix.
 
-- Linux amd64 / arm64
-- Windows amd64 / arm64
-- macOS (darwin) amd64 / arm64
-
-For Unix-like systems, extract the matching `tar.gz` archive and run `anpu`. Windows releases are packaged with the `.exe` binary in the archive.
-
-```sh
-tar -xzf anpu_*.tar.gz
-./anpu --help
-```
+See **[docs/releases.md](docs/releases.md)** for release verification, checksums, Docker installation, source builds, first-scan examples, and the maintainer release checklist.
 
 ### Build from source
 
@@ -159,7 +151,7 @@ internal/
 
 pkg/models/             shared scanner-agnostic data model
 
-docs/                   CLI, configuration, scanner, development, scoring, and CI/CD documentation
+docs/                   CLI, configuration, scanner, development, release, scoring, and CI/CD documentation
 ```
 
 **Design principle:** `internal/scanner` defines the scanner boundary and pipeline orchestration. Concrete analyzer packages are wired together in `cmd/anpu/scan.go`; the orchestrator works with scanner interfaces rather than hard-coding analyzer internals.
@@ -223,7 +215,7 @@ go test -v -race ./...
 docker build -t anpu .
 ```
 
-For the complete contributor workflow, scanner extension guidance, and CI/security integration checks, see [docs/development.md](docs/development.md).
+For the complete contributor workflow, scanner extension guidance, and CI/security integration checks, see [docs/development.md](docs/development.md). For release automation, see [docs/releases.md](docs/releases.md) and `.github/workflows/release.yml`.
 
 ## 11. Contributing
 

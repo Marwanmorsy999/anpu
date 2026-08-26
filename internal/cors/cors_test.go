@@ -50,7 +50,7 @@ func TestCORS_WildcardWithCredentials(t *testing.T) {
 	}
 	found := false
 	for _, f := range res.Findings {
-		if f.Severity == models.SeverityMedium && f.Title == "CORS wildcard combined with credentials" {
+		if f.Severity == models.SeverityMedium && f.Title == "Wildcard CORS combined with credentials" {
 			found = true
 			break
 		}

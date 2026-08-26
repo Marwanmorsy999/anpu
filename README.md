@@ -8,10 +8,14 @@
 
 [Install](#3-installation) · [Documentation](#5-architecture) · [Releases](https://github.com/Marwanmorsy999/anpu/releases)
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/Marwanmorsy999/anpu/ci.yml?branch=main&style=flat-square)](https://github.com/Marwanmorsy999/anpu/actions) [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://go.dev/) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE) [![SARIF](https://img.shields.io/badge/SARIF-Supported-success?style=flat-square)](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?style=flat-square&logo=docker)](https://docs.docker.com/)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/Marwanmorsy999/anpu/ci.yml?branch=main&style=flat-square)](https://github.com/Marwanmorsy999/anpu/actions) [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://go.dev/) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](https://github.com/Marwanmorsy999/anpu/blob/main/LICENSE) [![SARIF](https://img.shields.io/badge/SARIF-Supported-success?style=flat-square)](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?style=flat-square&logo=docker)](https://docs.docker.com/)
 
 ### Quick links
 
+- [CLI Reference](docs/cli.md)
+- [Configuration Reference](docs/configuration.md)
+- [Scanner and Engine Reference](docs/scanners.md)
+- [Development and Testing](docs/development.md)
 - [Risk Scoring Deep Dive](docs/scoring.md)
 - [CI/CD Integration](docs/ci-cd.md)
 - [Security Policy](SECURITY.md)
@@ -155,7 +159,7 @@ internal/
 
 pkg/models/             shared scanner-agnostic data model
 
-docs/                   scoring and CI/CD documentation
+docs/                   CLI, configuration, scanner, development, scoring, and CI/CD documentation
 ```
 
 **Design principle:** `internal/scanner` defines the scanner boundary and pipeline orchestration. Concrete analyzer packages are wired together in `cmd/anpu/scan.go`; the orchestrator works with scanner interfaces rather than hard-coding analyzer internals.
@@ -169,6 +173,8 @@ docs/                   scoring and CI/CD documentation
 | `deep` | ✅ | ✅ | ✅ when available | Broader discovery and active analysis |
 
 Module toggles in `anpu.yaml` can further enable or disable individual engines. `--no-nuclei` and `--no-zap` override integration settings for the current run.
+
+See [docs/configuration.md](docs/configuration.md) for profile/module precedence and the complete YAML shape.
 
 ## 7. Scan comparison and CI gates
 
@@ -185,7 +191,7 @@ Module toggles in `anpu.yaml` can further enable or disable individual engines. 
 
 `--fail-on` exits non-zero after reports and scan history have been written. Supported thresholds are `low`, `medium`, `high`, and `critical`; the default is `none`.
 
-See [docs/ci-cd.md](docs/ci-cd.md) for a complete GitHub Actions example.
+See [docs/ci-cd.md](docs/ci-cd.md) for a complete GitHub Actions example and [docs/cli.md](docs/cli.md) for all command and flag details.
 
 ## 8. Output formats
 
@@ -210,13 +216,14 @@ The ZAP integration is currently **planned**. The interface exists as an extensi
 ## 10. Development
 
 ```sh
+gofmt -l $(find . -name '*.go')
 go build ./...
 go vet ./...
-go test ./...
-gofmt -l $(find . -name '*.go')
+go test -v -race ./...
+docker build -t anpu .
 ```
 
-For the same checks used by GitHub Actions, see `.github/workflows/ci.yml` and `.github/workflows/scan.yml`.
+For the complete contributor workflow, scanner extension guidance, and CI/security integration checks, see [docs/development.md](docs/development.md).
 
 ## 11. Contributing
 

@@ -27,15 +27,24 @@ import (
 // Scanner implements scanner.Scanner for TCP port probing.
 type Scanner struct {
 	dialer *net.Dialer
+	dial   func(context.Context, string, string) (net.Conn, error)
 }
 
 func New() *Scanner {
-	return &Scanner{dialer: &net.Dialer{Timeout: 2 * time.Second}}
+	d := &net.Dialer{Timeout: 2 * time.Second}
+	return &Scanner{dialer: d, dial: d.DialContext}
 }
 
 func (s *Scanner) Name() string { return "portscan" }
 
 func (s *Scanner) Available(ctx context.Context) bool { return true }
+
+func (s *Scanner) dialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	if s.dial != nil {
+		return s.dial(ctx, network, address)
+	}
+	return s.dialer.DialContext(ctx, network, address)
+}
 
 // commonPorts covers the services most commonly exposed on web-facing
 // infrastructure: mail, databases, dev/admin panels, caches, message
@@ -74,8 +83,6 @@ var riskyServices = map[string]models.Severity{
 func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
 	host := sc.Target.Host
 	if sc.Target.Port != "" && sc.Target.Port != "80" && sc.Target.Port != "443" {
-		// Non-standard target port implies a specific service; still scan
-		// the standard set for completeness.
 		_ = sc.Target.Port
 	}
 
@@ -83,13 +90,9 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		return scanner.StageResult{}, fmt.Errorf("port scan blocked by local-network guard: %w", err)
 	}
 
-	// Sanity probe: middleboxes and transparent proxies sometimes
-	// SYN-ACK every connection. If two ports that are never meaningfully
-	// open (discard/tcpmux) accept connects, the path is lying and none
-	// of the results can be trusted.
 	lies := 0
 	for _, p := range []int{1, 9} {
-		if conn, err := s.dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, fmt.Sprintf("%d", p))); err == nil {
+		if conn, err := s.dialContext(ctx, "tcp", net.JoinHostPort(host, fmt.Sprintf("%d", p))); err == nil {
 			conn.Close()
 			lies++
 		}
@@ -119,7 +122,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			defer func() { <-sem }()
 
 			addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
-			conn, err := s.dialer.DialContext(ctx, "tcp", addr)
+			conn, err := s.dialContext(ctx, "tcp", addr)
 			if err == nil {
 				conn.Close()
 				mu.Lock()
@@ -148,8 +151,6 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		if r, ok := riskyServices[op.svc]; ok {
 			sev = r
 		}
-		// The primary web ports are expected; don't pad the report with
-		// findings for simply running a website.
 		if sev == models.SeverityInfo && (op.port == 80 || op.port == 443) {
 			continue
 		}
@@ -197,9 +198,6 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	return scanner.StageResult{Findings: findings}, nil
 }
 
-// cdnCaveat warns when the target is known to sit behind a CDN/proxy:
-// the connect scan reaches the CDN's edge IPs, so open ports may belong
-// to the provider's network rather than the customer's origin server.
 func cdnCaveat(sc *scanner.ScanContext) string {
 	for _, t := range sc.Technologies {
 		switch t.Name {

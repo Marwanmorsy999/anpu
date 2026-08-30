@@ -271,6 +271,51 @@ func isSharedAddressSpace(ip net.IP) bool {
 	return false
 }
 
+// AuthedClient wraps Client and injects a fixed set of headers (typically
+// from an AuthContext) into every request.  Use Client.WithAuth to
+// create one.
+type AuthedClient struct {
+	*Client
+	headers map[string]string
+}
+
+// WithAuth returns an AuthedClient that merges extraHeaders into every
+// outgoing request.  When extraHeaders is nil or empty, the original
+// Client is returned unchanged (no allocation).
+func (c *Client) WithAuth(extraHeaders map[string]string) *Client {
+	if len(extraHeaders) == 0 {
+		return c
+	}
+	// Shallow-clone the Client so the original is unchanged.
+	clone := *c
+	// Swap the transport to one that injects headers.
+	clone.http = &stdhttp.Client{
+		Transport: &authTransport{
+			base:    c.http.Transport,
+			headers: extraHeaders,
+		},
+		Timeout:       c.http.Timeout,
+		CheckRedirect: c.http.CheckRedirect,
+	}
+	return &clone
+}
+
+// authTransport is an http.RoundTripper that injects fixed headers before
+// delegating to the base transport.
+type authTransport struct {
+	base    stdhttp.RoundTripper
+	headers map[string]string
+}
+
+func (t *authTransport) RoundTrip(req *stdhttp.Request) (*stdhttp.Response, error) {
+	// Clone the request so we never mutate the caller's copy.
+	r := req.Clone(req.Context())
+	for k, v := range t.headers {
+		r.Header.Set(k, v)
+	}
+	return t.base.RoundTrip(r)
+}
+
 // Response is a captured HTTP response, with the body already read
 // (bounded by MaxBodyBytes) so callers can inspect it repeatedly without
 // re-issuing requests.

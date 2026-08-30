@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/anpu-project/anpu/internal/auth"
 	"github.com/anpu-project/anpu/internal/config"
 	"github.com/anpu-project/anpu/internal/cors"
 	"github.com/anpu-project/anpu/internal/dirs"
@@ -42,6 +43,12 @@ func newScanCmd() *cobra.Command {
 		noZAP        bool
 		failOn       string
 		skipPreCheck bool
+
+		// Auth flags — all opt-in, no credential is required or guessed.
+		authToken   string
+		authCookies []string
+		authHeaders []string
+		authRole    string
 	)
 
 	cmd := &cobra.Command{
@@ -57,7 +64,8 @@ are explicitly authorized to test.`,
 			if len(args) > 0 {
 				targetArg = args[0]
 			}
-			return runScan(cmd, targetArg, profile, jsonOut, htmlOut, sarifOut, outputDir, noNuclei, noZAP, failOn, skipPreCheck)
+			return runScan(cmd, targetArg, profile, jsonOut, htmlOut, sarifOut, outputDir, noNuclei, noZAP, failOn, skipPreCheck,
+				authToken, authCookies, authHeaders, authRole)
 		},
 	}
 
@@ -71,10 +79,19 @@ are explicitly authorized to test.`,
 	cmd.Flags().StringVar(&failOn, "fail-on", "none", "return a non-zero exit status when findings meet/exceed this severity: none, low, medium, high, critical")
 	cmd.Flags().BoolVar(&skipPreCheck, "skip-pre-check", false, "skip the initial connectivity check (scan runs even if host appears down)")
 
+	// Authentication flags — all opt-in.  ANPU never guesses or derives
+	// credentials; everything here must be supplied explicitly.
+	cmd.Flags().StringVar(&authToken, "auth-token", "", "bearer token to include in every request (Authorization: Bearer <token>)")
+	cmd.Flags().StringArrayVar(&authCookies, "auth-cookie", nil, "cookie to include in every request, in name=value form (repeatable)")
+	cmd.Flags().StringArrayVar(&authHeaders, "auth-header", nil, "custom header to include in every request, in 'Name: Value' form (repeatable)")
+	cmd.Flags().StringVar(&authRole, "auth-role", "", "label for the scan identity, e.g. admin, user (default: anonymous / user)")
+
 	return cmd
 }
 
-func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut, sarifOut bool, outputDir string, noNuclei, noZAP bool, failOn string, skipPreCheck bool) error {
+func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut, sarifOut bool, outputDir string, noNuclei, noZAP bool, failOn string, skipPreCheck bool,
+	authToken string, authCookies, authHeaders []string, authRole string) error {
+
 	profile := models.Profile(strings.ToLower(profileStr))
 	if !profile.Valid() {
 		return fmt.Errorf("invalid --profile %q: must be one of safe, standard, deep", profileStr)
@@ -82,6 +99,13 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 	failThreshold, err := parseFailOn(failOn)
 	if err != nil {
 		return err
+	}
+
+	// Build the auth context early so a bad flag combination surfaces
+	// before we print the banner or touch the network.
+	authCtx, err := auth.FromFlags(authToken, authCookies, authHeaders, authRole)
+	if err != nil {
+		return fmt.Errorf("invalid auth flags: %w", err)
 	}
 
 	fmt.Print(reporting.AuthorizationWarning)
@@ -119,6 +143,11 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		Verbose:      flagVerbose,
 		SkipPreCheck: skipPreCheck,
 		Modules:      modules,
+		Auth:         authCtx,
+	}
+
+	if authCtx.IsAuthenticated() {
+		fmt.Printf("  auth context : %s\n", auth.Summary(authCtx))
 	}
 
 	reporting.PrintBanner(target.Raw)

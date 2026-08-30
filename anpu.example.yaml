@@ -30,3 +30,20 @@ report:
   html: true
   json: true
   sarif: false
+
+# Authentication context — all fields are optional.
+# ANPU never guesses or brute-forces credentials.
+# Authentication is always opt-in and explicit.
+#
+# SECURITY: Never commit real credentials to source control.
+# Pass sensitive values via CLI flags or environment substitution.
+#
+# auth:
+#   method: bearer          # none | bearer | cookie | header
+#   token: ""               # used when method: bearer
+#   cookies:                # used when method: cookie
+#     - session=abc123
+#     - csrf=xyz789
+#   headers:                # used when method: header
+#     - "X-Api-Key: mykey"
+#   role: user              # label for this identity (default: user / anonymous)

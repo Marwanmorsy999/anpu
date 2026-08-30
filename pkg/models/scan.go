@@ -73,6 +73,12 @@ type ScanConfig struct {
 	Verbose      bool
 	SkipPreCheck bool
 	Modules      ModuleConfig
+
+	// Auth is the credential context for this scan.  An empty AuthContext
+	// (Method == AuthMethodNone) means the scan runs anonymously.
+	// Authentication is always opt-in — this field is never populated
+	// from environment variables or implicit sources.
+	Auth AuthContext
 }
 
 // ModuleConfig toggles individual pipeline stages, mirroring the
@@ -149,6 +155,10 @@ type ScanSummary struct {
 	CompletedAt  time.Time `json:"completed_at"`
 	Status       string    `json:"status"` // running, completed, failed
 	StatusReason string    `json:"status_reason,omitempty"`
+
+	// AuthRole is the credential identity used for this scan.
+	// Credential values are never stored — only the role label.
+	AuthRole string `json:"auth_role,omitempty"`
 
 	Technologies []Technology `json:"technologies"`
 	Endpoints    []Endpoint   `json:"endpoints"`

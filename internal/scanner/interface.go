@@ -24,6 +24,12 @@ type ScanContext struct {
 	Config  models.ScanConfig
 	Verbose bool
 
+	// Auth is the credential context for this scan.  Stages that issue
+	// HTTP requests should call Auth.RequestHeaders() and merge the
+	// result into their requests so that authenticated surfaces are
+	// reachable.  Credential values must never appear in findings or logs.
+	Auth models.AuthContext
+
 	// Populated as the pipeline progresses so later stages (e.g. Nuclei)
 	// can use earlier results (e.g. discovered endpoints).
 	Technologies []models.Technology

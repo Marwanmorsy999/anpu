@@ -6,8 +6,8 @@ import (
 	"context"
 	"fmt"
 
-	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/crawler"
+	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/pkg/models"
 )

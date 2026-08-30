@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
@@ -12,23 +13,40 @@ import (
 
 func TestDiscover_RespectsScopeAndDepth(t *testing.T) {
 	mux := http.NewServeMux()
+	var mu sync.Mutex
+	hits := map[string]int{}
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		hits[r.URL.Path]++
+		mu.Unlock()
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write([]byte(`<a href="/one">one</a><a href="https://example.invalid/outside">external</a>`))
 	})
 	mux.HandleFunc("/one", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		hits[r.URL.Path]++
+		mu.Unlock()
 		w.Header().Set("Content-Type", "text/html")
 		_, _ = w.Write([]byte(`<a href="/two">two</a><img src="/image.png">`))
 	})
 	mux.HandleFunc("/two", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		hits[r.URL.Path]++
+		mu.Unlock()
 		w.Header().Set("Content-Type", "text/html")
 		_, _ = w.Write([]byte(`<a href="/three">three</a>`))
 	})
 	mux.HandleFunc("/three", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		hits[r.URL.Path]++
+		mu.Unlock()
 		w.Header().Set("Content-Type", "text/html")
 		_, _ = w.Write([]byte(`<p>terminal</p>`))
 	})
 	mux.HandleFunc("/image.png", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		hits[r.URL.Path]++
+		mu.Unlock()
 		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write([]byte("not-an-image"))
 	})
@@ -51,17 +69,26 @@ func TestDiscover_RespectsScopeAndDepth(t *testing.T) {
 	if _, ok := findEndpoint(endpoints, srv.URL+"/one"); !ok {
 		t.Fatal("expected first-level page to be discovered")
 	}
-	if _, ok := findEndpoint(endpoints, srv.URL+"/two"); ok {
-		t.Fatal("did not expect second-level page to be discovered at max depth 1")
+	if _, ok := findEndpoint(endpoints, srv.URL+"/two"); !ok {
+		t.Fatal("expected second-level URL to be recorded in the attack surface")
 	}
 	if _, ok := findEndpoint(endpoints, srv.URL+"/three"); ok {
-		t.Fatal("did not expect depth-3 page to be discovered")
+		t.Fatal("did not expect depth-2 page to be discovered")
 	}
-	if _, ok := findEndpoint(endpoints, srv.URL+"/image.png"); ok {
-		t.Fatal("did not expect asset discovered from an un-crawled page")
+	if _, ok := findEndpoint(endpoints, srv.URL+"/image.png"); !ok {
+		t.Fatal("expected linked asset to be recorded")
 	}
 	if _, ok := findEndpoint(endpoints, "https://example.invalid/outside"); ok {
 		t.Fatal("did not expect external-domain endpoint")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if hits["/two"] != 0 {
+		t.Fatalf("expected max depth to prevent fetching /two, got %d request(s)", hits["/two"])
+	}
+	if hits["/image.png"] != 0 {
+		t.Fatalf("expected static assets not to be recursively fetched, got %d request(s)", hits["/image.png"])
 	}
 }
 

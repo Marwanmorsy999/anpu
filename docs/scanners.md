@@ -11,7 +11,7 @@ ANPU combines built-in analyzers with an optional Nuclei integration. The scanne
 | TLS | Certificate validity, expiry, hostname, protocols, HTTPS behavior | All | Passive | No |
 | Headers | CSP, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, disclosure headers | All | Passive | No |
 | Cookies | Secure, HttpOnly, SameSite attributes | All | Passive | No |
-| Endpoints | Links, forms, scripts, API/path references | All | Passive | No |
+| Endpoints / Crawler | Same-host pages, links, forms, scripts, API/path references | All | Bounded GETs | No |
 | Subdomains | Certificate Transparency logs; DNS brute-force in deep | Standard/Deep | Active | No |
 | PortScan | TCP connect scan of common service ports | Deep | Active | No |
 | Dirs | Sensitive-path probing with soft-404 baseline | Standard/Deep | Active | No |
@@ -43,9 +43,19 @@ The headers analyzer checks security-related HTTP response headers and server di
 
 These checks are low-impact because they inspect HTTP behavior rather than attempting exploitation.
 
-## Endpoint discovery
+## Endpoint discovery and bounded crawling
 
-Endpoint discovery extracts links, forms, scripts, and API/path references from discovered content. Results are normalized and deduplicated so the same URL is not reported repeatedly simply because it appeared from multiple sources.
+Endpoint discovery now uses a bounded same-host crawler. The crawler starts at the target URL, records normalized links/forms/scripts/API references, and follows only same-host HTTP(S) document URLs. Obvious static assets are recorded as endpoints but are not recursively crawled.
+
+The crawl remains bounded by profile:
+
+- `safe`: target page only (`1` page, depth `0`)
+- `standard`: up to `25` pages, depth `2`
+- `deep`: up to `100` pages, depth `4`
+
+The crawler performs GET requests only; it never submits forms, attempts authentication, or brute-forces paths. All requests go through ANPU's shared HTTP client, preserving redirect and local-network protections.
+
+A page-limit warning is emitted when the configured bound is reached. This makes scan scope visible rather than silently truncating discovery.
 
 ## Subdomains
 

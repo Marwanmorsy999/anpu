@@ -10,7 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-
 // TargetConfig mirrors the `target:` section of the YAML config.
 type TargetConfig struct {
 	URL string `yaml:"url"`

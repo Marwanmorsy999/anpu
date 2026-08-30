@@ -11,7 +11,7 @@ ANPU combines built-in analyzers with an optional Nuclei integration. The scanne
 | TLS | Certificate validity, expiry, hostname, protocols, HTTPS behavior | All | Passive | No |
 | Headers | CSP, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, disclosure headers | All | Passive | No |
 | Cookies | Secure, HttpOnly, SameSite attributes | All | Passive | No |
-| Endpoints / Crawler | Same-origin pages, links, forms, scripts, API/path references | All | Bounded GETs | No |
+| Endpoints / Crawler | Same-host pages, links, forms, scripts, API/path references | All | Bounded GETs | No |
 | Subdomains | Certificate Transparency logs; DNS brute-force in deep | Standard/Deep | Active | No |
 | PortScan | TCP connect scan of common service ports | Deep | Active | No |
 | Dirs | Sensitive-path probing with soft-404 baseline | Standard/Deep | Active | No |
@@ -45,7 +45,7 @@ These checks are low-impact because they inspect HTTP behavior rather than attem
 
 ## Endpoint discovery and bounded crawling
 
-Endpoint discovery now uses a bounded same-origin crawler. The crawler starts at the target URL, records normalized links/forms/scripts/API references, and follows only same-host HTTP(S) document URLs. Obvious static assets are recorded as endpoints but are not recursively crawled.
+Endpoint discovery now uses a bounded same-host crawler. The crawler starts at the target URL, records normalized links/forms/scripts/API references, and follows only same-host HTTP(S) document URLs. Obvious static assets are recorded as endpoints but are not recursively crawled.
 
 The crawl remains bounded by profile:
 

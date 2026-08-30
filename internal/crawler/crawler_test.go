@@ -46,7 +46,7 @@ func TestDiscover_RespectsScopeAndDepth(t *testing.T) {
 	}
 
 	want := map[string]bool{
-		srv.URL:         true,
+		srv.URL:          true,
 		srv.URL + "/one": true,
 		srv.URL + "/two": true, // discovered, but not crawled at depth 2
 	}

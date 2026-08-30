@@ -45,21 +45,23 @@ func TestDiscover_RespectsScopeAndDepth(t *testing.T) {
 		t.Fatalf("unexpected warnings: %v", warnings)
 	}
 
-	want := map[string]bool{
-		srv.URL:          true,
-		srv.URL + "/one": true,
-		srv.URL + "/two": true, // discovered, but not crawled at depth 2
+	if _, ok := findEndpoint(endpoints, srv.URL); !ok {
+		t.Fatal("expected crawl start endpoint")
 	}
-	for raw := range want {
-		if _, ok := findEndpoint(endpoints, raw); !ok {
-			t.Errorf("expected endpoint %s", raw)
-		}
+	if _, ok := findEndpoint(endpoints, srv.URL+"/one"); !ok {
+		t.Fatal("expected first-level page to be discovered")
+	}
+	if _, ok := findEndpoint(endpoints, srv.URL+"/two"); ok {
+		t.Fatal("did not expect second-level page to be discovered at max depth 1")
 	}
 	if _, ok := findEndpoint(endpoints, srv.URL+"/three"); ok {
-		t.Error("did not expect depth-3 page to be discovered")
+		t.Fatal("did not expect depth-3 page to be discovered")
 	}
-	if _, ok := findEndpoint(endpoints, srv.URL+"/image.png"); !ok {
-		t.Error("expected non-page asset to be recorded but not crawled")
+	if _, ok := findEndpoint(endpoints, srv.URL+"/image.png"); ok {
+		t.Fatal("did not expect asset discovered from an un-crawled page")
+	}
+	if _, ok := findEndpoint(endpoints, "https://example.invalid/outside"); ok {
+		t.Fatal("did not expect external-domain endpoint")
 	}
 }
 

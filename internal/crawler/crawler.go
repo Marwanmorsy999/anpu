@@ -1,4 +1,4 @@
-// Package crawler provides bounded, same-origin web crawling for ANPU's
+// Package crawler provides bounded, same-host web crawling for ANPU's
 // attack-surface discovery stage. It intentionally performs only GET
 // requests through ANPU's shared HTTP client and never submits forms.
 package crawler
@@ -34,7 +34,7 @@ func LimitsForProfile(profile models.Profile) Limits {
 	}
 }
 
-// Crawler performs bounded same-origin discovery.
+// Crawler performs bounded same-host discovery.
 type Crawler struct {
 	client *anpuhttp.Client
 	limits Limits
@@ -82,6 +82,7 @@ func (c *Crawler) Discover(ctx context.Context, startURL string) ([]models.Endpo
 	visited := map[string]bool{}
 	collected := map[string]*models.Endpoint{}
 	var warnings []string
+	limitHit := false
 
 	for len(queue) > 0 && len(visited) < c.limits.MaxPages {
 		select {
@@ -130,6 +131,7 @@ func (c *Crawler) Discover(ctx context.Context, startURL string) ([]models.Endpo
 				continue
 			}
 			if len(visited)+len(queue) >= c.limits.MaxPages {
+				limitHit = true
 				continue
 			}
 			queued[resolved] = true
@@ -137,7 +139,7 @@ func (c *Crawler) Discover(ctx context.Context, startURL string) ([]models.Endpo
 		}
 	}
 
-	if len(visited) >= c.limits.MaxPages && len(queue) > 0 {
+	if len(visited) >= c.limits.MaxPages && (len(queue) > 0 || limitHit) {
 		warnings = append(warnings, fmt.Sprintf("crawler: page limit reached (%d)", c.limits.MaxPages))
 	}
 	return materialize(collected), warnings, nil
@@ -155,10 +157,11 @@ func extractLinks(body []byte) []link {
 	var out []link
 	add := func(raw, source, method string) {
 		raw = strings.TrimSpace(raw)
-		if raw == "" || seen[source+"|"+raw+"|"+method] {
+		key := source + "|" + raw + "|" + method
+		if raw == "" || seen[key] {
 			return
 		}
-		seen[source+"|"+raw+"|"+method] = true
+		seen[key] = true
 		out = append(out, link{raw: raw, source: source, method: method})
 	}
 
@@ -186,10 +189,11 @@ func resolve(base *url.URL, raw, current string) string {
 	if raw == "" {
 		return current
 	}
-	if strings.HasPrefix(strings.ToLower(raw), "javascript:") ||
-		strings.HasPrefix(strings.ToLower(raw), "mailto:") ||
-		strings.HasPrefix(strings.ToLower(raw), "tel:") ||
-		strings.HasPrefix(strings.ToLower(raw), "data:") {
+	lower := strings.ToLower(raw)
+	if strings.HasPrefix(lower, "javascript:") ||
+		strings.HasPrefix(lower, "mailto:") ||
+		strings.HasPrefix(lower, "tel:") ||
+		strings.HasPrefix(lower, "data:") {
 		return ""
 	}
 	u, err := url.Parse(raw)

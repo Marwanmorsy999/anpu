@@ -15,6 +15,19 @@ type TargetConfig struct {
 	URL string `yaml:"url"`
 }
 
+// AuthFileConfig mirrors the `auth:` section of the YAML config.
+// Credentials supplied here are merged with CLI flags; CLI flags win.
+//
+// NEVER commit real credentials.  Use environment variable references
+// or pass credentials on the command line for sensitive values.
+type AuthFileConfig struct {
+	Method  string   `yaml:"method"`
+	Token   string   `yaml:"token"`
+	Cookies []string `yaml:"cookies"`
+	Headers []string `yaml:"headers"`
+	Role    string   `yaml:"role"`
+}
+
 // ScanFileConfig mirrors the `scan:` section.
 type ScanFileConfig struct {
 	Profile string `yaml:"profile"`
@@ -52,6 +65,7 @@ type File struct {
 	Scan    ScanFileConfig    `yaml:"scan"`
 	Modules ModulesFileConfig `yaml:"modules"`
 	Report  ReportFileConfig  `yaml:"report"`
+	Auth    AuthFileConfig    `yaml:"auth"`
 }
 
 // Load reads and parses a YAML config file at path. It is not an error
@@ -70,6 +84,85 @@ func Load(path string) (*File, error) {
 		return nil, fmt.Errorf("parsing config file %s: %w", path, err)
 	}
 	return &f, nil
+}
+
+// ResolveAuth returns the effective AuthContext for a scan, merging YAML
+// config with CLI flag values.  CLI flags always win over file values.
+// An empty AuthContext (all-zero) is returned when neither source
+// provides credentials.
+//
+// The caller is responsible for calling Validate() on the result.
+func ResolveAuth(f *File, cliToken string, cliCookies, cliHeaders []string, cliRole string) (models.AuthContext, error) {
+	// Start from file values.
+	token := cliToken
+	cookies := cliCookies
+	hdrs := cliHeaders
+	role := cliRole
+
+	if f != nil && f.Auth.Method != "" {
+		// Only pull from file if CLI didn't supply a credential.
+		if token == "" && len(cookies) == 0 && len(hdrs) == 0 {
+			token = f.Auth.Token
+			cookies = f.Auth.Cookies
+			hdrs = f.Auth.Headers
+		}
+		if role == "" {
+			role = f.Auth.Role
+		}
+	}
+
+	// Delegate to the auth package constructor for validation logic.
+	// We call it directly here to keep config independent of auth, but
+	// the logic is: pick the first non-empty credential type, validate,
+	// return.
+	active := 0
+	if token != "" {
+		active++
+	}
+	if len(cookies) > 0 {
+		active++
+	}
+	if len(hdrs) > 0 {
+		active++
+	}
+	if active > 1 {
+		return models.AuthContext{}, fmt.Errorf(
+			"at most one auth method may be active (bearer_token, cookies, or headers)",
+		)
+	}
+
+	ctx := models.AuthContext{}
+	switch {
+	case token != "":
+		ctx.Method = models.AuthMethodBearer
+		ctx.BearerToken = token
+		if role == "" {
+			role = "user"
+		}
+	case len(cookies) > 0:
+		ctx.Method = models.AuthMethodCookie
+		ctx.Cookies = cookies
+		if role == "" {
+			role = "user"
+		}
+	case len(hdrs) > 0:
+		ctx.Method = models.AuthMethodHeader
+		ctx.Headers = hdrs
+		if role == "" {
+			role = "user"
+		}
+	default:
+		ctx.Method = models.AuthMethodNone
+		if role == "" {
+			role = "anonymous"
+		}
+	}
+	ctx.Role = models.AuthRole(role)
+
+	if err := ctx.Validate(); err != nil {
+		return models.AuthContext{}, err
+	}
+	return ctx, nil
 }
 
 // applyBool overrides dst with src if src is non-nil.

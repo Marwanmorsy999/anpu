@@ -58,6 +58,7 @@ func (p *Pipeline) Run(
 		Target:  target,
 		Config:  cfg,
 		Verbose: cfg.Verbose,
+		Auth:    cfg.Auth,
 	}
 
 	summary := &models.ScanSummary{
@@ -66,6 +67,8 @@ func (p *Pipeline) Run(
 		Profile:   cfg.Profile,
 		StartedAt: time.Now(),
 		Status:    "running",
+		// Store the role label only — never credential values.
+		AuthRole: string(cfg.Auth.EffectiveRole()),
 	}
 
 	if p.Client != nil && !cfg.SkipPreCheck {

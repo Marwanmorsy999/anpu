@@ -63,14 +63,14 @@ func TestResolveModules_CLIFlagsOverrideConfig(t *testing.T) {
 	trueVal := true
 	f := &File{Modules: ModulesFileConfig{Nuclei: &trueVal}}
 
-	mc := ResolveModules(models.ProfileStandard, f, true /* --no-nuclei */, false)
+	mc := ResolveModules(models.ProfileStandard, f, true /* --no-nuclei */, false, false)
 	if mc.Nuclei {
 		t.Error("expected --no-nuclei CLI flag to override modules.nuclei=true from config")
 	}
 }
 
 func TestResolveModules_ProfileDefaultsApplyWithoutConfig(t *testing.T) {
-	mc := ResolveModules(models.ProfileSafe, &File{}, false, false)
+	mc := ResolveModules(models.ProfileSafe, &File{}, false, false, false)
 	if mc.Nuclei {
 		t.Error("expected nuclei to default to disabled under the safe profile")
 	}

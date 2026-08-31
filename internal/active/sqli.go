@@ -18,10 +18,10 @@ import (
 // vulnerable systems but cannot modify data.
 type sqliRule struct{}
 
-func (r *sqliRule) ID() models.ActiveRuleID  { return "sqli-error-based" }
-func (r *sqliRule) Name() string             { return "SQL Injection Indicator (Error-Based)" }
+func (r *sqliRule) ID() models.ActiveRuleID    { return "sqli-error-based" }
+func (r *sqliRule) Name() string               { return "SQL Injection Indicator (Error-Based)" }
 func (r *sqliRule) Safety() models.SafetyLevel { return models.SafetyLowImpact }
-func (r *sqliRule) RequestBudget() int       { return 2 }
+func (r *sqliRule) RequestBudget() int         { return 2 }
 
 // sqliPayload is a minimal probe that triggers a SQL parse error on most
 // databases without modifying any data.
@@ -76,23 +76,23 @@ func (r *sqliRule) Test(ctx context.Context, client *anpuhttp.Client, v models.I
 
 func (r *sqliRule) ToFinding(res models.ActiveRuleResult, target string) models.Finding {
 	return models.Finding{
-		ID: fmt.Sprintf("active-sqli-%d", time.Now().UnixNano()),
-		Title: fmt.Sprintf("SQL injection indicator in parameter %q at %s", res.Vector.Name, res.Vector.URL),
-		Description: fmt.Sprintf("Injecting a single-quote into parameter %q triggered a database error message in the response, indicating the parameter value is interpolated into a SQL query without sanitization.", res.Vector.Name),
-		Severity: models.SeverityCritical,
-		Confidence: models.ConfidenceHigh,
-		Category: models.CategoryVulnerability,
-		CWE: "CWE-89",
-		OWASP: "A03:2021 - Injection",
-		Target: target,
-		URL: res.Vector.URL,
-		Parameter: res.Vector.Name,
-		Source: models.SourceActive,
+		ID:              fmt.Sprintf("active-sqli-%d", time.Now().UnixNano()),
+		Title:           fmt.Sprintf("SQL injection indicator in parameter %q at %s", res.Vector.Name, res.Vector.URL),
+		Description:     fmt.Sprintf("Injecting a single-quote into parameter %q triggered a database error message in the response, indicating the parameter value is interpolated into a SQL query without sanitization.", res.Vector.Name),
+		Severity:        models.SeverityCritical,
+		Confidence:      models.ConfidenceHigh,
+		Category:        models.CategoryVulnerability,
+		CWE:             "CWE-89",
+		OWASP:           "A03:2021 - Injection",
+		Target:          target,
+		URL:             res.Vector.URL,
+		Parameter:       res.Vector.Name,
+		Source:          models.SourceActive,
 		DetectionMethod: "error-based SQL injection: single-quote probe triggered a recognisable database error string",
-		Evidence: models.Evidence{Observed: res.Evidence, Location: res.Vector.URL, RequestSummary: fmt.Sprintf("GET %s (payload in %s=%q)", res.Vector.URL, res.Vector.Name, res.Payload)},
-		Impact: "An attacker can read, modify, or delete database contents, bypass authentication, and potentially execute OS commands depending on the database and configuration.",
-		Remediation: "Use parameterised queries or prepared statements. Never interpolate user input directly into SQL. Apply least-privilege DB accounts.",
-		References: []string{"https://owasp.org/www-community/attacks/SQL_Injection", "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"},
-		FirstSeen: time.Now(),
+		Evidence:        models.Evidence{Observed: res.Evidence, Location: res.Vector.URL, RequestSummary: fmt.Sprintf("GET %s (payload in %s=%q)", res.Vector.URL, res.Vector.Name, res.Payload)},
+		Impact:          "An attacker can read, modify, or delete database contents, bypass authentication, and potentially execute OS commands depending on the database and configuration.",
+		Remediation:     "Use parameterised queries or prepared statements. Never interpolate user input directly into SQL. Apply least-privilege DB accounts.",
+		References:      []string{"https://owasp.org/www-community/attacks/SQL_Injection", "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"},
+		FirstSeen:       time.Now(),
 	}
 }

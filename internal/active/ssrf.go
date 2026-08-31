@@ -19,10 +19,10 @@ import (
 // actually contacting internal services during testing.
 type ssrfRule struct{}
 
-func (r *ssrfRule) ID() models.ActiveRuleID  { return "ssrf-indicator" }
-func (r *ssrfRule) Name() string             { return "SSRF Indicator" }
+func (r *ssrfRule) ID() models.ActiveRuleID    { return "ssrf-indicator" }
+func (r *ssrfRule) Name() string               { return "SSRF Indicator" }
 func (r *ssrfRule) Safety() models.SafetyLevel { return models.SafetyLowImpact }
-func (r *ssrfRule) RequestBudget() int       { return 3 }
+func (r *ssrfRule) RequestBudget() int         { return 3 }
 
 // ssrfPayloads target well-known cloud metadata endpoints.
 var ssrfPayloads = []string{
@@ -95,23 +95,23 @@ func looksLikeURLParam(name, value string) bool {
 
 func (r *ssrfRule) ToFinding(res models.ActiveRuleResult, target string) models.Finding {
 	return models.Finding{
-		ID: fmt.Sprintf("active-ssrf-%d", time.Now().UnixNano()),
-		Title: fmt.Sprintf("SSRF indicator in parameter %q at %s", res.Vector.Name, res.Vector.URL),
-		Description: fmt.Sprintf("Parameter %q accepted a cloud metadata URL and the server's response contained metadata content, indicating it made an outbound request to the injected URL (Server-Side Request Forgery).", res.Vector.Name),
-		Severity: models.SeverityCritical,
-		Confidence: models.ConfidenceMedium,
-		Category: models.CategoryVulnerability,
-		CWE: "CWE-918",
-		OWASP: "A10:2021 - Server-Side Request Forgery",
-		Target: target,
-		URL: res.Vector.URL,
-		Parameter: res.Vector.Name,
-		Source: models.SourceActive,
+		ID:              fmt.Sprintf("active-ssrf-%d", time.Now().UnixNano()),
+		Title:           fmt.Sprintf("SSRF indicator in parameter %q at %s", res.Vector.Name, res.Vector.URL),
+		Description:     fmt.Sprintf("Parameter %q accepted a cloud metadata URL and the server's response contained metadata content, indicating it made an outbound request to the injected URL (Server-Side Request Forgery).", res.Vector.Name),
+		Severity:        models.SeverityCritical,
+		Confidence:      models.ConfidenceMedium,
+		Category:        models.CategoryVulnerability,
+		CWE:             "CWE-918",
+		OWASP:           "A10:2021 - Server-Side Request Forgery",
+		Target:          target,
+		URL:             res.Vector.URL,
+		Parameter:       res.Vector.Name,
+		Source:          models.SourceActive,
 		DetectionMethod: "SSRF probe: cloud metadata endpoint injected into URL-like parameter, metadata content found in response",
-		Evidence: models.Evidence{Observed: res.Evidence, Location: res.Vector.URL, RequestSummary: fmt.Sprintf("GET %s (payload in %s=%q)", res.Vector.URL, res.Vector.Name, res.Payload)},
-		Impact: "An attacker can make the server contact internal services, cloud metadata endpoints, and other infrastructure, enabling credential theft, lateral movement, and data exfiltration.",
-		Remediation: "Validate and allowlist outbound URL destinations. Block access to cloud metadata IP ranges (169.254.169.254) at the network level. Use IMDSv2 with token requirement on AWS.",
-		References: []string{"https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/", "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"},
-		FirstSeen: time.Now(),
+		Evidence:        models.Evidence{Observed: res.Evidence, Location: res.Vector.URL, RequestSummary: fmt.Sprintf("GET %s (payload in %s=%q)", res.Vector.URL, res.Vector.Name, res.Payload)},
+		Impact:          "An attacker can make the server contact internal services, cloud metadata endpoints, and other infrastructure, enabling credential theft, lateral movement, and data exfiltration.",
+		Remediation:     "Validate and allowlist outbound URL destinations. Block access to cloud metadata IP ranges (169.254.169.254) at the network level. Use IMDSv2 with token requirement on AWS.",
+		References:      []string{"https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/", "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"},
+		FirstSeen:       time.Now(),
 	}
 }

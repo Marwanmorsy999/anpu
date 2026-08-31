@@ -20,13 +20,13 @@ type Scanner struct {
 // New returns an active.Scanner with the default rule registry.
 func New(client *anpuhttp.Client) *Scanner {
 	return &Scanner{
-		client: client,
+		client:   client,
 		registry: DefaultRegistry(),
 	}
 }
 
-func (s *Scanner) Name() string                       { return "active-tester" }
-func (s *Scanner) Available(_ context.Context) bool   { return true }
+func (s *Scanner) Name() string                     { return "active-tester" }
+func (s *Scanner) Available(_ context.Context) bool { return true }
 
 // Run iterates over all discovered endpoints, extracts input vectors,
 // and runs every rule against every vector within its declared budget.

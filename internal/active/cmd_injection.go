@@ -19,10 +19,10 @@ import (
 // (those require timing analysis and carry higher risk).
 type cmdInjectionRule struct{}
 
-func (r *cmdInjectionRule) ID() models.ActiveRuleID  { return "cmd-injection-indicator" }
-func (r *cmdInjectionRule) Name() string             { return "Command Injection Indicator" }
+func (r *cmdInjectionRule) ID() models.ActiveRuleID    { return "cmd-injection-indicator" }
+func (r *cmdInjectionRule) Name() string               { return "Command Injection Indicator" }
 func (r *cmdInjectionRule) Safety() models.SafetyLevel { return models.SafetyLowImpact }
-func (r *cmdInjectionRule) RequestBudget() int       { return 2 }
+func (r *cmdInjectionRule) RequestBudget() int         { return 2 }
 
 // Payloads use shell metacharacters that cause syntax errors when
 // interpolated into a shell command — visible in error output.
@@ -80,23 +80,23 @@ func (r *cmdInjectionRule) Test(ctx context.Context, client *anpuhttp.Client, v 
 
 func (r *cmdInjectionRule) ToFinding(res models.ActiveRuleResult, target string) models.Finding {
 	return models.Finding{
-		ID: fmt.Sprintf("active-cmdi-%d", time.Now().UnixNano()),
-		Title: fmt.Sprintf("Command injection indicator in parameter %q at %s", res.Vector.Name, res.Vector.URL),
-		Description: fmt.Sprintf("Shell metacharacters injected into parameter %q produced a shell error message or executed a test command, indicating the value is passed to a system shell without sanitization.", res.Vector.Name),
-		Severity: models.SeverityCritical,
-		Confidence: models.ConfidenceMedium,
-		Category: models.CategoryVulnerability,
-		CWE: "CWE-78",
-		OWASP: "A03:2021 - Injection",
-		Target: target,
-		URL: res.Vector.URL,
-		Parameter: res.Vector.Name,
-		Source: models.SourceActive,
+		ID:              fmt.Sprintf("active-cmdi-%d", time.Now().UnixNano()),
+		Title:           fmt.Sprintf("Command injection indicator in parameter %q at %s", res.Vector.Name, res.Vector.URL),
+		Description:     fmt.Sprintf("Shell metacharacters injected into parameter %q produced a shell error message or executed a test command, indicating the value is passed to a system shell without sanitization.", res.Vector.Name),
+		Severity:        models.SeverityCritical,
+		Confidence:      models.ConfidenceMedium,
+		Category:        models.CategoryVulnerability,
+		CWE:             "CWE-78",
+		OWASP:           "A03:2021 - Injection",
+		Target:          target,
+		URL:             res.Vector.URL,
+		Parameter:       res.Vector.Name,
+		Source:          models.SourceActive,
 		DetectionMethod: "command injection probe: shell metacharacters triggered error message or command output in response",
-		Evidence: models.Evidence{Observed: res.Evidence, Location: res.Vector.URL, RequestSummary: fmt.Sprintf("GET %s (payload appended to %s)", res.Vector.URL, res.Vector.Name)},
-		Impact: "An attacker can execute arbitrary commands on the server operating system, leading to full server compromise.",
-		Remediation: "Never pass user input to shell commands. Use language APIs that accept argument lists instead of shell strings. Validate input against strict allowlists.",
-		References: []string{"https://owasp.org/www-community/attacks/Command_Injection", "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"},
-		FirstSeen: time.Now(),
+		Evidence:        models.Evidence{Observed: res.Evidence, Location: res.Vector.URL, RequestSummary: fmt.Sprintf("GET %s (payload appended to %s)", res.Vector.URL, res.Vector.Name)},
+		Impact:          "An attacker can execute arbitrary commands on the server operating system, leading to full server compromise.",
+		Remediation:     "Never pass user input to shell commands. Use language APIs that accept argument lists instead of shell strings. Validate input against strict allowlists.",
+		References:      []string{"https://owasp.org/www-community/attacks/Command_Injection", "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"},
+		FirstSeen:       time.Now(),
 	}
 }

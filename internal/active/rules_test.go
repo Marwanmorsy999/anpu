@@ -19,9 +19,9 @@ func testClient(t *testing.T) *anpuhttp.Client {
 
 func testVector(serverURL, param, value string) models.InputVector {
 	return models.InputVector{
-		URL: serverURL + "?q=safe&" + param + "=" + value,
-		Kind: models.VectorQueryParam,
-		Name: param,
+		URL:           serverURL + "?q=safe&" + param + "=" + value,
+		Kind:          models.VectorQueryParam,
+		Name:          param,
 		OriginalValue: value,
 	}
 }
@@ -186,12 +186,12 @@ func TestAllRulesToFinding_NonEmpty(t *testing.T) {
 	rules := DefaultRegistry().Rules()
 	for _, rule := range rules {
 		res := models.ActiveRuleResult{
-			RuleID: rule.ID(),
-			Payload: "test-payload",
-			Found: true,
+			RuleID:   rule.ID(),
+			Payload:  "test-payload",
+			Found:    true,
 			Evidence: "test evidence",
 			Vector: models.InputVector{
-				URL: "https://example.com/page?q=1",
+				URL:  "https://example.com/page?q=1",
 				Kind: models.VectorQueryParam,
 				Name: "q",
 			},

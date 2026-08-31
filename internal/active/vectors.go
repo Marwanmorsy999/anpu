@@ -29,9 +29,9 @@ func ExtractVectors(ep models.Endpoint) []models.InputVector {
 			original = values[0]
 		}
 		out = append(out, models.InputVector{
-			URL: ep.URL,
-			Kind: models.VectorQueryParam,
-			Name: name,
+			URL:           ep.URL,
+			Kind:          models.VectorQueryParam,
+			Name:          name,
 			OriginalValue: original,
 		})
 	}
@@ -48,9 +48,9 @@ func ExtractVectors(ep models.Endpoint) []models.InputVector {
 		// are skipped to keep the request count low.
 		if isDynamicSegment(seg) {
 			out = append(out, models.InputVector{
-				URL: ep.URL,
-				Kind: models.VectorPathSegment,
-				Name: seg,
+				URL:           ep.URL,
+				Kind:          models.VectorPathSegment,
+				Name:          seg,
 				OriginalValue: seg,
 			})
 		}

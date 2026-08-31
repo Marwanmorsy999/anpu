@@ -52,16 +52,20 @@ func (r *openRedirectRule) Test(ctx context.Context, client *anpuhttp.Client, v 
 		}
 
 		location := resp.Header.Get("Location")
-		finalURL := resp.FinalURL
 
-		if strings.Contains(location, redirectCanaryDomain) ||
-			strings.Contains(finalURL, redirectCanaryDomain) ||
-			(resp.StatusCode >= 300 && resp.StatusCode < 400 && strings.Contains(location, redirectCanaryDomain)) {
+		// Only flag when the server actually redirected to our canary domain.
+		// We deliberately do NOT check resp.FinalURL here because FinalURL is
+		// set to the last requested URL (including the injected payload URL
+		// itself), which would always contain the canary and cause false positives.
+		redirectedToCanary := resp.StatusCode >= 300 && resp.StatusCode < 400 &&
+			strings.Contains(location, redirectCanaryDomain)
+
+		if redirectedToCanary {
 			result.Found = true
 			result.Payload = payload
 			result.Evidence = fmt.Sprintf(
-				"Response redirected toward canary domain (status %d, Location: %q, FinalURL: %q)",
-				resp.StatusCode, location, finalURL,
+				"Response redirected toward canary domain (status %d, Location: %q)",
+				resp.StatusCode, location,
 			)
 			return result, nil
 		}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/anpu-project/anpu/internal/active"
 	"github.com/anpu-project/anpu/internal/auth"
 	"github.com/anpu-project/anpu/internal/authz"
 	"github.com/anpu-project/anpu/internal/config"
@@ -42,6 +43,7 @@ func newScanCmd() *cobra.Command {
 		outputDir    string
 		noNuclei     bool
 		noZAP        bool
+		noActive     bool
 		failOn       string
 		skipPreCheck bool
 
@@ -71,7 +73,7 @@ are explicitly authorized to test.`,
 			if len(args) > 0 {
 				targetArg = args[0]
 			}
-			return runScan(cmd, targetArg, profile, jsonOut, htmlOut, sarifOut, outputDir, noNuclei, noZAP, failOn, skipPreCheck,
+			return runScan(cmd, targetArg, profile, jsonOut, htmlOut, sarifOut, outputDir, noNuclei, noZAP, noActive, failOn, skipPreCheck,
 				authToken, authCookies, authHeaders, authRole,
 				authzToken, authzCookies, authzHeaders, authzRole)
 		},
@@ -83,6 +85,7 @@ are explicitly authorized to test.`,
 	cmd.Flags().BoolVar(&sarifOut, "sarif", false, "write a SARIF report")
 	cmd.Flags().StringVar(&outputDir, "output", "./reports", "directory to write reports into")
 	cmd.Flags().BoolVar(&noNuclei, "no-nuclei", false, "disable the Nuclei integration for this scan")
+	cmd.Flags().BoolVar(&noActive, "no-active", false, "disable the safe active testing engine (Phase 4) for this scan")
 	cmd.Flags().BoolVar(&noZAP, "no-zap", false, "disable the ZAP integration for this scan (no-op in this MVP; ZAP is not yet implemented)")
 	cmd.Flags().StringVar(&failOn, "fail-on", "none", "return a non-zero exit status when findings meet/exceed this severity: none, low, medium, high, critical")
 	cmd.Flags().BoolVar(&skipPreCheck, "skip-pre-check", false, "skip the initial connectivity check (scan runs even if host appears down)")
@@ -104,7 +107,7 @@ are explicitly authorized to test.`,
 	return cmd
 }
 
-func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut, sarifOut bool, outputDir string, noNuclei, noZAP bool, failOn string, skipPreCheck bool,
+func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut, sarifOut bool, outputDir string, noNuclei, noZAP, noActive bool, failOn string, skipPreCheck bool,
 	authToken string, authCookies, authHeaders []string, authRole string,
 	authzToken string, authzCookies, authzHeaders []string, authzRole string) error {
 
@@ -146,7 +149,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		return fmt.Errorf("target validation failed: %w", err)
 	}
 
-	modules := config.ResolveModules(profile, cfgFile, noNuclei, noZAP)
+	modules := config.ResolveModules(profile, cfgFile, noNuclei, noZAP, noActive)
 
 	cfg := models.ScanConfig{
 		Target:       target.Raw,
@@ -293,6 +296,9 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCt
 			// AuthZ runs after Endpoints/Dirs so both contexts probe the
 			// full discovered attack surface.
 			{Label: "AuthZ", Enabled: authzEnabled, Scanner: authzScanner},
+			// Active runs last among ANPU built-ins so it benefits from
+			// the complete endpoint list and technology fingerprints.
+			{Label: "Active", Enabled: modules.Active, Scanner: active.New(client)},
 			{Label: "Nuclei", Enabled: modules.Nuclei, Scanner: nuclei},
 			{Label: "ZAP", Enabled: modules.ZAP, Scanner: zap},
 		},

@@ -273,7 +273,7 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCt
 	// AuthZ testing runs after Endpoints so it has a full attack surface
 	// to probe.  It is enabled whenever a challenger context (context B)
 	// has been configured — anonymous vs. anonymous would produce nothing.
-	authzEnabled := authzCtx.IsAuthenticated() || authzCtx.Method == models.AuthMethodNone && authzCtx.Role != ""
+	authzEnabled := authzCtx.IsAuthenticated() || (authzCtx.Method == models.AuthMethodNone && authzCtx.Role != "")
 	authzScanner := authz.New(client, authzCtx)
 
 	return &scanner.Pipeline{

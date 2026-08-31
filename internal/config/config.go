@@ -48,6 +48,7 @@ type ModulesFileConfig struct {
 	Secrets    *bool `yaml:"secrets"`
 	CORS       *bool `yaml:"cors"`
 	Methods    *bool `yaml:"methods"`
+	Active     *bool `yaml:"active"`
 	Nuclei     *bool `yaml:"nuclei"`
 	ZAP        *bool `yaml:"zap"`
 }
@@ -175,7 +176,7 @@ func applyBool(dst *bool, src *bool) {
 // ResolveModules computes the effective ModuleConfig for a scan given
 // the profile default, the config file, and the --no-nuclei/--no-zap CLI
 // flags (CLI flags win last).
-func ResolveModules(profile models.Profile, f *File, noNuclei, noZAP bool) models.ModuleConfig {
+func ResolveModules(profile models.Profile, f *File, noNuclei, noZAP, noActive bool) models.ModuleConfig {
 	mc := models.DefaultModuleConfig(profile)
 	if f != nil {
 		applyBool(&mc.Recon, f.Modules.Recon)
@@ -190,8 +191,12 @@ func ResolveModules(profile models.Profile, f *File, noNuclei, noZAP bool) model
 		applyBool(&mc.Secrets, f.Modules.Secrets)
 		applyBool(&mc.CORS, f.Modules.CORS)
 		applyBool(&mc.Methods, f.Modules.Methods)
+		applyBool(&mc.Active, f.Modules.Active)
 		applyBool(&mc.Nuclei, f.Modules.Nuclei)
 		applyBool(&mc.ZAP, f.Modules.ZAP)
+	}
+	if noActive {
+		mc.Active = false
 	}
 	if noNuclei {
 		mc.Nuclei = false

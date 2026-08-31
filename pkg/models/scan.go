@@ -96,8 +96,11 @@ type ModuleConfig struct {
 	Secrets    bool
 	CORS       bool
 	Methods    bool
-	Nuclei     bool
-	ZAP        bool
+	// Active enables the Phase 4 safe active testing engine.
+	// Only available on Standard and Deep profiles.
+	Active bool
+	Nuclei bool
+	ZAP    bool
 }
 
 // DefaultModuleConfig returns the module set enabled for a given profile.
@@ -134,6 +137,7 @@ func DefaultModuleConfig(p Profile) ModuleConfig {
 	mc.Methods = true
 	mc.Dirs = true
 	mc.Subdomains = true
+	mc.Active = true // enabled on Standard and Deep
 
 	if p == ProfileStandard {
 		// Standard stops short of the intrusive engines.

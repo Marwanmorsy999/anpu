@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/anpu-project/anpu/internal/auth"
+	"github.com/anpu-project/anpu/internal/authz"
 	"github.com/anpu-project/anpu/internal/config"
 	"github.com/anpu-project/anpu/internal/cors"
 	"github.com/anpu-project/anpu/internal/dirs"
@@ -49,6 +50,12 @@ func newScanCmd() *cobra.Command {
 		authCookies []string
 		authHeaders []string
 		authRole    string
+
+		// AuthZ flags (Phase 3) — second identity for authorization comparison.
+		authzToken   string
+		authzCookies []string
+		authzHeaders []string
+		authzRole    string
 	)
 
 	cmd := &cobra.Command{
@@ -65,7 +72,8 @@ are explicitly authorized to test.`,
 				targetArg = args[0]
 			}
 			return runScan(cmd, targetArg, profile, jsonOut, htmlOut, sarifOut, outputDir, noNuclei, noZAP, failOn, skipPreCheck,
-				authToken, authCookies, authHeaders, authRole)
+				authToken, authCookies, authHeaders, authRole,
+				authzToken, authzCookies, authzHeaders, authzRole)
 		},
 	}
 
@@ -86,11 +94,19 @@ are explicitly authorized to test.`,
 	cmd.Flags().StringArrayVar(&authHeaders, "auth-header", nil, "custom header to include in every request, in 'Name: Value' form (repeatable)")
 	cmd.Flags().StringVar(&authRole, "auth-role", "", "label for the scan identity, e.g. admin, user (default: anonymous / user)")
 
+	// AuthZ (Phase 3) — second identity for authorization comparison testing.
+	// ANPU will probe every discovered endpoint under both identities and flag anomalies.
+	cmd.Flags().StringVar(&authzToken, "authz-token", "", "bearer token for the second (challenger) identity")
+	cmd.Flags().StringArrayVar(&authzCookies, "authz-cookie", nil, "cookie for the second identity, in name=value form (repeatable)")
+	cmd.Flags().StringArrayVar(&authzHeaders, "authz-header", nil, "custom header for the second identity, in 'Name: Value' form (repeatable)")
+	cmd.Flags().StringVar(&authzRole, "authz-role", "", "label for the second identity, e.g. user, anonymous (default: challenger)")
+
 	return cmd
 }
 
 func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut, sarifOut bool, outputDir string, noNuclei, noZAP bool, failOn string, skipPreCheck bool,
-	authToken string, authCookies, authHeaders []string, authRole string) error {
+	authToken string, authCookies, authHeaders []string, authRole string,
+	authzToken string, authzCookies, authzHeaders []string, authzRole string) error {
 
 	profile := models.Profile(strings.ToLower(profileStr))
 	if !profile.Valid() {
@@ -146,14 +162,27 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		Auth:         authCtx,
 	}
 
+	// Build the challenger context (context B) for authz comparison.
+	// Defaults to "challenger" role if not specified.
+	if authzRole == "" && (authzToken != "" || len(authzCookies) > 0 || len(authzHeaders) > 0) {
+		authzRole = "challenger"
+	}
+	authzCtx, err := auth.FromFlags(authzToken, authzCookies, authzHeaders, authzRole)
+	if err != nil {
+		return fmt.Errorf("invalid authz flags: %w", err)
+	}
+
 	if authCtx.IsAuthenticated() {
 		fmt.Printf("  auth context : %s\n", auth.Summary(authCtx))
+	}
+	if authzCtx.IsAuthenticated() {
+		fmt.Printf("  authz context: %s\n", auth.Summary(authzCtx))
 	}
 
 	reporting.PrintBanner(target.Raw)
 
 	client := anpuhttp.NewClientWithLocalNetworkAllowed(scanner.AllowLocalNetwork)
-	pipeline := buildPipeline(client, modules)
+	pipeline := buildPipeline(client, modules, authzCtx)
 
 	summary, err := pipeline.Run(
 		cmd.Context(),
@@ -234,9 +263,15 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 // orchestrator (internal/scanner) and every analyzer package only know
 // about the Scanner interface, so adding a new stage means adding one
 // entry here.
-func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig) *scanner.Pipeline {
+func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCtx models.AuthContext) *scanner.Pipeline {
 	nuclei := integrations.NewNucleiScanner()
 	zap := integrations.NewZapScanner()
+
+	// AuthZ testing runs after Endpoints so it has a full attack surface
+	// to probe.  It is enabled whenever a challenger context (context B)
+	// has been configured — anonymous vs. anonymous would produce nothing.
+	authzEnabled := authzCtx.IsAuthenticated() || authzCtx.Method == models.AuthMethodNone && authzCtx.Role != ""
+	authzScanner := authz.New(client, authzCtx)
 
 	return &scanner.Pipeline{
 		Client: client,
@@ -255,6 +290,9 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig) *scanne
 			{Label: "Secrets", Enabled: modules.Secrets, Scanner: secrets.New(client)},
 			{Label: "CORS", Enabled: modules.CORS, Scanner: cors.New(client)},
 			{Label: "Methods", Enabled: modules.Methods, Scanner: methods.New(client)},
+			// AuthZ runs after Endpoints/Dirs so both contexts probe the
+			// full discovered attack surface.
+			{Label: "AuthZ", Enabled: authzEnabled, Scanner: authzScanner},
 			{Label: "Nuclei", Enabled: modules.Nuclei, Scanner: nuclei},
 			{Label: "ZAP", Enabled: modules.ZAP, Scanner: zap},
 		},

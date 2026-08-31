@@ -47,3 +47,18 @@ report:
 #   headers:                # used when method: header
 #     - "X-Api-Key: mykey"
 #   role: user              # label for this identity (default: user / anonymous)
+
+# Authorization comparison testing (Phase 3).
+# Supply a second identity to probe every discovered endpoint under both
+# the primary (--auth-*) and challenger (--authz-*) contexts.
+# ANPU flags responses that differ in access-control-relevant ways.
+#
+# Example: scan as admin (context A) and compare against user (context B)
+#   anpu scan https://app.example.com \
+#     --auth-token <admin-token> --auth-role admin \
+#     --authz-token <user-token> --authz-role user
+#
+# Or: scan as authenticated user and compare against anonymous
+#   anpu scan https://app.example.com \
+#     --auth-cookie "session=abc" --auth-role user \
+#     --authz-role anonymous

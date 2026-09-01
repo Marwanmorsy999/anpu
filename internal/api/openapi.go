@@ -29,11 +29,11 @@ import (
 // document that ANPU needs to enumerate operations and parameters.
 // We decode only the fields we use; unknown fields are ignored.
 type openAPIDoc struct {
-	Swagger  string `json:"swagger"` // "2.0"
-	OpenAPI  string `json:"openapi"` // "3.x.y"
-	BasePath string `json:"basePath,omitempty"` // Swagger 2
-	Host     string `json:"host,omitempty"`     // Swagger 2
-	Schemes  []string `json:"schemes,omitempty"` // Swagger 2
+	Swagger  string   `json:"swagger"`            // "2.0"
+	OpenAPI  string   `json:"openapi"`            // "3.x.y"
+	BasePath string   `json:"basePath,omitempty"` // Swagger 2
+	Host     string   `json:"host,omitempty"`     // Swagger 2
+	Schemes  []string `json:"schemes,omitempty"`  // Swagger 2
 
 	// OpenAPI 3 servers block
 	Servers []struct {
@@ -55,11 +55,11 @@ type pathItem struct {
 }
 
 type operation struct {
-	OperationID string      `json:"operationId"`
-	Summary     string      `json:"summary"`
-	Description string      `json:"description"`
-	Tags        []string    `json:"tags"`
-	Parameters  []parameter `json:"parameters"`
+	OperationID string       `json:"operationId"`
+	Summary     string       `json:"summary"`
+	Description string       `json:"description"`
+	Tags        []string     `json:"tags"`
+	Parameters  []parameter  `json:"parameters"`
 	RequestBody *requestBody `json:"requestBody,omitempty"`
 }
 
@@ -68,8 +68,8 @@ type parameter struct {
 	In       string `json:"in"` // query, path, header, cookie, body (swagger 2)
 	Required bool   `json:"required"`
 	Schema   struct {
-		Type    string `json:"type"`
-		Format  string `json:"format,omitempty"`
+		Type    string      `json:"type"`
+		Format  string      `json:"format,omitempty"`
 		Example interface{} `json:"example,omitempty"`
 	} `json:"schema"`
 	// Swagger 2 puts type at the parameter level
@@ -81,9 +81,9 @@ type requestBody struct {
 	Required bool `json:"required"`
 	Content  map[string]struct {
 		Schema struct {
-			Type       string                     `json:"type"`
-			Properties map[string]propertySchema  `json:"properties,omitempty"`
-			Example    interface{}                `json:"example,omitempty"`
+			Type       string                    `json:"type"`
+			Properties map[string]propertySchema `json:"properties,omitempty"`
+			Example    interface{}               `json:"example,omitempty"`
 		} `json:"schema"`
 	} `json:"content"`
 }

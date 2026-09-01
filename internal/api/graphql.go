@@ -58,9 +58,9 @@ type gqlType struct {
 }
 
 type gqlField struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Args        []gqlArg `json:"args"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	Args        []gqlArg   `json:"args"`
 	Type        gqlTypeRef `json:"type"`
 }
 
@@ -70,8 +70,8 @@ type gqlArg struct {
 }
 
 type gqlTypeRef struct {
-	Name   string     `json:"name"`
-	Kind   string     `json:"kind"`
+	Name   string      `json:"name"`
+	Kind   string      `json:"kind"`
 	OfType *gqlTypeRef `json:"ofType"`
 }
 

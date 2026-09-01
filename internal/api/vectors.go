@@ -75,12 +75,12 @@ func ExtractAPIVectors(ep models.APIEndpoint) []models.InputVector {
 // sensitiveHeaders is the deny-list of header names we never inject into,
 // even if they appear in an API schema.
 var sensitiveHeaders = map[string]bool{
-	"authorization": true,
-	"cookie":        true,
-	"set-cookie":    true,
+	"authorization":       true,
+	"cookie":              true,
+	"set-cookie":          true,
 	"proxy-authorization": true,
-	"x-api-key":     true,
-	"x-auth-token":  true,
+	"x-api-key":           true,
+	"x-auth-token":        true,
 }
 
 // isSafeHeaderToProbe returns true for schema-declared headers that are

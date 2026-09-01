@@ -2,6 +2,7 @@ package active
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -226,11 +227,18 @@ func testJSONBodyVector(serverURL, param string) models.InputVector {
 }
 
 func TestXSSRule_JSONBody_Found(t *testing.T) {
+	// The server parses the JSON body and reflects the value of "comment"
+	// directly into an HTML response without escaping — simulating a
+	// vulnerable API that renders user input server-side.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		// Echo the raw body back in an HTML response so the canary is reflected.
+		var m map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+			http.Error(w, "bad json", 400)
+			return
+		}
 		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte("<html><body>" + string(body) + "</body></html>"))
+		// Reflect the value verbatim — this is the vulnerable behaviour.
+		w.Write([]byte("<html><body>" + m["comment"] + "</body></html>"))
 	}))
 	defer srv.Close()
 
@@ -241,13 +249,13 @@ func TestXSSRule_JSONBody_Found(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !result.Found {
-		t.Error("expected XSS found=true when JSON body is reflected unescaped")
+		t.Error("expected XSS found=true when JSON body value is reflected unescaped")
 	}
 }
 
 func TestXSSRule_JSONBody_NotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Discard body, return a safe response.
+		io.Copy(io.Discard, r.Body) //nolint:errcheck
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
 	}))
@@ -265,11 +273,16 @@ func TestXSSRule_JSONBody_NotFound(t *testing.T) {
 }
 
 func TestSQLiRule_JSONBody_Found(t *testing.T) {
+	// The server parses the JSON body and reflects a DB error when it
+	// sees a single quote — simulating a vulnerable SQL query.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		// Simulate a DB error surfacing in response after the injected quote.
+		var m map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+			http.Error(w, "bad json", 400)
+			return
+		}
 		w.Header().Set("Content-Type", "text/plain")
-		if strings.Contains(string(body), "'") {
+		if strings.Contains(m["id"], "'") {
 			w.Write([]byte("You have an error in your SQL syntax near '1'"))
 		} else {
 			w.Write([]byte("ok"))
@@ -290,6 +303,7 @@ func TestSQLiRule_JSONBody_Found(t *testing.T) {
 
 func TestSQLiRule_JSONBody_NotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body) //nolint:errcheck
 		w.WriteHeader(200)
 		w.Write([]byte(`{"result":"ok"}`))
 	}))

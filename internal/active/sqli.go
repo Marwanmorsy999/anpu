@@ -56,8 +56,13 @@ func (r *sqliRule) Test(ctx context.Context, client *anpuhttp.Client, v models.I
 
 	switch v.Kind {
 	case models.VectorJSONBody:
-		// JSON body injection: POST {"<param>": "'", ...other keys as placeholders...}
-		jsonBody := fmt.Sprintf(`{%q: %q}`, v.Name, sqliPayload)
+		// Build proper JSON — a single quote is safe in JSON strings
+		// (no escaping needed) but using buildJSONBody keeps construction
+		// consistent and avoids any future edge-case surprises.
+		jsonBody, buildErr := buildJSONBody(v.Name, sqliPayload)
+		if buildErr != nil {
+			return result, nil
+		}
 		resp, err = client.PostJSON(ctx, v.URL, jsonBody, nil)
 		result.RequestsMade++
 	default:

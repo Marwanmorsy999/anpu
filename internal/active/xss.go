@@ -1,7 +1,9 @@
 package active
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -15,8 +17,9 @@ import (
 // unescaped in the response body.
 //
 // Safety: benign — the payload is non-executable (no <script>), uses a
-// random nonce so it cannot be pre-cached, and is GET-only for URL vectors.
-// JSON body injection uses POST but the canary is still non-executable.
+// fixed canary so it cannot be confused with real content, and is
+// GET-only for URL vectors. JSON body injection uses POST but the
+// canary is still non-executable.
 type xssRule struct{}
 
 func (r *xssRule) ID() models.ActiveRuleID    { return "xss-reflected" }
@@ -28,6 +31,9 @@ func (r *xssRule) RequestBudget() int         { return 2 }
 // Using a non-executable tag means no JS runs even if reflected in a browser.
 const xssCanary = `anpu-xss-<b id="anpucanary">`
 
+// xssDetect is the lowercase form we search for in responses.
+const xssDetect = `<b id="anpucanary">`
+
 func (r *xssRule) Test(ctx context.Context, client *anpuhttp.Client, v models.InputVector) (models.ActiveRuleResult, error) {
 	result := models.ActiveRuleResult{RuleID: r.ID(), Vector: v, Payload: xssCanary}
 
@@ -38,9 +44,13 @@ func (r *xssRule) Test(ctx context.Context, client *anpuhttp.Client, v models.In
 
 	switch v.Kind {
 	case models.VectorJSONBody:
-		// JSON body injection: POST {"<param>": "<canary>"}
-		// The canary is non-executable so this is still benign.
-		jsonBody := fmt.Sprintf(`{%q: %q}`, v.Name, xssCanary)
+		// Build a proper JSON body without HTML-escaping the canary.
+		// json.NewEncoder with SetEscapeHTML(false) preserves < > & verbatim
+		// so the canary reaches the server exactly as written.
+		jsonBody, buildErr := buildJSONBody(v.Name, xssCanary)
+		if buildErr != nil {
+			return result, nil
+		}
 		resp, err = client.PostJSON(ctx, v.URL, jsonBody, nil)
 		result.RequestsMade++
 	default:
@@ -58,7 +68,7 @@ func (r *xssRule) Test(ctx context.Context, client *anpuhttp.Client, v models.In
 
 	body := strings.ToLower(string(resp.Body))
 	// Check for unescaped reflection — look for the tag without HTML entity encoding.
-	if strings.Contains(body, `<b id="anpucanary">`) ||
+	if strings.Contains(body, xssDetect) ||
 		strings.Contains(body, `<b id='anpucanary'>`) {
 		result.Found = true
 		result.Evidence = fmt.Sprintf(
@@ -90,4 +100,19 @@ func (r *xssRule) ToFinding(res models.ActiveRuleResult, target string) models.F
 		References:      []string{"https://owasp.org/www-community/attacks/xss/", "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"},
 		FirstSeen:       time.Now(),
 	}
+}
+
+// buildJSONBody creates a single-key JSON object {"name": value} without
+// HTML-escaping the value. Standard encoding/json escapes <, >, & by default
+// which would corrupt the XSS canary; SetEscapeHTML(false) prevents that.
+func buildJSONBody(name, value string) (string, error) {
+	m := map[string]string{name: value}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(m); err != nil {
+		return "", err
+	}
+	// Encode adds a trailing newline — strip it so the body is compact.
+	return strings.TrimRight(buf.String(), "\n"), nil
 }

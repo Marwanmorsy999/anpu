@@ -49,13 +49,26 @@ var sqliErrorSignatures = []string{
 func (r *sqliRule) Test(ctx context.Context, client *anpuhttp.Client, v models.InputVector) (models.ActiveRuleResult, error) {
 	result := models.ActiveRuleResult{RuleID: r.ID(), Vector: v, Payload: sqliPayload}
 
-	injected, err := buildInjectedURL(v, sqliPayload)
-	if err != nil {
-		return result, nil
+	var (
+		resp *anpuhttp.Response
+		err  error
+	)
+
+	switch v.Kind {
+	case models.VectorJSONBody:
+		// JSON body injection: POST {"<param>": "'", ...other keys as placeholders...}
+		jsonBody := fmt.Sprintf(`{%q: %q}`, v.Name, sqliPayload)
+		resp, err = client.PostJSON(ctx, v.URL, jsonBody, nil)
+		result.RequestsMade++
+	default:
+		injected, buildErr := buildInjectedURL(v, sqliPayload)
+		if buildErr != nil {
+			return result, nil
+		}
+		resp, err = client.Get(ctx, injected)
+		result.RequestsMade++
 	}
 
-	resp, err := client.Get(ctx, injected)
-	result.RequestsMade++
 	if err != nil {
 		return result, nil
 	}

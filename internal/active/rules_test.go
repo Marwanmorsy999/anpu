@@ -2,8 +2,10 @@ package active
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
@@ -209,5 +211,97 @@ func TestAllRulesToFinding_NonEmpty(t *testing.T) {
 		if f.Source != models.SourceActive {
 			t.Errorf("rule %s ToFinding source = %q, want SourceActive", rule.ID(), f.Source)
 		}
+	}
+}
+
+// --- JSON body injection (VectorJSONBody) ---
+
+func testJSONBodyVector(serverURL, param string) models.InputVector {
+	return models.InputVector{
+		URL:           serverURL,
+		Kind:          models.VectorJSONBody,
+		Name:          param,
+		OriginalValue: "safe",
+	}
+}
+
+func TestXSSRule_JSONBody_Found(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		// Echo the raw body back in an HTML response so the canary is reflected.
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte("<html><body>" + string(body) + "</body></html>"))
+	}))
+	defer srv.Close()
+
+	v := testJSONBodyVector(srv.URL, "comment")
+	rule := &xssRule{}
+	result, err := rule.Test(context.Background(), testClient(t), v)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Found {
+		t.Error("expected XSS found=true when JSON body is reflected unescaped")
+	}
+}
+
+func TestXSSRule_JSONBody_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Discard body, return a safe response.
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer srv.Close()
+
+	v := testJSONBodyVector(srv.URL, "comment")
+	rule := &xssRule{}
+	result, err := rule.Test(context.Background(), testClient(t), v)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Found {
+		t.Error("did not expect XSS found=true when body is not reflected")
+	}
+}
+
+func TestSQLiRule_JSONBody_Found(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		// Simulate a DB error surfacing in response after the injected quote.
+		w.Header().Set("Content-Type", "text/plain")
+		if strings.Contains(string(body), "'") {
+			w.Write([]byte("You have an error in your SQL syntax near '1'"))
+		} else {
+			w.Write([]byte("ok"))
+		}
+	}))
+	defer srv.Close()
+
+	v := testJSONBodyVector(srv.URL, "id")
+	rule := &sqliRule{}
+	result, err := rule.Test(context.Background(), testClient(t), v)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Found {
+		t.Error("expected SQLi found=true when DB error appears after JSON body injection")
+	}
+}
+
+func TestSQLiRule_JSONBody_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte(`{"result":"ok"}`))
+	}))
+	defer srv.Close()
+
+	v := testJSONBodyVector(srv.URL, "id")
+	rule := &sqliRule{}
+	result, err := rule.Test(context.Background(), testClient(t), v)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Found {
+		t.Error("did not expect SQLi found=true on a clean response")
 	}
 }

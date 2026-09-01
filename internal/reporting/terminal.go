@@ -55,9 +55,10 @@ func ProgressBar(percent int, width int) string {
 	return "[" + strings.Repeat("█", filled) + strings.Repeat(" ", width-filled) + fmt.Sprintf("] %d%%", percent)
 }
 
-// PrintResultsSummary prints the CRITICAL/HIGH/.../ risk-score summary
-// block shown at the end of a scan.
-func PrintResultsSummary(summary *models.ScanSummary, reportPath string) {
+// PrintResultsSummary prints the terminal summary after a scan completes.
+// When quiet is true, info-severity findings are suppressed from terminal
+// output; they are still written to JSON/HTML/SARIF reports unchanged.
+func PrintResultsSummary(summary *models.ScanSummary, reportPath string, quiet bool) {
 	if summary.SeverityCounts == nil {
 		summary.RecomputeSeverityCounts()
 	}
@@ -67,7 +68,9 @@ func PrintResultsSummary(summary *models.ScanSummary, reportPath string) {
 	fmt.Printf("HIGH         %d\n", summary.SeverityCounts[models.SeverityHigh])
 	fmt.Printf("MEDIUM       %d\n", summary.SeverityCounts[models.SeverityMedium])
 	fmt.Printf("LOW          %d\n", summary.SeverityCounts[models.SeverityLow])
-	fmt.Printf("INFO         %d\n", summary.SeverityCounts[models.SeverityInfo])
+	if !quiet {
+		fmt.Printf("INFO         %d\n", summary.SeverityCounts[models.SeverityInfo])
+	}
 	fmt.Println()
 	fmt.Printf("Risk Score: %.1f/10\n", summary.RiskScore)
 	if reportPath != "" {

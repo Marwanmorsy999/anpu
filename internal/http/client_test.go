@@ -3,11 +3,13 @@ package http
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	stdhttp "net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 )
 
 func TestClient_RejectsDirectPrivateIP(t *testing.T) {
@@ -149,5 +151,116 @@ func TestCheckIPNotPrivate_AllowsPublicIP(t *testing.T) {
 	ip := net.ParseIP("8.8.8.8")
 	if err := checkIPNotPrivate(ip, "8.8.8.8"); err != nil {
 		t.Fatalf("expected public IP to be allowed, got %v", err)
+	}
+}
+
+// --- Rate limiter ---
+
+func TestRateLimiter_Unlimited(t *testing.T) {
+	rl := NewRateLimiter(0, 0)
+	ctx := context.Background()
+	// Should never block.
+	for i := 0; i < 10; i++ {
+		if err := rl.Wait(ctx); err != nil {
+			t.Fatalf("unlimited Wait returned error: %v", err)
+		}
+	}
+}
+
+func TestRateLimiter_ContextCancelled(t *testing.T) {
+	// 1 rps limiter — first call consumes the token, second must wait.
+	rl := NewRateLimiter(1, 0)
+	ctx, cancel := context.WithCancel(context.Background())
+	// Drain the initial token.
+	if err := rl.Wait(ctx); err != nil {
+		t.Fatalf("first Wait: %v", err)
+	}
+	// Cancel immediately so the next Wait returns early.
+	cancel()
+	err := rl.Wait(ctx)
+	if err == nil {
+		t.Error("expected context cancellation error from second Wait, got nil")
+	}
+}
+
+func TestRateLimiter_FixedDelay(t *testing.T) {
+	rl := NewRateLimiter(0, 10*time.Millisecond)
+	start := time.Now()
+	ctx := context.Background()
+	if err := rl.Wait(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(start); elapsed < 10*time.Millisecond {
+		t.Errorf("expected at least 10ms delay, got %v", elapsed)
+	}
+}
+
+func TestRateLimiter_DelayContextCancelled(t *testing.T) {
+	rl := NewRateLimiter(0, 5*time.Second) // huge delay
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+	err := rl.Wait(ctx)
+	if err == nil {
+		t.Error("expected context cancellation error during delay, got nil")
+	}
+}
+
+func TestClient_PostJSON(t *testing.T) {
+	var gotBody []byte
+	var gotCT string
+	srv := httptest.NewServer(stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		gotCT = r.Header.Get("Content-Type")
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer srv.Close()
+
+	c := NewClientWithLocalNetworkAllowed(true)
+	resp, err := c.PostJSON(context.Background(), srv.URL, `{"name":"test"}`, nil)
+	if err != nil {
+		t.Fatalf("PostJSON: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("status: want 200, got %d", resp.StatusCode)
+	}
+	if gotCT != "application/json" {
+		t.Errorf("Content-Type: want application/json, got %q", gotCT)
+	}
+	if string(gotBody) != `{"name":"test"}` {
+		t.Errorf("body: want {\"name\":\"test\"}, got %q", gotBody)
+	}
+}
+
+func TestClient_PostJSON_ExtraHeaders(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	c := NewClientWithLocalNetworkAllowed(true)
+	_, err := c.PostJSON(context.Background(), srv.URL, `{}`, map[string]string{
+		"Authorization": "Bearer tok",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotAuth != "Bearer tok" {
+		t.Errorf("Authorization header: want %q, got %q", "Bearer tok", gotAuth)
+	}
+}
+
+func TestClient_WithRateLimiter(t *testing.T) {
+	srv := httptest.NewServer(stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, _ *stdhttp.Request) {
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	limiter := NewRateLimiter(0, 0) // unlimited, no delay — just verify no crash
+	c := NewClientWithLocalNetworkAllowed(true).WithRateLimiter(limiter)
+	if _, err := c.Get(context.Background(), srv.URL); err != nil {
+		t.Fatalf("Get with limiter: %v", err)
 	}
 }

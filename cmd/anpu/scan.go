@@ -47,6 +47,9 @@ func newScanCmd() *cobra.Command {
 		noActive     bool
 		failOn       string
 		skipPreCheck bool
+		quiet        bool
+		rateLimit    float64
+		requestDelay time.Duration
 
 		// Auth flags — all opt-in, no credential is required or guessed.
 		authToken   string
@@ -80,6 +83,7 @@ are explicitly authorized to test.`,
 				targetArg = args[0]
 			}
 			return runScan(cmd, targetArg, profile, jsonOut, htmlOut, sarifOut, outputDir, noNuclei, noZAP, noActive, failOn, skipPreCheck,
+				quiet, rateLimit, requestDelay,
 				authToken, authCookies, authHeaders, authRole,
 				authzToken, authzCookies, authzHeaders, authzRole,
 				openAPISource, graphQLURL, apiBaseURL)
@@ -96,6 +100,9 @@ are explicitly authorized to test.`,
 	cmd.Flags().BoolVar(&noZAP, "no-zap", false, "disable the ZAP integration for this scan (no-op in this MVP; ZAP is not yet implemented)")
 	cmd.Flags().StringVar(&failOn, "fail-on", "none", "return a non-zero exit status when findings meet/exceed this severity: none, low, medium, high, critical")
 	cmd.Flags().BoolVar(&skipPreCheck, "skip-pre-check", false, "skip the initial connectivity check (scan runs even if host appears down)")
+	cmd.Flags().BoolVar(&quiet, "quiet", false, "suppress info-severity findings from terminal output (they still appear in reports)")
+	cmd.Flags().Float64Var(&rateLimit, "rate-limit", 0, "max requests per second across all stages (0 = unlimited)")
+	cmd.Flags().DurationVar(&requestDelay, "delay", 0, "fixed inter-request delay, e.g. 200ms or 1s (stacks with --rate-limit)")
 
 	// Authentication flags — all opt-in.  ANPU never guesses or derives
 	// credentials; everything here must be supplied explicitly.
@@ -120,6 +127,7 @@ are explicitly authorized to test.`,
 }
 
 func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut, sarifOut bool, outputDir string, noNuclei, noZAP, noActive bool, failOn string, skipPreCheck bool,
+	quiet bool, rateLimit float64, requestDelay time.Duration,
 	authToken string, authCookies, authHeaders []string, authRole string,
 	authzToken string, authzCookies, authzHeaders []string, authzRole string,
 	openAPISource, graphQLURL, apiBaseURL string) error {
@@ -173,9 +181,12 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		SARIF:        sarifOut,
 		NoZAP:        noZAP,
 		Verbose:      flagVerbose,
+		Quiet:        quiet,
 		SkipPreCheck: skipPreCheck,
 		Modules:      modules,
 		Auth:         authCtx,
+		RateLimit:    rateLimit,
+		RequestDelay: requestDelay,
 	}
 
 	// Build the challenger context (context B) for authz comparison.
@@ -198,6 +209,10 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 	reporting.PrintBanner(target.Raw)
 
 	client := anpuhttp.NewClientWithLocalNetworkAllowed(scanner.AllowLocalNetwork)
+	if rateLimit > 0 || requestDelay > 0 {
+		limiter := anpuhttp.NewRateLimiter(rateLimit, requestDelay)
+		client = client.WithRateLimiter(limiter)
+	}
 	apiCfg := api.Config{
 		OpenAPISource: openAPISource,
 		GraphQLURL:    graphQLURL,
@@ -272,7 +287,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		}
 	}
 
-	reporting.PrintResultsSummary(summary, reportPath)
+	reporting.PrintResultsSummary(summary, reportPath, quiet)
 	if failThreshold != "" && scanMeetsThreshold(summary, failThreshold) {
 		return fmt.Errorf("CI security gate failed: at least one %s-severity finding was detected", failThreshold)
 	}

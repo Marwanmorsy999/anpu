@@ -15,7 +15,8 @@ import (
 // unescaped in the response body.
 //
 // Safety: benign — the payload is non-executable (no <script>), uses a
-// random nonce so it cannot be pre-cached, and is GET-only.
+// random nonce so it cannot be pre-cached, and is GET-only for URL vectors.
+// JSON body injection uses POST but the canary is still non-executable.
 type xssRule struct{}
 
 func (r *xssRule) ID() models.ActiveRuleID    { return "xss-reflected" }
@@ -23,20 +24,34 @@ func (r *xssRule) Name() string               { return "Reflected XSS Indicator"
 func (r *xssRule) Safety() models.SafetyLevel { return models.SafetyBenign }
 func (r *xssRule) RequestBudget() int         { return 2 }
 
-// canary is injected as a value; we look for it reflected unescaped.
+// xssCanary is injected as a value; we look for it reflected unescaped.
 // Using a non-executable tag means no JS runs even if reflected in a browser.
 const xssCanary = `anpu-xss-<b id="anpucanary">`
 
 func (r *xssRule) Test(ctx context.Context, client *anpuhttp.Client, v models.InputVector) (models.ActiveRuleResult, error) {
 	result := models.ActiveRuleResult{RuleID: r.ID(), Vector: v, Payload: xssCanary}
 
-	injected, err := buildInjectedURL(v, xssCanary)
-	if err != nil {
-		return result, nil
+	var (
+		resp *anpuhttp.Response
+		err  error
+	)
+
+	switch v.Kind {
+	case models.VectorJSONBody:
+		// JSON body injection: POST {"<param>": "<canary>"}
+		// The canary is non-executable so this is still benign.
+		jsonBody := fmt.Sprintf(`{%q: %q}`, v.Name, xssCanary)
+		resp, err = client.PostJSON(ctx, v.URL, jsonBody, nil)
+		result.RequestsMade++
+	default:
+		injected, buildErr := buildInjectedURL(v, xssCanary)
+		if buildErr != nil {
+			return result, nil
+		}
+		resp, err = client.Get(ctx, injected)
+		result.RequestsMade++
 	}
 
-	resp, err := client.Get(ctx, injected)
-	result.RequestsMade++
 	if err != nil {
 		return result, nil
 	}

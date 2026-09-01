@@ -54,3 +54,13 @@ type ActiveRuleResult struct {
 	// RequestsMade is how many HTTP requests this rule consumed.
 	RequestsMade int
 }
+
+// Phase 5 additions: API-aware injection points.
+const (
+	// VectorJSONBody targets a named key inside a JSON request body.
+	// Only emitted by the API scanner when a schema declares a body parameter.
+	VectorJSONBody InputVectorKind = "json-body"
+	// VectorHeader targets a named HTTP request header.
+	// Used sparingly — only for headers declared in the API schema.
+	VectorHeader InputVectorKind = "header"
+)

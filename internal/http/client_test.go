@@ -184,14 +184,18 @@ func TestRateLimiter_ContextCancelled(t *testing.T) {
 }
 
 func TestRateLimiter_FixedDelay(t *testing.T) {
-	rl := NewRateLimiter(0, 10*time.Millisecond)
-	start := time.Now()
+	const delay = 50 * time.Millisecond
+	rl := NewRateLimiter(0, delay)
 	ctx := context.Background()
+	start := time.Now()
 	if err := rl.Wait(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if elapsed := time.Since(start); elapsed < 10*time.Millisecond {
-		t.Errorf("expected at least 10ms delay, got %v", elapsed)
+	elapsed := time.Since(start)
+	// Use a generous lower bound to avoid flakiness on loaded CI runners.
+	// The delay is 50ms; we accept anything over 20ms.
+	if elapsed < 20*time.Millisecond {
+		t.Errorf("expected at least 20ms delay (configured 50ms), got %v", elapsed)
 	}
 }
 

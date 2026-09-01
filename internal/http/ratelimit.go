@@ -84,8 +84,3 @@ func (rl *RateLimiter) acquireToken(ctx context.Context) error {
 		}
 	}
 }
-
-// nopLimiter is returned when rate limiting is disabled.
-type nopLimiter struct{}
-
-func (nopLimiter) Wait(_ context.Context) error { return nil }

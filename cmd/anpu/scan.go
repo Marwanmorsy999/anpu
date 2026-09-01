@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/anpu-project/anpu/internal/active"
+	"github.com/anpu-project/anpu/internal/api"
 	"github.com/anpu-project/anpu/internal/auth"
 	"github.com/anpu-project/anpu/internal/authz"
 	"github.com/anpu-project/anpu/internal/config"
@@ -58,6 +59,11 @@ func newScanCmd() *cobra.Command {
 		authzCookies []string
 		authzHeaders []string
 		authzRole    string
+
+		// API flags (Phase 5) — schema-driven API security testing.
+		openAPISource string
+		graphQLURL    string
+		apiBaseURL    string
 	)
 
 	cmd := &cobra.Command{
@@ -75,7 +81,8 @@ are explicitly authorized to test.`,
 			}
 			return runScan(cmd, targetArg, profile, jsonOut, htmlOut, sarifOut, outputDir, noNuclei, noZAP, noActive, failOn, skipPreCheck,
 				authToken, authCookies, authHeaders, authRole,
-				authzToken, authzCookies, authzHeaders, authzRole)
+				authzToken, authzCookies, authzHeaders, authzRole,
+				openAPISource, graphQLURL, apiBaseURL)
 		},
 	}
 
@@ -104,12 +111,18 @@ are explicitly authorized to test.`,
 	cmd.Flags().StringArrayVar(&authzHeaders, "authz-header", nil, "custom header for the second identity, in 'Name: Value' form (repeatable)")
 	cmd.Flags().StringVar(&authzRole, "authz-role", "", "label for the second identity, e.g. user, anonymous (default: challenger)")
 
+	// API (Phase 5) — schema-driven API security testing.
+	cmd.Flags().StringVar(&openAPISource, "openapi", "", "path or URL to an OpenAPI 3.x or Swagger 2.x schema; enables API-aware endpoint discovery and injection")
+	cmd.Flags().StringVar(&graphQLURL, "graphql", "", "GraphQL endpoint URL to introspect (e.g. https://api.example.com/graphql)")
+	cmd.Flags().StringVar(&apiBaseURL, "api-base-url", "", "override the base URL detected from the OpenAPI schema (useful for scanning staging with a production schema)")
+
 	return cmd
 }
 
 func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut, sarifOut bool, outputDir string, noNuclei, noZAP, noActive bool, failOn string, skipPreCheck bool,
 	authToken string, authCookies, authHeaders []string, authRole string,
-	authzToken string, authzCookies, authzHeaders []string, authzRole string) error {
+	authzToken string, authzCookies, authzHeaders []string, authzRole string,
+	openAPISource, graphQLURL, apiBaseURL string) error {
 
 	profile := models.Profile(strings.ToLower(profileStr))
 	if !profile.Valid() {
@@ -185,7 +198,12 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 	reporting.PrintBanner(target.Raw)
 
 	client := anpuhttp.NewClientWithLocalNetworkAllowed(scanner.AllowLocalNetwork)
-	pipeline := buildPipeline(client, modules, authzCtx)
+	apiCfg := api.Config{
+		OpenAPISource: openAPISource,
+		GraphQLURL:    graphQLURL,
+		BaseURL:       apiBaseURL,
+	}
+	pipeline := buildPipeline(client, modules, authzCtx, apiCfg)
 
 	summary, err := pipeline.Run(
 		cmd.Context(),
@@ -266,7 +284,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 // orchestrator (internal/scanner) and every analyzer package only know
 // about the Scanner interface, so adding a new stage means adding one
 // entry here.
-func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCtx models.AuthContext) *scanner.Pipeline {
+func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCtx models.AuthContext, apiCfg api.Config) *scanner.Pipeline {
 	nuclei := integrations.NewNucleiScanner()
 	zap := integrations.NewZapScanner()
 
@@ -285,6 +303,10 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCt
 			{Label: "Headers", Enabled: modules.Headers, Scanner: headers.New(client)},
 			{Label: "Cookies", Enabled: modules.Cookies, Scanner: headers.NewCookieAnalyzer(client)},
 			{Label: "Endpoints", Enabled: modules.Endpoints, Scanner: endpoints.New(client)},
+			// API scanner (Phase 5) runs immediately after endpoint discovery
+			// so that schema-derived endpoints are in ScanContext.Endpoints
+			// before the AuthZ and Active stages consume them.
+			{Label: "API", Enabled: apiCfg.OpenAPISource != "" || apiCfg.GraphQLURL != "", Scanner: api.New(apiCfg)},
 			{Label: "Subdomains", Enabled: modules.Subdomains, Scanner: subdomains.New()},
 			{Label: "PortScan", Enabled: modules.PortScan, Scanner: portscan.New()},
 			{Label: "Dirs", Enabled: modules.Dirs, Scanner: dirs.New(client)},

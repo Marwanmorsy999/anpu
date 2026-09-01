@@ -41,6 +41,8 @@ func (a *Analyzer) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.St
 
 	var findings []models.Finding
 	findings = append(findings, checkCSP(resp, sc.Target.Raw)...)
+	findings = append(findings, checkCSPReportOnly(resp, sc.Target.Raw)...)
+	findings = append(findings, checkCOOP(resp, sc.Target.Raw)...)
 	findings = append(findings, checkHSTS(resp, sc.Target.Raw, isHTTPS)...)
 	findings = append(findings, checkXCTO(resp, sc.Target.Raw)...)
 	findings = append(findings, checkReferrerPolicy(resp, sc.Target.Raw)...)
@@ -250,4 +252,100 @@ func looksLikeVersionDisclosure(v string) bool {
 		}
 	}
 	return digits >= 2 && dots >= 1
+}
+
+// checkCSPReportOnly detects the case where Content-Security-Policy-Report-Only
+// is present but no enforced Content-Security-Policy header exists (issue #5).
+// Report-Only mode logs violations but does not block anything — it provides
+// zero runtime protection on its own.
+func checkCSPReportOnly(resp *anpuhttp.Response, target string) []models.Finding {
+	enforced := resp.Header.Get("Content-Security-Policy")
+	reportOnly := resp.Header.Get("Content-Security-Policy-Report-Only")
+	if reportOnly == "" || enforced != "" {
+		// Either no report-only header, or an enforced policy is also present — fine.
+		return nil
+	}
+	return []models.Finding{finding(
+		"headers-csp-report-only-only",
+		"Content-Security-Policy is in report-only mode with no enforced policy",
+		"The response includes a Content-Security-Policy-Report-Only header but no enforced Content-Security-Policy. "+
+			"Report-Only mode collects violation reports but does not block any content — it offers no runtime protection against XSS or data injection.",
+		models.SeverityMedium,
+		models.ConfidenceHigh,
+		target, resp.FinalURL,
+		models.Evidence{
+			Observed: fmt.Sprintf(
+				"Content-Security-Policy-Report-Only: %s\nContent-Security-Policy: <absent>",
+				reportOnly,
+			),
+			Location: "HTTP response headers",
+		},
+		"Attackers can still inject and execute arbitrary scripts — the Report-Only policy will log the violations but will not prevent them.",
+		"Promote the report-only policy to an enforced Content-Security-Policy once you have confirmed it does not break legitimate functionality. "+
+			"Keep the Report-Only header in parallel during the transition to catch regressions.",
+		"CWE-693",
+		[]string{
+			"https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy-Report-Only",
+			"https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html",
+		},
+	)}
+}
+
+// checkCOOP detects a missing or weak Cross-Origin-Opener-Policy header (issue #3).
+// COOP isolates a browsing context group so cross-origin documents cannot get a
+// reference to the window object, mitigating XS-Leaks and Spectre-class attacks
+// that require cross-origin window access.
+func checkCOOP(resp *anpuhttp.Response, target string) []models.Finding {
+	v := strings.TrimSpace(resp.Header.Get("Cross-Origin-Opener-Policy"))
+	lower := strings.ToLower(v)
+
+	// "same-origin" and "same-origin-allow-popups" both provide meaningful isolation.
+	if lower == "same-origin" || lower == "same-origin-allow-popups" {
+		return nil
+	}
+
+	if v == "" {
+		// Header is absent — browsers default to unsafe-none.
+		return []models.Finding{finding(
+			"headers-missing-coop",
+			"Cross-Origin-Opener-Policy header not set",
+			"The response does not include a Cross-Origin-Opener-Policy (COOP) header. "+
+				"Without COOP, cross-origin pages opened by this page can obtain a reference to its window object, "+
+				"enabling XS-Leak attacks and weakening process isolation that protects against Spectre-class side-channel attacks.",
+			models.SeverityLow,
+			models.ConfidenceMedium,
+			target, resp.FinalURL,
+			headerEvidence(resp.Header, "Cross-Origin-Opener-Policy"),
+			"Cross-origin pages may be able to probe timing or state information from this origin's window object, leaking sensitive data.",
+			"Add 'Cross-Origin-Opener-Policy: same-origin' to responses. "+
+				"If your application opens cross-origin popups that need a window reference, use 'same-origin-allow-popups' instead.",
+			"CWE-346",
+			[]string{
+				"https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cross-Origin-Opener-Policy",
+				"https://web.dev/why-coop-coep/",
+			},
+		)}
+	}
+
+	// Header is present but set to "unsafe-none" — explicitly disabled.
+	if lower == "unsafe-none" {
+		return []models.Finding{finding(
+			"headers-coop-unsafe-none",
+			"Cross-Origin-Opener-Policy is set to unsafe-none (isolation disabled)",
+			"The response sets Cross-Origin-Opener-Policy: unsafe-none, which explicitly opts out of cross-origin isolation. "+
+				"This is equivalent to not setting the header and provides no protection against XS-Leak or Spectre-class attacks.",
+			models.SeverityLow,
+			models.ConfidenceMedium,
+			target, resp.FinalURL,
+			headerEvidence(resp.Header, "Cross-Origin-Opener-Policy"),
+			"Cross-origin pages may be able to probe timing or state information from this origin's window object.",
+			"Change to 'Cross-Origin-Opener-Policy: same-origin' unless cross-origin popup window access is required by the application.",
+			"CWE-346",
+			[]string{
+				"https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cross-Origin-Opener-Policy",
+			},
+		)}
+	}
+
+	return nil
 }

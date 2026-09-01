@@ -81,7 +81,7 @@ func printScanDetail(s *models.ScanSummary) {
 
 	fmt.Printf("Endpoints discovered: %d\n\n", len(s.Endpoints))
 
-	reporting.PrintResultsSummary(s, "")
+	reporting.PrintResultsSummary(s, "", false)
 
 	if len(s.Findings) > 0 {
 		fmt.Println("\nFindings:")

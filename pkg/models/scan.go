@@ -71,8 +71,14 @@ type ScanConfig struct {
 	SARIF        bool
 	NoZAP        bool
 	Verbose      bool
+	Quiet        bool // suppress info-severity findings from terminal output
 	SkipPreCheck bool
 	Modules      ModuleConfig
+
+	// RateLimit is the maximum requests per second across all stages (0 = unlimited).
+	RateLimit float64
+	// RequestDelay is a fixed inter-request sleep added after every HTTP request.
+	RequestDelay time.Duration
 
 	// Auth is the credential context for this scan.  An empty AuthContext
 	// (Method == AuthMethodNone) means the scan runs anonymously.

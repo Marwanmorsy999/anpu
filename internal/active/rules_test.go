@@ -2,8 +2,11 @@ package active
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
@@ -209,5 +212,110 @@ func TestAllRulesToFinding_NonEmpty(t *testing.T) {
 		if f.Source != models.SourceActive {
 			t.Errorf("rule %s ToFinding source = %q, want SourceActive", rule.ID(), f.Source)
 		}
+	}
+}
+
+// --- JSON body injection (VectorJSONBody) ---
+
+func testJSONBodyVector(serverURL, param string) models.InputVector {
+	return models.InputVector{
+		URL:           serverURL,
+		Kind:          models.VectorJSONBody,
+		Name:          param,
+		OriginalValue: "safe",
+	}
+}
+
+func TestXSSRule_JSONBody_Found(t *testing.T) {
+	// The server parses the JSON body and reflects the value of "comment"
+	// directly into an HTML response without escaping — simulating a
+	// vulnerable API that renders user input server-side.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var m map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+			http.Error(w, "bad json", 400)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		// Reflect the value verbatim — this is the vulnerable behaviour.
+		w.Write([]byte("<html><body>" + m["comment"] + "</body></html>"))
+	}))
+	defer srv.Close()
+
+	v := testJSONBodyVector(srv.URL, "comment")
+	rule := &xssRule{}
+	result, err := rule.Test(context.Background(), testClient(t), v)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Found {
+		t.Error("expected XSS found=true when JSON body value is reflected unescaped")
+	}
+}
+
+func TestXSSRule_JSONBody_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body) //nolint:errcheck
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer srv.Close()
+
+	v := testJSONBodyVector(srv.URL, "comment")
+	rule := &xssRule{}
+	result, err := rule.Test(context.Background(), testClient(t), v)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Found {
+		t.Error("did not expect XSS found=true when body is not reflected")
+	}
+}
+
+func TestSQLiRule_JSONBody_Found(t *testing.T) {
+	// The server parses the JSON body and reflects a DB error when it
+	// sees a single quote — simulating a vulnerable SQL query.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var m map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+			http.Error(w, "bad json", 400)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		if strings.Contains(m["id"], "'") {
+			w.Write([]byte("You have an error in your SQL syntax near '1'"))
+		} else {
+			w.Write([]byte("ok"))
+		}
+	}))
+	defer srv.Close()
+
+	v := testJSONBodyVector(srv.URL, "id")
+	rule := &sqliRule{}
+	result, err := rule.Test(context.Background(), testClient(t), v)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Found {
+		t.Error("expected SQLi found=true when DB error appears after JSON body injection")
+	}
+}
+
+func TestSQLiRule_JSONBody_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body) //nolint:errcheck
+		w.WriteHeader(200)
+		w.Write([]byte(`{"result":"ok"}`))
+	}))
+	defer srv.Close()
+
+	v := testJSONBodyVector(srv.URL, "id")
+	rule := &sqliRule{}
+	result, err := rule.Test(context.Background(), testClient(t), v)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Found {
+		t.Error("did not expect SQLi found=true on a clean response")
 	}
 }

@@ -41,6 +41,7 @@ type Client struct {
 	guardRedirects    bool
 	resolver          ipResolver
 	dialer            *net.Dialer
+	limiter           *RateLimiter // nil = unlimited
 }
 
 // NewClient builds a Client with conservative, safe-by-default settings.
@@ -316,6 +317,15 @@ func (t *authTransport) RoundTrip(req *stdhttp.Request) (*stdhttp.Response, erro
 	return t.base.RoundTrip(r)
 }
 
+// WithRateLimiter returns a shallow copy of c with the given RateLimiter
+// attached.  All subsequent requests from the returned Client will call
+// limiter.Wait before issuing the network request.
+func (c *Client) WithRateLimiter(limiter *RateLimiter) *Client {
+	clone := *c
+	clone.limiter = limiter
+	return &clone
+}
+
 // Response is a captured HTTP response, with the body already read
 // (bounded by MaxBodyBytes) so callers can inspect it repeatedly without
 // re-issuing requests.
@@ -332,6 +342,11 @@ type Response struct {
 // Get issues a GET request against rawURL with the shared safety
 // settings and returns the captured response.
 func (c *Client) Get(ctx context.Context, rawURL string) (*Response, error) {
+	if c.limiter != nil {
+		if err := c.limiter.Wait(ctx); err != nil {
+			return nil, err
+		}
+	}
 	req, err := stdhttp.NewRequestWithContext(ctx, stdhttp.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("building request: %w", err)
@@ -365,12 +380,17 @@ func (c *Client) Get(ctx context.Context, rawURL string) (*Response, error) {
 	return out, nil
 }
 
-// DoWithHeaders issues a GET with extra headers through the same safety
+// DoWithHeaders issues a request with extra headers through the same safety
 // settings (redirect guard, safe dialing) and returns the captured
 // response. Engines that need custom probes (CORS origin tests, OPTIONS
 // audits) must use this instead of building their own clients so the
 // local-network protections stay enforced in one place.
 func (c *Client) DoWithHeaders(ctx context.Context, method, rawURL string, headers map[string]string) (*Response, error) {
+	if c.limiter != nil {
+		if err := c.limiter.Wait(ctx); err != nil {
+			return nil, err
+		}
+	}
 	req, err := stdhttp.NewRequestWithContext(ctx, method, rawURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("building request: %w", err)
@@ -395,6 +415,53 @@ func (c *Client) DoWithHeaders(ctx context.Context, method, rawURL string, heade
 		StatusCode: resp.StatusCode,
 		Header:     resp.Header,
 		Body:       body,
+		FinalURL:   resp.Request.URL.String(),
+		Elapsed:    time.Since(start),
+	}
+	if resp.TLS != nil {
+		out.TLS = resp.TLS
+	}
+	return out, nil
+}
+
+// PostJSON issues a POST request with a JSON body through the same safety
+// settings as Get.  It is used by active rules that need to inject payloads
+// into JSON request bodies (Phase 5 VectorJSONBody targets).
+//
+// extraHeaders is merged into the request after Content-Type is set so
+// callers can pass auth headers from an AuthContext without overwriting it.
+func (c *Client) PostJSON(ctx context.Context, rawURL, body string, extraHeaders map[string]string) (*Response, error) {
+	if c.limiter != nil {
+		if err := c.limiter.Wait(ctx); err != nil {
+			return nil, err
+		}
+	}
+	req, err := stdhttp.NewRequestWithContext(ctx, stdhttp.MethodPost, rawURL, strings.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("building POST request: %w", err)
+	}
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, */*")
+	for k, v := range extraHeaders {
+		req.Header.Set(k, v)
+	}
+
+	start := time.Now()
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("reading POST response body: %w", err)
+	}
+	out := &Response{
+		StatusCode: resp.StatusCode,
+		Header:     resp.Header,
+		Body:       respBody,
 		FinalURL:   resp.Request.URL.String(),
 		Elapsed:    time.Since(start),
 	}

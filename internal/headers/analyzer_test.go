@@ -100,3 +100,127 @@ func hasFindingID(fs []models.Finding, id string) bool {
 	}
 	return false
 }
+
+// --- Issue #5: CSP-Report-Only without enforced CSP ---
+
+func TestHeadersAnalyzer_CSPReportOnlyWithoutEnforced(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy-Report-Only", "default-src 'self'")
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	a := New(anpuhttp.NewClientWithLocalNetworkAllowed(true))
+	res, err := a.Run(context.Background(), newTestContext(t, srv))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !hasFindingID(res.Findings, "headers-csp-report-only-only") {
+		t.Error("expected headers-csp-report-only-only finding when enforced CSP is absent")
+	}
+}
+
+func TestHeadersAnalyzer_CSPReportOnlyWithEnforced(t *testing.T) {
+	// Both headers present — no finding expected.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", "default-src 'self'")
+		w.Header().Set("Content-Security-Policy-Report-Only", "default-src 'self'; report-uri /csp-report")
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	a := New(anpuhttp.NewClientWithLocalNetworkAllowed(true))
+	res, err := a.Run(context.Background(), newTestContext(t, srv))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasFindingID(res.Findings, "headers-csp-report-only-only") {
+		t.Error("did not expect headers-csp-report-only-only when enforced CSP is also present")
+	}
+}
+
+func TestHeadersAnalyzer_NeitherCSPHeader(t *testing.T) {
+	// No CSP headers at all — only missing-csp fires, not report-only-only.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	a := New(anpuhttp.NewClientWithLocalNetworkAllowed(true))
+	res, err := a.Run(context.Background(), newTestContext(t, srv))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasFindingID(res.Findings, "headers-csp-report-only-only") {
+		t.Error("did not expect headers-csp-report-only-only when neither CSP header is set")
+	}
+}
+
+// --- Issue #3: COOP header ---
+
+func TestHeadersAnalyzer_COOPMissing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	a := New(anpuhttp.NewClientWithLocalNetworkAllowed(true))
+	res, err := a.Run(context.Background(), newTestContext(t, srv))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !hasFindingID(res.Findings, "headers-missing-coop") {
+		t.Error("expected headers-missing-coop finding when COOP header is absent")
+	}
+}
+
+func TestHeadersAnalyzer_COOPSameOrigin(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	a := New(anpuhttp.NewClientWithLocalNetworkAllowed(true))
+	res, err := a.Run(context.Background(), newTestContext(t, srv))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasFindingID(res.Findings, "headers-missing-coop") || hasFindingID(res.Findings, "headers-coop-unsafe-none") {
+		t.Error("did not expect COOP finding when set to same-origin")
+	}
+}
+
+func TestHeadersAnalyzer_COOPSameOriginAllowPopups(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	a := New(anpuhttp.NewClientWithLocalNetworkAllowed(true))
+	res, err := a.Run(context.Background(), newTestContext(t, srv))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasFindingID(res.Findings, "headers-missing-coop") || hasFindingID(res.Findings, "headers-coop-unsafe-none") {
+		t.Error("did not expect COOP finding when set to same-origin-allow-popups")
+	}
+}
+
+func TestHeadersAnalyzer_COOPUnsafeNone(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cross-Origin-Opener-Policy", "unsafe-none")
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	a := New(anpuhttp.NewClientWithLocalNetworkAllowed(true))
+	res, err := a.Run(context.Background(), newTestContext(t, srv))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !hasFindingID(res.Findings, "headers-coop-unsafe-none") {
+		t.Error("expected headers-coop-unsafe-none finding when COOP is explicitly unsafe-none")
+	}
+}

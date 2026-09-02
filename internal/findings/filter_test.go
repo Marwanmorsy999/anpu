@@ -88,7 +88,7 @@ func TestFilterByConfidence_EmptyInput(t *testing.T) {
 
 func TestParseMinConfidence_Valid(t *testing.T) {
 	cases := []struct {
-		raw	string
+		raw  string
 		want models.Confidence
 	}{
 		{"", ""},

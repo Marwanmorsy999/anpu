@@ -99,7 +99,7 @@ func (r *ssrfRule) ToFinding(res models.ActiveRuleResult, target string) models.
 		Title:           fmt.Sprintf("SSRF indicator in parameter %q at %s", res.Vector.Name, res.Vector.URL),
 		Description:     fmt.Sprintf("Parameter %q accepted a cloud metadata URL and the server's response contained metadata content, indicating it made an outbound request to the injected URL (Server-Side Request Forgery).", res.Vector.Name),
 		Severity:        models.SeverityCritical,
-		Confidence:      models.ConfidenceMedium,
+		Confidence:      models.ConfidenceLow,
 		Category:        models.CategoryVulnerability,
 		CWE:             "CWE-918",
 		OWASP:           "A10:2021 - Server-Side Request Forgery",

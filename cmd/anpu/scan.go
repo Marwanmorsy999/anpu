@@ -37,19 +37,20 @@ import (
 
 func newScanCmd() *cobra.Command {
 	var (
-		profile      string
-		jsonOut      bool
-		htmlOut      bool
-		sarifOut     bool
-		outputDir    string
-		noNuclei     bool
-		noZAP        bool
-		noActive     bool
-		failOn       string
-		skipPreCheck bool
-		quiet        bool
-		rateLimit    float64
-		requestDelay time.Duration
+		profile       string
+		jsonOut       bool
+		htmlOut       bool
+		sarifOut      bool
+		outputDir     string
+		noNuclei      bool
+		noZAP         bool
+		noActive      bool
+		failOn        string
+		skipPreCheck  bool
+		quiet         bool
+		minConfidence string
+		rateLimit     float64
+		requestDelay  time.Duration
 
 		// Auth flags — all opt-in, no credential is required or guessed.
 		authToken   string
@@ -83,7 +84,7 @@ are explicitly authorized to test.`,
 				targetArg = args[0]
 			}
 			return runScan(cmd, targetArg, profile, jsonOut, htmlOut, sarifOut, outputDir, noNuclei, noZAP, noActive, failOn, skipPreCheck,
-				quiet, rateLimit, requestDelay,
+				quiet, minConfidence, rateLimit, requestDelay,
 				authToken, authCookies, authHeaders, authRole,
 				authzToken, authzCookies, authzHeaders, authzRole,
 				openAPISource, graphQLURL, apiBaseURL)
@@ -101,6 +102,7 @@ are explicitly authorized to test.`,
 	cmd.Flags().StringVar(&failOn, "fail-on", "none", "return a non-zero exit status when findings meet/exceed this severity: none, low, medium, high, critical")
 	cmd.Flags().BoolVar(&skipPreCheck, "skip-pre-check", false, "skip the initial connectivity check (scan runs even if host appears down)")
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "suppress info-severity findings from terminal output (they still appear in reports)")
+	cmd.Flags().StringVar(&minConfidence, "min-confidence", "none", "minimum confidence level for findings: none, low, medium, high, confirmed (findings below this are excluded from all output)")
 	cmd.Flags().Float64Var(&rateLimit, "rate-limit", 0, "max requests per second across all stages (0 = unlimited)")
 	cmd.Flags().DurationVar(&requestDelay, "delay", 0, "fixed inter-request delay, e.g. 200ms or 1s (stacks with --rate-limit)")
 
@@ -127,7 +129,7 @@ are explicitly authorized to test.`,
 }
 
 func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut, sarifOut bool, outputDir string, noNuclei, noZAP, noActive bool, failOn string, skipPreCheck bool,
-	quiet bool, rateLimit float64, requestDelay time.Duration,
+	quiet bool, minConfidenceStr string, rateLimit float64, requestDelay time.Duration,
 	authToken string, authCookies, authHeaders []string, authRole string,
 	authzToken string, authzCookies, authzHeaders []string, authzRole string,
 	openAPISource, graphQLURL, apiBaseURL string) error {
@@ -137,6 +139,10 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		return fmt.Errorf("invalid --profile %q: must be one of safe, standard, deep", profileStr)
 	}
 	failThreshold, err := parseFailOn(failOn)
+	if err != nil {
+		return err
+	}
+	minConf, err := findings.ParseMinConfidence(minConfidenceStr)
 	if err != nil {
 		return err
 	}
@@ -173,20 +179,21 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 	modules := config.ResolveModules(profile, cfgFile, noNuclei, noZAP, noActive)
 
 	cfg := models.ScanConfig{
-		Target:       target.Raw,
-		Profile:      profile,
-		OutputDir:    outputDir,
-		JSON:         jsonOut,
-		HTML:         htmlOut,
-		SARIF:        sarifOut,
-		NoZAP:        noZAP,
-		Verbose:      flagVerbose,
-		Quiet:        quiet,
-		SkipPreCheck: skipPreCheck,
-		Modules:      modules,
-		Auth:         authCtx,
-		RateLimit:    rateLimit,
-		RequestDelay: requestDelay,
+		Target:        target.Raw,
+		Profile:       profile,
+		OutputDir:     outputDir,
+		JSON:          jsonOut,
+		HTML:          htmlOut,
+		SARIF:         sarifOut,
+		NoZAP:         noZAP,
+		Verbose:       flagVerbose,
+		Quiet:         quiet,
+		MinConfidence: minConf,
+		SkipPreCheck:  skipPreCheck,
+		Modules:       modules,
+		Auth:          authCtx,
+		RateLimit:     rateLimit,
+		RequestDelay:  requestDelay,
 	}
 
 	// Build the challenger context (context B) for authz comparison.
@@ -220,6 +227,9 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 	}
 	pipeline := buildPipeline(client, modules, authzCtx, apiCfg)
 
+	confFilter := func(fs []models.Finding) ([]models.Finding, []models.Finding) {
+		return findings.FilterByConfidence(fs, minConf)
+	}
 	summary, err := pipeline.Run(
 		cmd.Context(),
 		target,
@@ -227,6 +237,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		findings.Deduplicate,
 		scoring.ScoreAll,
 		scoring.AggregateScore,
+		confFilter,
 		func(p scanner.StageProgress) {
 			if p.Skipped {
 				fmt.Println(reporting.StageLine(p.StageName, false, true, nil, false, 0, 0))

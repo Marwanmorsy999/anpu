@@ -84,7 +84,7 @@ func (r *cmdInjectionRule) ToFinding(res models.ActiveRuleResult, target string)
 		Title:           fmt.Sprintf("Command injection indicator in parameter %q at %s", res.Vector.Name, res.Vector.URL),
 		Description:     fmt.Sprintf("Shell metacharacters injected into parameter %q produced a shell error message or executed a test command, indicating the value is passed to a system shell without sanitization.", res.Vector.Name),
 		Severity:        models.SeverityCritical,
-		Confidence:      models.ConfidenceMedium,
+		Confidence:      models.ConfidenceLow,
 		Category:        models.CategoryVulnerability,
 		CWE:             "CWE-78",
 		OWASP:           "A03:2021 - Injection",

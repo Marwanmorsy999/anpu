@@ -288,3 +288,23 @@ func boolToInt(b bool) int {
 	}
 	return 0
 }
+
+// LatestScanForTarget returns the most recently completed scan for the given
+// target URL, or nil if no scan exists. Only "completed" scans are considered
+// so an in-progress or failed scan doesn't pollute the baseline.
+func (s *Store) LatestScanForTarget(target string) (*models.ScanSummary, error) {
+	row := s.db.QueryRow(`
+		SELECT id FROM scans
+		WHERE target = ? AND status = 'completed'
+		ORDER BY completed_at DESC
+		LIMIT 1`, target)
+
+	var id string
+	if err := row.Scan(&id); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("querying latest scan for %q: %w", target, err)
+	}
+	return s.GetScan(id)
+}

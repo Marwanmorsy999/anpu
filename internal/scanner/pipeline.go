@@ -52,6 +52,7 @@ func (p *Pipeline) Run(
 	dedup func([]models.Finding) []models.Finding,
 	score func([]models.Finding) []models.Finding,
 	aggregateScore func([]models.Finding) float64,
+	confidenceFilter func([]models.Finding) (kept, suppressed []models.Finding),
 	progress ProgressFunc,
 ) (*models.ScanSummary, error) {
 	sc := &ScanContext{
@@ -131,6 +132,11 @@ func (p *Pipeline) Run(
 
 	summary.Findings = dedup(summary.Findings)
 	summary.Findings = score(summary.Findings)
+	if confidenceFilter != nil {
+		kept, suppressed := confidenceFilter(summary.Findings)
+		summary.Findings = kept
+		summary.SuppressedByConfidence = len(suppressed)
+	}
 	summary.RiskScore = aggregateScore(summary.Findings)
 	summary.RecomputeSeverityCounts()
 	summary.Technologies = dedupTechs(summary.Technologies)

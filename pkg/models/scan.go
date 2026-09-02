@@ -75,6 +75,11 @@ type ScanConfig struct {
 	SkipPreCheck bool
 	Modules      ModuleConfig
 
+	// MinConfidence is the lowest confidence level that passes the filter.
+	// Findings below this level are excluded from reports and CI gates.
+	// An empty value disables the filter (all findings pass).
+	MinConfidence Confidence
+
 	// RateLimit is the maximum requests per second across all stages (0 = unlimited).
 	RateLimit float64
 	// RequestDelay is a fixed inter-request sleep added after every HTTP request.
@@ -179,6 +184,11 @@ type ScanSummary struct {
 	RiskScore      float64          `json:"risk_score"` // aggregate 0-10
 
 	Warnings []string `json:"warnings,omitempty"`
+
+	// SuppressedByConfidence is the number of findings that were removed
+	// by the --min-confidence filter. They are not in Findings but are
+	// counted here so the terminal summary can report them.
+	SuppressedByConfidence int `json:"suppressed_by_confidence,omitempty"`
 }
 
 // RecomputeSeverityCounts refreshes SeverityCounts from Findings.

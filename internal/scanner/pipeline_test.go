@@ -61,7 +61,7 @@ func TestPipeline_RunsEnabledStagesAndSkipsDisabled(t *testing.T) {
 	noopScore := func(fs []models.Finding) []models.Finding { return fs }
 	zeroAgg := func(fs []models.Finding) float64 { return 0 }
 
-	summary, err := pipeline.Run(context.Background(), target, models.ScanConfig{Profile: models.ProfileSafe}, noopDedup, noopScore, zeroAgg, func(p StageProgress) {
+	summary, err := pipeline.Run(context.Background(), target, models.ScanConfig{Profile: models.ProfileSafe}, noopDedup, noopScore, zeroAgg, nil, func(p StageProgress) {
 		if p.Done {
 			ran[p.StageName] = true
 		}
@@ -103,7 +103,7 @@ func TestPipeline_StageErrorDoesNotAbortScan(t *testing.T) {
 	noop := func(fs []models.Finding) []models.Finding { return fs }
 	zeroAgg := func(fs []models.Finding) float64 { return 0 }
 
-	summary, err := pipeline.Run(context.Background(), target, models.ScanConfig{Profile: models.ProfileSafe}, noop, noop, zeroAgg, nil)
+	summary, err := pipeline.Run(context.Background(), target, models.ScanConfig{Profile: models.ProfileSafe}, noop, noop, zeroAgg, nil, nil)
 	if err != nil {
 		t.Fatalf("pipeline should not hard-fail on a single stage error: %v", err)
 	}

@@ -73,6 +73,9 @@ func PrintResultsSummary(summary *models.ScanSummary, reportPath string, quiet b
 	}
 	fmt.Println()
 	fmt.Printf("Risk Score: %.1f/10\n", summary.RiskScore)
+	if summary.SuppressedByConfidence > 0 {
+		fmt.Printf("Suppressed: %d finding(s) below --min-confidence threshold\n", summary.SuppressedByConfidence)
+	}
 	if reportPath != "" {
 		fmt.Printf("\nReport:\n%s\n", reportPath)
 	}

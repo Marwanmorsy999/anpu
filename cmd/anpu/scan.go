@@ -97,7 +97,7 @@ are explicitly authorized to test.`,
 	cmd.Flags().StringVar(&outputDir, "output", "./reports", "directory to write reports into")
 	cmd.Flags().BoolVar(&noNuclei, "no-nuclei", false, "disable the Nuclei integration for this scan")
 	cmd.Flags().BoolVar(&noActive, "no-active", false, "disable the safe active testing engine (Phase 4) for this scan")
-	cmd.Flags().BoolVar(&noZAP, "no-zap", false, "disable the ZAP integration for this scan (no-op in this MVP; ZAP is not yet implemented)")
+	cmd.Flags().BoolVar(&noZAP, "no-zap", false, "disable the OWASP ZAP integration for this scan (ZAP requires Docker or a local zap.sh installation; enabled by default on --profile deep)")
 	cmd.Flags().StringVar(&failOn, "fail-on", "none", "return a non-zero exit status when findings meet/exceed this severity: none, low, medium, high, critical")
 	cmd.Flags().BoolVar(&skipPreCheck, "skip-pre-check", false, "skip the initial connectivity check (scan runs even if host appears down)")
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "suppress info-severity findings from terminal output (they still appear in reports)")

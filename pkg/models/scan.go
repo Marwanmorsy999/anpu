@@ -127,7 +127,7 @@ func DefaultModuleConfig(p Profile) ModuleConfig {
 		Cookies:    true,
 		Endpoints:  true,
 		Nuclei:     true,
-		ZAP:        false, // never enabled by default; MVP has no ZAP implementation
+		ZAP:        false, // enabled on Deep profile below; off for Safe/Standard by default
 	}
 	if p == ProfileSafe {
 		// Safe profile stays fully passive: Nuclei (which sends templated
@@ -152,6 +152,7 @@ func DefaultModuleConfig(p Profile) ModuleConfig {
 
 	// deep: everything on.
 	mc.PortScan = true
+	mc.ZAP = true // Deep profile enables ZAP (Docker or local zap.sh required)
 	return mc
 }
 

@@ -37,15 +37,15 @@ import (
 
 func newScanCmd() *cobra.Command {
 	var (
-		profile      string
-		jsonOut      bool
-		htmlOut      bool
-		sarifOut     bool
-		outputDir    string
-		noNuclei     bool
-		noZAP        bool
-		noActive     bool
-		failOn       string
+		profile       string
+		jsonOut       bool
+		htmlOut       bool
+		sarifOut      bool
+		outputDir     string
+		noNuclei      bool
+		noZAP         bool
+		noActive      bool
+		failOn        string
 		skipPreCheck  bool
 		quiet         bool
 		minConfidence string

@@ -114,3 +114,4 @@ func TestPipeline_StageErrorDoesNotAbortScan(t *testing.T) {
 		t.Errorf("expected the successful stage's finding to still be present, got %d findings", len(summary.Findings))
 	}
 }
+

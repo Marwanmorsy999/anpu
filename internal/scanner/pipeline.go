@@ -52,7 +52,7 @@ func (p *Pipeline) Run(
 	dedup func([]models.Finding) []models.Finding,
 	score func([]models.Finding) []models.Finding,
 	aggregateScore func([]models.Finding) float64,
-	confidenceFilter func([]models.Finding) (kept, suppressed []models.Finding),
+	confidenceFilter func([]models.Finding) ([]models.Finding, []models.Finding),
 	progress ProgressFunc,
 ) (*models.ScanSummary, error) {
 	sc := &ScanContext{

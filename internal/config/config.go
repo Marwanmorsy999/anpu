@@ -49,6 +49,7 @@ type ModulesFileConfig struct {
 	CORS       *bool `yaml:"cors"`
 	Methods    *bool `yaml:"methods"`
 	CSRF       *bool `yaml:"csrf"`
+	Deps       *bool `yaml:"deps"`
 	Active     *bool `yaml:"active"`
 	Nuclei     *bool `yaml:"nuclei"`
 	ZAP        *bool `yaml:"zap"`
@@ -177,7 +178,7 @@ func applyBool(dst *bool, src *bool) {
 // ResolveModules computes the effective ModuleConfig for a scan given
 // the profile default, the config file, and the --no-nuclei/--no-zap CLI
 // flags (CLI flags win last).
-func ResolveModules(profile models.Profile, f *File, noNuclei, noZAP, noActive, noCSRF bool) models.ModuleConfig {
+func ResolveModules(profile models.Profile, f *File, noNuclei, noZAP, noActive, noCSRF, noDeps bool) models.ModuleConfig {
 	mc := models.DefaultModuleConfig(profile)
 	if f != nil {
 		applyBool(&mc.Recon, f.Modules.Recon)
@@ -193,6 +194,7 @@ func ResolveModules(profile models.Profile, f *File, noNuclei, noZAP, noActive, 
 		applyBool(&mc.CORS, f.Modules.CORS)
 		applyBool(&mc.Methods, f.Modules.Methods)
 		applyBool(&mc.CSRF, f.Modules.CSRF)
+		applyBool(&mc.Deps, f.Modules.Deps)
 		applyBool(&mc.Active, f.Modules.Active)
 		applyBool(&mc.Nuclei, f.Modules.Nuclei)
 		applyBool(&mc.ZAP, f.Modules.ZAP)
@@ -208,6 +210,9 @@ func ResolveModules(profile models.Profile, f *File, noNuclei, noZAP, noActive, 
 	}
 	if noCSRF {
 		mc.CSRF = false
+	}
+	if noDeps {
+		mc.Deps = false
 	}
 	return mc
 }

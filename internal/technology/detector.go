@@ -136,46 +136,157 @@ func detectFromCookies(h http.Header) []models.Technology {
 	return out
 }
 
-// bodySignatures match against raw HTML/JS body content. Kept
-// conservative and specific to reduce false positives.
-var bodySignatures = []struct {
-	Name     string
-	Category string
-	Needle   *regexp.Regexp
-}{
-	{"WordPress", "cms", regexp.MustCompile(`(?i)wp-content/|wp-includes/|generator" content="WordPress`)},
-	{"React", "js-framework", regexp.MustCompile(`(?i)data-reactroot|react-dom|__REACT_DEVTOOLS`)},
-	{"Vue.js", "js-framework", regexp.MustCompile(`(?i)data-v-app|__vue__|vue\.js`)},
-	{"Angular", "js-framework", regexp.MustCompile(`(?i)ng-version=|angular\.js`)},
-	{"Next.js", "framework", regexp.MustCompile(`(?i)__NEXT_DATA__|/_next/static/`)},
-	{"jQuery", "js-library", regexp.MustCompile(`(?i)jquery(-|\.)([\d.]+)?(\.min)?\.js`)},
-	{"Shopify", "cms", regexp.MustCompile(`(?i)cdn\.shopify\.com|Shopify\.theme`)},
-	{"Drupal", "cms", regexp.MustCompile(`(?i)Drupal\.settings|/sites/default/files/`)},
-	{"Bootstrap", "css-framework", regexp.MustCompile(`(?i)bootstrap(\.min)?\.css|bootstrap(\.min)?\.js`)},
-	{"Tailwind CSS", "css-framework", regexp.MustCompile(`(?i)tailwind`)},
-	{"Google Tag Manager", "analytics", regexp.MustCompile(`(?i)googletagmanager\.com/gtm\.js`)},
-	{"Google Analytics", "analytics", regexp.MustCompile(`(?i)google-analytics\.com/analytics\.js|gtag\('config'`)},
+// bodySignature matches HTML/JS body content. VersionAt, if > 0, is the
+// capture-group index in Pattern that holds the version string.
+type bodySignature struct {
+	Name      string
+	Category  string
+	Pattern   *regexp.Regexp
+	VersionAt int // 0 = no version capture
 }
 
+// bodySignatures match against raw HTML/JS body content. Kept conservative
+// and specific to reduce false positives.
+//
+// VersionAt points to the capture group that holds the version string when
+// it can be extracted directly from the matched token.
+var bodySignatures = []bodySignature{
+	// WordPress — wp-content/wp-includes path presence; version via generator tag
+	{"WordPress", "cms",
+		regexp.MustCompile(`(?i)wp-content/|wp-includes/`), 0},
+	// React — no reliable inline version
+	{"React", "js-framework",
+		regexp.MustCompile(`(?i)data-reactroot|react-dom|__REACT_DEVTOOLS`), 0},
+	// Vue.js
+	{"Vue.js", "js-framework",
+		regexp.MustCompile(`(?i)data-v-app|__vue__|vue\.js`), 0},
+	// Angular writes ng-version="17.3.1" on the root element
+	{"Angular", "js-framework",
+		regexp.MustCompile(`(?i)ng-version="([\d.]+)"`), 1},
+	// Next.js
+	{"Next.js", "framework",
+		regexp.MustCompile(`(?i)__NEXT_DATA__|/_next/static/`), 0},
+	// jQuery — inline banner /*! jQuery v3.6.0 */ or script src filename
+	{"jQuery", "js-library",
+		regexp.MustCompile(`(?i)(?:jQuery(?:\s+JavaScript Library)?\s+v([\d.]+)|jquery[/\-]([\d.]+)(?:\.min)?\.js)`), 1},
+	// Bootstrap — inline banner /*! Bootstrap v5.3.0 */ or filename
+	{"Bootstrap", "css-framework",
+		regexp.MustCompile(`(?i)(?:Bootstrap\s+v([\d.]+)|bootstrap[/\-]([\d.]+)(?:\.min)?(?:\.css|\.js))`), 1},
+	// lodash — inline banner /*! lodash v4.17.21 */
+	{"lodash", "js-library",
+		regexp.MustCompile(`(?i)lodash(?:\s+v|-)([\d.]+)`), 1},
+	// moment.js — inline banner //! moment.js 2.29.4
+	{"moment", "js-library",
+		regexp.MustCompile(`(?i)moment\.js\s+([\d.]+)`), 1},
+	{"Shopify", "cms",
+		regexp.MustCompile(`(?i)cdn\.shopify\.com|Shopify\.theme`), 0},
+	{"Drupal", "cms",
+		regexp.MustCompile(`(?i)Drupal\.settings|/sites/default/files/`), 0},
+	{"Tailwind CSS", "css-framework",
+		regexp.MustCompile(`(?i)tailwind`), 0},
+	{"Google Tag Manager", "analytics",
+		regexp.MustCompile(`(?i)googletagmanager\.com/gtm\.js`), 0},
+	{"Google Analytics", "analytics",
+		regexp.MustCompile(`(?i)google-analytics\.com/analytics\.js|gtag\('config'`), 0},
+}
+
+// generatorPattern matches <meta name="generator" content="Name Version">
+// in either attribute order.
+var generatorPattern = regexp.MustCompile(
+	`(?i)<meta[^>]+name=["'']?generator["'']?[^>]+content=["'']([^"']+)["'']|` +
+		`<meta[^>]+content=["'']([^"']+)["''][^>]+name=["'']?generator["'']?`,
+)
+
+// knownGenerators maps generator tag prefixes to Technology fields.
+var knownGenerators = []struct {
+	prefix   string
+	name     string
+	category string
+}{
+	{"wordpress", "WordPress", "cms"},
+	{"joomla!", "Joomla", "cms"},
+	{"drupal", "Drupal", "cms"},
+	{"typo3", "TYPO3", "cms"},
+	{"mediawiki", "MediaWiki", "cms"},
+	{"ghost", "Ghost", "cms"},
+	{"gatsby", "Gatsby", "framework"},
+	{"hugo", "Hugo", "framework"},
+	{"jekyll", "Jekyll", "framework"},
+	{"wix", "Wix", "cms"},
+	{"squarespace", "Squarespace", "cms"},
+}
+
+// detectFromBody scans the page body for technology fingerprints and, where
+// possible, extracts the exact version from inline banners or attribute values.
 func detectFromBody(body string) []models.Technology {
 	if len(body) > 2_000_000 {
 		body = body[:2_000_000]
 	}
 	var out []models.Technology
+
 	for _, sig := range bodySignatures {
-		loc := sig.Needle.FindString(body)
-		if loc == "" {
+		m := sig.Pattern.FindStringSubmatch(body)
+		if m == nil {
 			continue
+		}
+		version := ""
+		if sig.VersionAt > 0 {
+			for i := sig.VersionAt; i < len(m); i++ {
+				if m[i] != "" {
+					version = m[i]
+					break
+				}
+			}
 		}
 		out = append(out, models.Technology{
 			Name:       sig.Name,
 			Category:   sig.Category,
+			Version:    version,
 			Confidence: 0.65,
 			Evidence: models.Evidence{
-				Observed: fmt.Sprintf("matched pattern in page content: %q", truncate(loc, 80)),
+				Observed: fmt.Sprintf("matched pattern in page content: %q", truncate(m[0], 80)),
 				Location: "HTML/JavaScript response body",
 			},
 		})
+	}
+
+	out = append(out, detectFromGenerator(body)...)
+	return out
+}
+
+// detectFromGenerator extracts technology and version from <meta name="generator">.
+// Many CMSes and frameworks emit this tag with an exact version.
+func detectFromGenerator(body string) []models.Technology {
+	matches := generatorPattern.FindAllStringSubmatch(body, -1)
+	var out []models.Technology
+	for _, m := range matches {
+		content := m[1]
+		if content == "" {
+			content = m[2]
+		}
+		content = strings.TrimSpace(content)
+		if content == "" {
+			continue
+		}
+		lower := strings.ToLower(content)
+		for _, kg := range knownGenerators {
+			if !strings.HasPrefix(lower, kg.prefix) {
+				continue
+			}
+			// Version is everything after the product name, stripped of leading spaces/v.
+			version := strings.TrimLeft(content[len(kg.prefix):], " vV")
+			out = append(out, models.Technology{
+				Name:       kg.name,
+				Category:   kg.category,
+				Version:    version,
+				Confidence: 0.85,
+				Evidence: models.Evidence{
+					Observed: fmt.Sprintf("meta[name=generator]: %q", truncate(content, 80)),
+					Location: "HTML meta tag",
+				},
+			})
+			break
+		}
 	}
 	return out
 }

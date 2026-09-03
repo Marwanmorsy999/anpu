@@ -107,6 +107,9 @@ type ModuleConfig struct {
 	Secrets    bool
 	CORS       bool
 	Methods    bool
+	// CSRF enables the Phase 10 CSRF token detection scanner.
+	// Only available on Standard and Deep profiles.
+	CSRF bool
 	// Active enables the Phase 4 safe active testing engine.
 	// Only available on Standard and Deep profiles.
 	Active bool
@@ -146,6 +149,7 @@ func DefaultModuleConfig(p Profile) ModuleConfig {
 	mc.Secrets = true
 	mc.CORS = true
 	mc.Methods = true
+	mc.CSRF = true
 	mc.Dirs = true
 	mc.Subdomains = true
 	mc.Active = true // enabled on Standard and Deep

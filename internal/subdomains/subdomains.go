@@ -119,7 +119,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		Impact:          "Forgotten or unmonitored subdomains frequently run outdated software and are a common initial-access path.",
 		Remediation:     "Inventory all subdomains; decommission unused hosts and keep remaining ones behind the same patching/monitoring regime as primary assets.",
 	}}
-	return scanner.StageResult{Findings: findings, Warnings: warnings}, nil
+	return scanner.StageResult{Findings: findings, Warnings: warnings, Subdomains: live}, nil
 }
 
 func (s *Scanner) queryCTLogs(ctx context.Context, host string) ([]string, string) {

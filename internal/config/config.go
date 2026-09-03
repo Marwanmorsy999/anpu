@@ -43,6 +43,7 @@ type ModulesFileConfig struct {
 	Cookies    *bool `yaml:"cookies"`
 	Endpoints  *bool `yaml:"endpoints"`
 	Subdomains *bool `yaml:"subdomains"`
+	Takeover   *bool `yaml:"takeover"`
 	PortScan   *bool `yaml:"portscan"`
 	Dirs       *bool `yaml:"dirs"`
 	Secrets    *bool `yaml:"secrets"`
@@ -178,7 +179,7 @@ func applyBool(dst *bool, src *bool) {
 // ResolveModules computes the effective ModuleConfig for a scan given
 // the profile default, the config file, and the --no-nuclei/--no-zap CLI
 // flags (CLI flags win last).
-func ResolveModules(profile models.Profile, f *File, noNuclei, noZAP, noActive, noCSRF, noDeps bool) models.ModuleConfig {
+func ResolveModules(profile models.Profile, f *File, noNuclei, noZAP, noActive, noCSRF, noDeps, noTakeover bool) models.ModuleConfig {
 	mc := models.DefaultModuleConfig(profile)
 	if f != nil {
 		applyBool(&mc.Recon, f.Modules.Recon)
@@ -188,6 +189,7 @@ func ResolveModules(profile models.Profile, f *File, noNuclei, noZAP, noActive, 
 		applyBool(&mc.Cookies, f.Modules.Cookies)
 		applyBool(&mc.Endpoints, f.Modules.Endpoints)
 		applyBool(&mc.Subdomains, f.Modules.Subdomains)
+		applyBool(&mc.Takeover, f.Modules.Takeover)
 		applyBool(&mc.PortScan, f.Modules.PortScan)
 		applyBool(&mc.Dirs, f.Modules.Dirs)
 		applyBool(&mc.Secrets, f.Modules.Secrets)
@@ -213,6 +215,9 @@ func ResolveModules(profile models.Profile, f *File, noNuclei, noZAP, noActive, 
 	}
 	if noDeps {
 		mc.Deps = false
+	}
+	if noTakeover {
+		mc.Takeover = false
 	}
 	return mc
 }

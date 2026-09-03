@@ -118,6 +118,7 @@ func (p *Pipeline) Run(
 		// future custom analyzer could target discovered endpoints).
 		sc.Technologies = summary.Technologies
 		sc.Endpoints = summary.Endpoints
+		sc.Subdomains = append(sc.Subdomains, result.Subdomains...)
 
 		if progress != nil {
 			postDedupCount := len(dedup(summary.Findings))

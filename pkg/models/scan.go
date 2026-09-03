@@ -102,11 +102,14 @@ type ModuleConfig struct {
 	Cookies    bool
 	Endpoints  bool
 	Subdomains bool
-	PortScan   bool
-	Dirs       bool
-	Secrets    bool
-	CORS       bool
-	Methods    bool
+	// Takeover enables Phase 11B subdomain takeover detection.
+	// Runs after Subdomains; requires Subdomains to be enabled to produce findings.
+	Takeover bool
+	PortScan bool
+	Dirs     bool
+	Secrets  bool
+	CORS     bool
+	Methods  bool
 	// CSRF enables the Phase 10A CSRF token detection scanner.
 	// Only available on Standard and Deep profiles.
 	CSRF bool
@@ -156,6 +159,7 @@ func DefaultModuleConfig(p Profile) ModuleConfig {
 	mc.Deps = true
 	mc.Dirs = true
 	mc.Subdomains = true
+	mc.Takeover = true
 	mc.Active = true // enabled on Standard and Deep
 
 	if p == ProfileStandard {

@@ -13,6 +13,7 @@ type StageResult struct {
 	Findings     []models.Finding
 	Technologies []models.Technology
 	Endpoints    []models.Endpoint
+	Subdomains   []string // live hostnames to expose to later stages
 	Warnings     []string
 }
 
@@ -34,6 +35,7 @@ type ScanContext struct {
 	// can use earlier results (e.g. discovered endpoints).
 	Technologies []models.Technology
 	Endpoints    []models.Endpoint
+	Subdomains   []string // live hostnames discovered by the subdomains stage
 }
 
 // Scanner is implemented by every pipeline stage: built-in analyzers

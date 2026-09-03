@@ -11,6 +11,8 @@ import (
 
 	"github.com/anpu-project/anpu/internal/diff"
 	"github.com/anpu-project/anpu/internal/findings"
+	"github.com/anpu-project/anpu/internal/notify"
+	"github.com/anpu-project/anpu/internal/schedule"
 	"github.com/anpu-project/anpu/internal/storage"
 	"github.com/anpu-project/anpu/pkg/models"
 )
@@ -18,6 +20,9 @@ import (
 func newWatchCmd() *cobra.Command {
 	var (
 		interval      time.Duration
+		cronExpr      string
+		webhookURL    string
+		webhookOn     string
 		profileStr    string
 		failOn        string
 		minConfidence string
@@ -51,11 +56,28 @@ Examples:
 			if !profile.Valid() {
 				return fmt.Errorf("invalid --profile %q: must be one of safe, standard, deep", profileStr)
 			}
-			return runWatch(cmd.Context(), args[0], profileStr, minConf, failThreshold, interval, jsonOut)
+			// Parse optional cron expression.
+			var sched *schedule.Schedule
+			if cronExpr != "" {
+				var cronErr error
+				sched, cronErr = schedule.Parse(cronExpr)
+				if cronErr != nil {
+					return fmt.Errorf("invalid --cron: %w", cronErr)
+				}
+			}
+			// Parse optional webhook-on policy.
+			wOn, err := notify.ParseOn(webhookOn)
+			if err != nil {
+				return err
+			}
+			return runWatch(cmd.Context(), args[0], profileStr, minConf, failThreshold, interval, sched, webhookURL, wOn, jsonOut)
 		},
 	}
 
 	cmd.Flags().DurationVar(&interval, "interval", 0, "time between scans (e.g. 30m, 1h, 6h); 0 = run once then exit")
+	cmd.Flags().StringVar(&cronExpr, "cron", "", `cron schedule for scans, e.g. "0 * * * *" (hourly); overrides --interval`)
+	cmd.Flags().StringVar(&webhookURL, "webhook", "", "URL to POST diff results to after each scan (Slack or generic JSON)")
+	cmd.Flags().StringVar(&webhookOn, "webhook-on", "change", "when to send webhook notifications: always, change, finding")
 	cmd.Flags().StringVar(&profileStr, "profile", "standard", "scan profile: safe, standard, deep")
 	cmd.Flags().StringVar(&failOn, "fail-on", "none", "exit non-zero if a new finding at or above this severity is found")
 	cmd.Flags().StringVar(&minConfidence, "min-confidence", "none", "skip findings below this confidence level")
@@ -70,6 +92,9 @@ func runWatch(
 	minConf models.Confidence,
 	failThreshold models.Severity,
 	interval time.Duration,
+	sched *schedule.Schedule,
+	webhookURL string,
+	webhookOn notify.On,
 	jsonOut bool,
 ) error {
 	store, err := storage.Open(defaultDBPath())
@@ -117,15 +142,31 @@ func runWatch(
 			}
 		}
 
-		if interval == 0 {
-			break
+		// Webhook notification (best-effort).
+		if webhookURL != "" && summary != nil && prev != nil {
+			wResult := diff.Compare(prev, summary)
+			if notify.ShouldNotify(wResult, webhookOn) {
+				if wErr := notify.Send(ctx, webhookURL, wResult); wErr != nil {
+					fmt.Fprintf(os.Stderr, "[watch] webhook error: %v\n", wErr)
+				}
+			}
+		}
+
+		// Determine wait duration: cron takes priority over --interval.
+		var waitDur time.Duration
+		if sched != nil {
+			waitDur = time.Until(sched.Next(time.Now()))
+		} else if interval > 0 {
+			waitDur = interval
+		} else {
+			break // one-shot mode
 		}
 
 		select {
 		case <-ctx.Done():
 			fmt.Fprintln(os.Stderr, "[watch] stopped")
 			return exitErr
-		case <-time.After(interval):
+		case <-time.After(waitDur):
 		}
 	}
 

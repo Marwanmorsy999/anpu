@@ -90,7 +90,8 @@ func finding(id, title, desc string, sev models.Severity, conf models.Confidence
 func checkCSP(resp *anpuhttp.Response, target string) []models.Finding {
 	v := resp.Header.Get("Content-Security-Policy")
 	if v != "" {
-		return nil
+		// Header is present — analyze quality.
+		return checkCSPQuality(v, target, resp.FinalURL, resp.Header)
 	}
 	return []models.Finding{finding(
 		"headers-missing-csp",

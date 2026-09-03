@@ -15,6 +15,7 @@ import (
 	"github.com/anpu-project/anpu/internal/authz"
 	"github.com/anpu-project/anpu/internal/config"
 	"github.com/anpu-project/anpu/internal/cors"
+	"github.com/anpu-project/anpu/internal/csrf"
 	"github.com/anpu-project/anpu/internal/dirs"
 	"github.com/anpu-project/anpu/internal/endpoints"
 	"github.com/anpu-project/anpu/internal/findings"
@@ -45,6 +46,7 @@ func newScanCmd() *cobra.Command {
 		noNuclei      bool
 		noZAP         bool
 		noActive      bool
+		noCSRF        bool
 		failOn        string
 		skipPreCheck  bool
 		quiet         bool
@@ -83,7 +85,7 @@ are explicitly authorized to test.`,
 			if len(args) > 0 {
 				targetArg = args[0]
 			}
-			return runScan(cmd, targetArg, profile, jsonOut, htmlOut, sarifOut, outputDir, noNuclei, noZAP, noActive, failOn, skipPreCheck,
+			return runScan(cmd, targetArg, profile, jsonOut, htmlOut, sarifOut, outputDir, noNuclei, noZAP, noActive, noCSRF, failOn, skipPreCheck,
 				quiet, minConfidence, rateLimit, requestDelay,
 				authToken, authCookies, authHeaders, authRole,
 				authzToken, authzCookies, authzHeaders, authzRole,
@@ -98,6 +100,7 @@ are explicitly authorized to test.`,
 	cmd.Flags().StringVar(&outputDir, "output", "./reports", "directory to write reports into")
 	cmd.Flags().BoolVar(&noNuclei, "no-nuclei", false, "disable the Nuclei integration for this scan")
 	cmd.Flags().BoolVar(&noActive, "no-active", false, "disable the safe active testing engine (Phase 4) for this scan")
+	cmd.Flags().BoolVar(&noCSRF, "no-csrf", false, "disable CSRF token detection (Phase 10)")
 	cmd.Flags().BoolVar(&noZAP, "no-zap", false, "disable the OWASP ZAP integration for this scan (ZAP requires Docker or a local zap.sh installation; enabled by default on --profile deep)")
 	cmd.Flags().StringVar(&failOn, "fail-on", "none", "return a non-zero exit status when findings meet/exceed this severity: none, low, medium, high, critical")
 	cmd.Flags().BoolVar(&skipPreCheck, "skip-pre-check", false, "skip the initial connectivity check (scan runs even if host appears down)")
@@ -128,7 +131,7 @@ are explicitly authorized to test.`,
 	return cmd
 }
 
-func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut, sarifOut bool, outputDir string, noNuclei, noZAP, noActive bool, failOn string, skipPreCheck bool,
+func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut, sarifOut bool, outputDir string, noNuclei, noZAP, noActive, noCSRF bool, failOn string, skipPreCheck bool,
 	quiet bool, minConfidenceStr string, rateLimit float64, requestDelay time.Duration,
 	authToken string, authCookies, authHeaders []string, authRole string,
 	authzToken string, authzCookies, authzHeaders []string, authzRole string,
@@ -176,7 +179,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		return fmt.Errorf("target validation failed: %w", err)
 	}
 
-	modules := config.ResolveModules(profile, cfgFile, noNuclei, noZAP, noActive)
+	modules := config.ResolveModules(profile, cfgFile, noNuclei, noZAP, noActive, noCSRF)
 
 	cfg := models.ScanConfig{
 		Target:        target.Raw,
@@ -341,6 +344,8 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCt
 			{Label: "Secrets", Enabled: modules.Secrets, Scanner: secrets.New(client)},
 			{Label: "CORS", Enabled: modules.CORS, Scanner: cors.New(client)},
 			{Label: "Methods", Enabled: modules.Methods, Scanner: methods.New(client)},
+			// CSRF runs after Endpoints so form action URLs are known.
+			{Label: "CSRF", Enabled: modules.CSRF, Scanner: csrf.New(client)},
 			// AuthZ runs after Endpoints/Dirs so both contexts probe the
 			// full discovered attack surface.
 			{Label: "AuthZ", Enabled: authzEnabled, Scanner: authzScanner},

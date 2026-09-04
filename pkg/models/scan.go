@@ -116,6 +116,10 @@ type ModuleConfig struct {
 	// Deps enables the Phase 10B dependency vulnerability scanner.
 	// Only available on Standard and Deep profiles.
 	Deps bool
+	// SRI enables the Phase 12C Subresource Integrity passive check.
+	// Enabled on all profiles (Safe, Standard, Deep) — passive, zero extra
+	// HTTP cost beyond the page fetches already performed by other stages.
+	SRI bool
 	// Active enables the Phase 4 safe active testing engine.
 	// Only available on Standard and Deep profiles.
 	Active bool
@@ -140,6 +144,7 @@ func DefaultModuleConfig(p Profile) ModuleConfig {
 		Headers:    true,
 		Cookies:    true,
 		Endpoints:  true,
+		SRI:        true, // passive — enabled on all profiles
 		Nuclei:     true,
 		ZAP:        false, // enabled on Deep profile below; off for Safe/Standard by default
 	}

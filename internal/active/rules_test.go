@@ -3,6 +3,7 @@ package active
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -577,5 +578,134 @@ func TestBuildXXEPayload_ContainsNonce(t *testing.T) {
 	}
 	if !strings.Contains(payload, "<!ENTITY") {
 		t.Error("payload should contain ENTITY declaration")
+	}
+}
+
+// --- Host Header Injection ---
+
+func TestHostHeaderRule_BodyReflection(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			// Reflect the Host header into the response body (vulnerable behaviour).
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte("<a href='https://" + r.Host + "/reset'>Reset password</a>"))
+		}
+	}))
+	defer srv.Close()
+
+	rule := &hostHeaderRule{}
+	vec := testVector(srv.URL, "q", "value")
+	result, err := rule.Test(context.Background(), testClient(t), vec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Found {
+		t.Error("expected hostHeaderRule to detect body reflection")
+	}
+	if !strings.Contains(result.Evidence, "reflected in response body") {
+		t.Errorf("evidence should mention reflection, got: %s", result.Evidence)
+	}
+}
+
+func TestHostHeaderRule_LocationRedirect(t *testing.T) {
+	// Simulate a server that uses the Host header to build a password-reset URL.
+	// After the redirect the reset page body also contains the host — this is
+	// the realistic pattern (email links built from Host).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Always reflect the incoming Host header somewhere in the response.
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(fmt.Sprintf(
+			"<p>Reset your password at https://%s/reset?token=abc</p>", r.Host,
+		)))
+	}))
+	defer srv.Close()
+
+	rule := &hostHeaderRule{}
+	vec := testVector(srv.URL, "email", "user@example.com")
+	result, err := rule.Test(context.Background(), testClient(t), vec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Found {
+		t.Error("expected hostHeaderRule to detect canary reflected in password-reset URL in body")
+	}
+}
+
+func TestHostHeaderRule_NoFinding_SafeEndpoint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Safe: ignores Host header entirely, always returns fixed content.
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte("<html><body>Hello world</body></html>"))
+	}))
+	defer srv.Close()
+
+	rule := &hostHeaderRule{}
+	vec := testVector(srv.URL, "q", "value")
+	result, err := rule.Test(context.Background(), testClient(t), vec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Found {
+		t.Errorf("expected no finding for safe endpoint, got: %s", result.Evidence)
+	}
+}
+
+func TestHostHeaderRule_SkipsXMLBodyVector(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	rule := &hostHeaderRule{}
+	vec := models.InputVector{URL: srv.URL, Kind: models.VectorXMLBody, Name: srv.URL}
+	result, err := rule.Test(context.Background(), testClient(t), vec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Found {
+		t.Error("hostHeaderRule should not fire on XML body vectors")
+	}
+	_ = called // may still be called for baseline; just checking Found
+}
+
+func TestHostHeaderRule_ToFinding_LocationIsMostDangerous(t *testing.T) {
+	rule := &hostHeaderRule{}
+	res := models.ActiveRuleResult{
+		RuleID:  rule.ID(),
+		Vector:  testVector("https://example.com/reset", "email", "user@example.com"),
+		Found:   true,
+		Payload: "anpu-cafebabe.invalid",
+		Evidence: "Host header canary \"anpu-cafebabe.invalid\" appeared in Location redirect header: " +
+			"\"https://anpu-cafebabe.invalid/reset?token=abc\" (status 302). This enables password-reset link poisoning.",
+	}
+	f := rule.ToFinding(res, "https://example.com")
+	if f.Severity != models.SeverityHigh {
+		t.Errorf("severity: got %q, want high", f.Severity)
+	}
+	if f.Confidence != models.ConfidenceHigh {
+		t.Errorf("confidence: got %q, want high", f.Confidence)
+	}
+	if f.CWE != "CWE-20" {
+		t.Errorf("CWE: got %q, want CWE-20", f.CWE)
+	}
+	if !strings.Contains(f.Impact, "password reset") {
+		t.Errorf("impact should mention password reset, got: %s", f.Impact)
+	}
+}
+
+func TestHostNonce_Format(t *testing.T) {
+	n := hostNonce()
+	if !strings.HasPrefix(n, "anpu-") {
+		t.Errorf("nonce should start with anpu-, got %q", n)
+	}
+	if !strings.HasSuffix(n, ".invalid") {
+		t.Errorf("nonce should end with .invalid, got %q", n)
+	}
+	// Two nonces should differ (with overwhelming probability).
+	n2 := hostNonce()
+	if n == n2 {
+		t.Error("two nonces should not be identical")
 	}
 }

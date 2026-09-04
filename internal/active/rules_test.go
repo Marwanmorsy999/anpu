@@ -319,3 +319,263 @@ func TestSQLiRule_JSONBody_NotFound(t *testing.T) {
 		t.Error("did not expect SQLi found=true on a clean response")
 	}
 }
+
+// --- XXE ---
+
+func xmlVector(url string) models.InputVector {
+	return models.InputVector{
+		URL:  url,
+		Kind: models.VectorXMLBody,
+		Name: url,
+	}
+}
+
+func TestXXERule_SkipsNonXMLVector(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	rule := &xxeRule{}
+	vec := testVector(srv.URL, "input", "value") // VectorQueryParam — should be skipped
+	result, err := rule.Test(context.Background(), testClient(t), vec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Found {
+		t.Error("xxeRule should not fire on non-XML vector")
+	}
+	if called {
+		t.Error("xxeRule should make zero requests for non-XML vectors")
+	}
+}
+
+func TestXXERule_EntityReflection(t *testing.T) {
+	// Simulate a vulnerable XML endpoint that reflects entity content.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		// Parse the entity value from the payload and reflect it back —
+		// simulates an XXE-vulnerable parser that expands the entity.
+		content := string(body)
+		// Extract the nonce between the quotes in <!ENTITY ... "nonce">
+		start := strings.Index(content, "\"anpu-")
+		end := -1
+		if start >= 0 {
+			end = strings.Index(content[start+1:], "\"")
+		}
+		nonce := ""
+		if start >= 0 && end >= 0 {
+			nonce = content[start+1 : start+1+end]
+		}
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte("<response>" + nonce + "</response>"))
+	}))
+	defer srv.Close()
+
+	rule := &xxeRule{}
+	result, err := rule.Test(context.Background(), testClient(t), xmlVector(srv.URL))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Found {
+		t.Error("expected xxeRule to find entity reflection")
+	}
+	if !strings.Contains(result.Evidence, "entity reflection confirmed") {
+		t.Errorf("evidence should mention reflection, got: %s", result.Evidence)
+	}
+}
+
+func TestXXERule_ParserErrorSignal(t *testing.T) {
+	// Simulate an endpoint that returns an XML parse error string.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("XML parsing error: invalid DOCTYPE declaration"))
+	}))
+	defer srv.Close()
+
+	rule := &xxeRule{}
+	result, err := rule.Test(context.Background(), testClient(t), xmlVector(srv.URL))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Found {
+		t.Error("expected xxeRule to detect parser error signal")
+	}
+	if !strings.Contains(result.Evidence, "xml parsing error") {
+		t.Errorf("evidence should contain error signature, got: %s", result.Evidence)
+	}
+}
+
+func TestXXERule_StackTraceSignal(t *testing.T) {
+	// Simulate an endpoint that leaks a Java XML stack trace.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Exception in thread main com.sun.org.apache.xerces.internal.impl.XMLStreamReaderImpl"))
+	}))
+	defer srv.Close()
+
+	rule := &xxeRule{}
+	result, err := rule.Test(context.Background(), testClient(t), xmlVector(srv.URL))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Found {
+		t.Error("expected xxeRule to detect stack trace signal")
+	}
+}
+
+func TestXXERule_StatusChangeTo500(t *testing.T) {
+	// Simulate an endpoint that returns 200 on GET but 500 on POST with DOCTYPE.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("<ok/>"))
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("internal error"))
+	}))
+	defer srv.Close()
+
+	rule := &xxeRule{}
+	result, err := rule.Test(context.Background(), testClient(t), xmlVector(srv.URL))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Found {
+		t.Error("expected xxeRule to detect status-change signal (200→500)")
+	}
+	if !strings.Contains(result.Evidence, "HTTP 500") {
+		t.Errorf("evidence should mention status 500, got: %s", result.Evidence)
+	}
+}
+
+func TestXXERule_NoFinding_CleanEndpoint(t *testing.T) {
+	// Simulate a safe XML endpoint that ignores the DOCTYPE and returns
+	// a generic response with no error strings.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("<response><status>ok</status></response>"))
+	}))
+	defer srv.Close()
+
+	rule := &xxeRule{}
+	result, err := rule.Test(context.Background(), testClient(t), xmlVector(srv.URL))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Found {
+		t.Errorf("expected no finding for safe endpoint, got evidence: %s", result.Evidence)
+	}
+}
+
+func TestXXERule_ToFinding_ReflectionIsHigh(t *testing.T) {
+	rule := &xxeRule{}
+	res := models.ActiveRuleResult{
+		RuleID:  rule.ID(),
+		Vector:  xmlVector("https://example.com/api/xml"),
+		Found:   true,
+		Payload: buildXXEPayload("anpu-cafebabe"),
+		Evidence: "XXE entity reflection confirmed: canary value \"anpu-cafebabe\" appeared in response body (status 200). " +
+			"The XML parser expanded the internal entity defined in the DOCTYPE.",
+	}
+	f := rule.ToFinding(res, "https://example.com")
+	if f.Confidence != models.ConfidenceHigh {
+		t.Errorf("reflection signal should be ConfidenceHigh, got %s", f.Confidence)
+	}
+	if f.Severity != models.SeverityCritical {
+		t.Errorf("XXE should be SeverityCritical, got %s", f.Severity)
+	}
+	if f.CWE != "CWE-611" {
+		t.Errorf("CWE should be CWE-611, got %s", f.CWE)
+	}
+}
+
+func TestXXERule_ToFinding_StatusChangeIsLow(t *testing.T) {
+	rule := &xxeRule{}
+	res := models.ActiveRuleResult{
+		RuleID:   rule.ID(),
+		Vector:   xmlVector("https://example.com/api/xml"),
+		Found:    true,
+		Evidence: "Server returned HTTP 500 (baseline was 200) after sending a DOCTYPE payload.",
+	}
+	f := rule.ToFinding(res, "https://example.com")
+	if f.Confidence != models.ConfidenceLow {
+		t.Errorf("status-change signal should be ConfidenceLow, got %s", f.Confidence)
+	}
+}
+
+// --- ExtractXMLVectors ---
+
+func TestExtractXMLVectors_XMLTaggedEndpoint(t *testing.T) {
+	eps := []models.Endpoint{
+		{URL: "https://example.com/api/ingest", Method: "POST", Sources: []string{"api-xml-body"}},
+	}
+	vecs := ExtractXMLVectors(eps)
+	if len(vecs) != 1 {
+		t.Fatalf("expected 1 vector, got %d", len(vecs))
+	}
+	if vecs[0].Kind != models.VectorXMLBody {
+		t.Errorf("kind: got %q, want xml-body", vecs[0].Kind)
+	}
+}
+
+func TestExtractXMLVectors_HeuristicXMLPath(t *testing.T) {
+	eps := []models.Endpoint{
+		{URL: "https://example.com/soap/endpoint", Method: "POST", Sources: []string{"crawler"}},
+	}
+	vecs := ExtractXMLVectors(eps)
+	if len(vecs) != 1 {
+		t.Fatalf("expected 1 vector for SOAP endpoint, got %d", len(vecs))
+	}
+}
+
+func TestExtractXMLVectors_SkipsGET(t *testing.T) {
+	eps := []models.Endpoint{
+		{URL: "https://example.com/xml/data", Method: "GET", Sources: []string{"crawler"}},
+	}
+	vecs := ExtractXMLVectors(eps)
+	if len(vecs) != 0 {
+		t.Errorf("GET endpoints should be skipped, got %d vectors", len(vecs))
+	}
+}
+
+func TestExtractXMLVectors_Deduplication(t *testing.T) {
+	eps := []models.Endpoint{
+		{URL: "https://example.com/xml/import", Method: "POST", Sources: []string{"api-xml-body"}},
+		{URL: "https://example.com/xml/import", Method: "POST", Sources: []string{"api-xml-body"}},
+	}
+	vecs := ExtractXMLVectors(eps)
+	if len(vecs) != 1 {
+		t.Errorf("duplicate endpoints should produce 1 vector, got %d", len(vecs))
+	}
+}
+
+func TestBuildXXEPayload_ContainsNonce(t *testing.T) {
+	nonce := "anpu-deadbeef"
+	payload := buildXXEPayload(nonce)
+	if !strings.Contains(payload, nonce) {
+		t.Error("payload should contain the nonce as entity value and reference")
+	}
+	if !strings.Contains(payload, "<!DOCTYPE") {
+		t.Error("payload should contain DOCTYPE declaration")
+	}
+	if !strings.Contains(payload, "<!ENTITY") {
+		t.Error("payload should contain ENTITY declaration")
+	}
+}

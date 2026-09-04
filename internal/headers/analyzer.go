@@ -111,7 +111,8 @@ func checkCSP(resp *anpuhttp.Response, target string) []models.Finding {
 func checkHSTS(resp *anpuhttp.Response, target string, isHTTPS bool) []models.Finding {
 	v := resp.Header.Get("Strict-Transport-Security")
 	if v != "" {
-		return nil
+		// Header is present — analyze quality.
+		return checkHSTSQuality(v, target, resp.FinalURL)
 	}
 	if !isHTTPS {
 		return []models.Finding{finding(

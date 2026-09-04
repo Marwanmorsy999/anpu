@@ -69,6 +69,66 @@ func analyzeCookie(c *http.Cookie, url, target string, isHTTPS bool) []models.Fi
 	var out []models.Finding
 	base := fmt.Sprintf("Set-Cookie: %s=%s", c.Name, redactCookieValue(c.Value))
 
+	// __Host- prefix: requires Secure, no Domain attribute, Path=/.
+	if strings.HasPrefix(c.Name, "__Host-") {
+		if !c.Secure {
+			out = append(out, models.Finding{
+				ID:              "cookie-host-prefix-missing-secure-" + safeID(c.Name),
+				Title:           fmt.Sprintf("Cookie %q uses __Host- prefix but is missing Secure flag", c.Name),
+				Description:     fmt.Sprintf("The __Host- cookie name prefix signals that the cookie should be bound to the exact host and transmitted only over HTTPS, but %q is set without the Secure attribute. Browsers that enforce the prefix semantics will reject this cookie; others silently accept it without the security guarantees the prefix implies.", c.Name),
+				Severity:        models.SeverityMedium,
+				Confidence:      models.ConfidenceHigh,
+				Category:        models.CategoryCookies,
+				CWE:             "CWE-614",
+				Target:          target,
+				URL:             url,
+				Source:          models.SourceCookies,
+				DetectionMethod: "passive HTTP response inspection",
+				Evidence:        models.Evidence{Observed: base + "; Secure=missing", Location: "Set-Cookie response header"},
+				Remediation:     fmt.Sprintf("Add the Secure attribute to %q, remove the Domain attribute, and set Path=/.", c.Name),
+				References:      []string{"https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#cookie_prefixes"},
+			})
+		}
+		if c.Domain != "" {
+			out = append(out, models.Finding{
+				ID:              "cookie-host-prefix-has-domain-" + safeID(c.Name),
+				Title:           fmt.Sprintf("Cookie %q uses __Host- prefix but sets a Domain attribute", c.Name),
+				Description:     fmt.Sprintf("The __Host- prefix requires that no Domain attribute be set, binding the cookie strictly to the origin host. %q sets Domain=%q, which violates the prefix contract and makes the cookie transmittable to subdomains.", c.Name, c.Domain),
+				Severity:        models.SeverityMedium,
+				Confidence:      models.ConfidenceHigh,
+				Category:        models.CategoryCookies,
+				CWE:             "CWE-614",
+				Target:          target,
+				URL:             url,
+				Source:          models.SourceCookies,
+				DetectionMethod: "passive HTTP response inspection",
+				Evidence:        models.Evidence{Observed: fmt.Sprintf("%s; Domain=%s", base, c.Domain), Location: "Set-Cookie response header"},
+				Remediation:     fmt.Sprintf("Remove the Domain attribute from %q to satisfy the __Host- prefix contract.", c.Name),
+				References:      []string{"https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#cookie_prefixes"},
+			})
+		}
+	}
+
+	// __Secure- prefix: requires Secure flag.
+	if strings.HasPrefix(c.Name, "__Secure-") && !c.Secure {
+		out = append(out, models.Finding{
+			ID:              "cookie-secure-prefix-missing-secure-" + safeID(c.Name),
+			Title:           fmt.Sprintf("Cookie %q uses __Secure- prefix but is missing Secure flag", c.Name),
+			Description:     fmt.Sprintf("The __Secure- cookie name prefix signals that the cookie must be set with the Secure attribute, but %q is set without it. Browsers that enforce the prefix semantics will reject this cookie.", c.Name),
+			Severity:        models.SeverityMedium,
+			Confidence:      models.ConfidenceHigh,
+			Category:        models.CategoryCookies,
+			CWE:             "CWE-614",
+			Target:          target,
+			URL:             url,
+			Source:          models.SourceCookies,
+			DetectionMethod: "passive HTTP response inspection",
+			Evidence:        models.Evidence{Observed: base + "; Secure=missing", Location: "Set-Cookie response header"},
+			Remediation:     fmt.Sprintf("Add the Secure attribute to %q.", c.Name),
+			References:      []string{"https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#cookie_prefixes"},
+		})
+	}
+
 	if !c.Secure && isHTTPS {
 		out = append(out, models.Finding{
 			ID:              "cookie-missing-secure-" + safeID(c.Name),
@@ -116,6 +176,8 @@ func analyzeCookie(c *http.Cookie, url, target string, isHTTPS bool) []models.Fi
 		sev := models.SeverityLow
 		if sameSite == "none" && !c.Secure {
 			sev = models.SeverityMedium // SameSite=None without Secure is invalid/risky
+		} else if isSessionCookieName(c.Name) {
+			sev = models.SeverityMedium // session/auth cookie — CSRF risk is concrete
 		}
 		out = append(out, models.Finding{
 			ID:              "cookie-samesite-" + safeID(c.Name),
@@ -138,6 +200,25 @@ func analyzeCookie(c *http.Cookie, url, target string, isHTTPS bool) []models.Fi
 	}
 
 	return out
+}
+
+// sessionCookieNames are substrings that commonly appear in session/auth
+// cookie names. A SameSite weakness on these carries concrete CSRF risk.
+var sessionCookieNames = []string{
+	"session", "sess", "sid", "auth", "token", "jwt", "login",
+	"identity", "user", "account", "csrf", "xsrf",
+}
+
+// isSessionCookieName returns true when the cookie name contains any of
+// the well-known session/auth substrings (case-insensitive).
+func isSessionCookieName(name string) bool {
+	lower := strings.ToLower(name)
+	for _, sub := range sessionCookieNames {
+		if strings.Contains(lower, sub) {
+			return true
+		}
+	}
+	return false
 }
 
 func cookieSameSiteString(c *http.Cookie) string {

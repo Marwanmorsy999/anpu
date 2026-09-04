@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
+	"github.com/anpu-project/anpu/pkg/models"
 )
 
 func TestCookieAnalyzer_FlagsMissingHttpOnlyAndSameSite(t *testing.T) {
@@ -67,4 +68,83 @@ func TestCookieAnalyzer_NoCookiesObserved(t *testing.T) {
 // verification, since httptest.NewTLSServer uses a self-signed cert.
 func insecureTestClient() *anpuhttp.Client {
 	return anpuhttp.NewInsecureClientWithLocalNetworkAllowed(true)
+}
+
+func TestIsSessionCookieName(t *testing.T) {
+	hits := []string{"session", "SESSIONID", "auth_token", "jwt", "user_sid", "login_token", "csrf"}
+	for _, name := range hits {
+		if !isSessionCookieName(name) {
+			t.Errorf("isSessionCookieName(%q) = false, want true", name)
+		}
+	}
+	misses := []string{"theme", "lang", "currency", "cookieconsent", "utm_source"}
+	for _, name := range misses {
+		if isSessionCookieName(name) {
+			t.Errorf("isSessionCookieName(%q) = true, want false", name)
+		}
+	}
+}
+
+func TestHostPrefix_MissingSecure(t *testing.T) {
+	c := &http.Cookie{Name: "__Host-session", Value: "abc", Secure: false, Path: "/"}
+	findings := analyzeCookie(c, "https://example.com", "https://example.com", true)
+	found := false
+	for _, f := range findings {
+		if f.ID == "cookie-host-prefix-missing-secure---host-session" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected host-prefix-missing-secure finding, got ids: %v", cookieIDs(findings))
+	}
+}
+
+func TestHostPrefix_WithDomain(t *testing.T) {
+	c := &http.Cookie{Name: "__Host-session", Value: "abc", Secure: true, Domain: "example.com", Path: "/"}
+	findings := analyzeCookie(c, "https://example.com", "https://example.com", true)
+	found := false
+	for _, f := range findings {
+		if f.ID == "cookie-host-prefix-has-domain---host-session" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected host-prefix-has-domain finding, got ids: %v", cookieIDs(findings))
+	}
+}
+
+func TestSecurePrefix_MissingSecure(t *testing.T) {
+	c := &http.Cookie{Name: "__Secure-auth", Value: "abc", Secure: false}
+	findings := analyzeCookie(c, "https://example.com", "https://example.com", true)
+	found := false
+	for _, f := range findings {
+		if f.ID == "cookie-secure-prefix-missing-secure---secure-auth" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected secure-prefix-missing-secure finding, got ids: %v", cookieIDs(findings))
+	}
+}
+
+func TestSessionCookie_ElevatedSameSiteSeverity(t *testing.T) {
+	c := &http.Cookie{Name: "session_id", Value: "abc", HttpOnly: true, Secure: true, SameSite: http.SameSiteDefaultMode}
+	findings := analyzeCookie(c, "https://example.com", "https://example.com", true)
+	for _, f := range findings {
+		if f.ID == "cookie-samesite-session-id" {
+			if f.Severity != models.SeverityMedium {
+				t.Errorf("session cookie SameSite severity = %q, want Medium", f.Severity)
+			}
+			return
+		}
+	}
+	t.Error("expected cookie-samesite-session-id finding")
+}
+
+func cookieIDs(findings []models.Finding) []string {
+	ids := make([]string, len(findings))
+	for i, f := range findings {
+		ids[i] = f.ID
+	}
+	return ids
 }

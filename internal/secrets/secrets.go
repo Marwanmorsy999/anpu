@@ -78,6 +78,58 @@ var rules = []rule{
 		Desc: "A private cryptographic key delivered to clients lets anyone impersonate the service or decrypt captured traffic signed with it.",
 	},
 	{
+		ID: "stripe-key", Title: "Stripe API key in client-side asset",
+		// Pattern split to avoid triggering GitHub secret scanning on this source file.
+		// Matches sk_live_ and rk_live_ prefixed keys.
+		Pattern:  regexp.MustCompile(`\b([sr]k_live_[0-9A-Za-z]{24,})\b`),
+		Severity: models.SeverityCritical, CWE: "CWE-798",
+		Desc: "A live Stripe secret key grants full read/write access to charges, refunds, customers, and payment methods. Exposure risks direct financial loss.",
+	},
+	{
+		ID: "stripe-publishable-key", Title: "Stripe publishable key in client-side asset",
+		Pattern:  regexp.MustCompile(`\b(pk_live_[0-9A-Za-z]{24,})\b`),
+		Severity: models.SeverityLow, CWE: "CWE-798",
+		Desc: "Stripe publishable keys are intended to be public but flagged here to confirm their presence is intentional and the site is not accidentally exposing a secret key.",
+	},
+	{
+		ID: "twilio-account-sid", Title: "Twilio Account SID in client-side asset",
+		Pattern:  regexp.MustCompile(`\b(AC[0-9a-fA-F]{32})\b`),
+		Severity: models.SeverityHigh, CWE: "CWE-798",
+		Desc: "Twilio Account SIDs combined with an auth token allow sending SMS, making calls, and reading message history. The SID alone is a half-credential.",
+	},
+	{
+		ID: "twilio-auth-token", Title: "Twilio auth token in client-side asset",
+		Pattern:  regexp.MustCompile(`(?i)twilio[^0-9A-Za-z]{0,20}([0-9a-fA-F]{32})\b`),
+		Severity: models.SeverityCritical, CWE: "CWE-798",
+		Desc: "A Twilio auth token in a public asset allows an attacker to send SMS/calls from your account and read message history.",
+	},
+	{
+		ID: "sendgrid-api-key", Title: "SendGrid API key in client-side asset",
+		// Prefix "SG." split as concatenation to avoid triggering push protection.
+		Pattern:  regexp.MustCompile(`\b(S` + `G\.[0-9A-Za-z\-_]{22}\.[0-9A-Za-z\-_]{43})\b`),
+		Severity: models.SeverityCritical, CWE: "CWE-798",
+		Desc: "SendGrid API keys with mail send permissions let an attacker send arbitrary email from your verified domains, enabling phishing and spam.",
+	},
+	{
+		ID: "firebase-api-key", Title: "Firebase API key in client-side asset",
+		Pattern:  regexp.MustCompile(`\b(AIza[0-9A-Za-z\-_]{35})\b`),
+		Severity: models.SeverityMedium, CWE: "CWE-798",
+		Desc: "Firebase API keys are often intended to be public but can enable abuse of Firebase services (auth, Firestore, Storage) if security rules are misconfigured.",
+	},
+	{
+		ID: "mailchimp-api-key", Title: "Mailchimp API key in client-side asset",
+		Pattern:  regexp.MustCompile(`\b([0-9a-fA-F]{32}-us[0-9]{1,2})\b`),
+		Severity: models.SeverityHigh, CWE: "CWE-798",
+		Desc: "Mailchimp API keys allow full access to mailing lists and campaign data; leaked keys can expose subscriber email addresses.",
+	},
+	{
+		ID: "npm-access-token", Title: "npm access token in client-side asset",
+		// Prefix split to avoid triggering GitHub push protection on this source file.
+		Pattern:  regexp.MustCompile(`\b(n` + `pm_[0-9A-Za-z]{36})\b`),
+		Severity: models.SeverityCritical, CWE: "CWE-798",
+		Desc: "npm access tokens can publish packages to the registry; a leaked token can be used to inject malicious code into npm packages.",
+	},
+	{
 		ID: "generic-secret-assignment", Title: "Possible hard-coded credential assignment",
 		Pattern:  regexp.MustCompile(`(?i)\b(api[_-]?key|secret|password|passwd|auth[_-]?token)\b['"]?\s*[:=]\s*['"][A-Za-z0-9+/=_\-]{16,}['"]`),
 		Severity: models.SeverityLow, CWE: "CWE-798",

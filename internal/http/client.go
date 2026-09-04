@@ -517,6 +517,55 @@ func (c *Client) PostXML(ctx context.Context, rawURL, body string, extraHeaders 
 	return out, nil
 }
 
+// GetWithHost issues a GET request to rawURL but overrides the Host header
+// sent on the wire to hostOverride.  This is used by the host-header-injection
+// active rule (Phase 12D) which needs to send a forged Host value while still
+// connecting to the real IP resolved from the original target URL.
+//
+// extraHeaders are merged in after Host is set so callers can inject
+// X-Forwarded-Host and X-Forwarded-For in the same call.
+func (c *Client) GetWithHost(ctx context.Context, rawURL, hostOverride string, extraHeaders map[string]string) (*Response, error) {
+	if c.limiter != nil {
+		if err := c.limiter.Wait(ctx); err != nil {
+			return nil, err
+		}
+	}
+	req, err := stdhttp.NewRequestWithContext(ctx, stdhttp.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("building request: %w", err)
+	}
+	req.Header.Set("User-Agent", UserAgent)
+	// req.Host overrides the Host header on the wire; req.Header.Set("Host",...)
+	// is ignored by Go's HTTP stack.
+	req.Host = hostOverride
+	for k, v := range extraHeaders {
+		req.Header.Set(k, v)
+	}
+
+	start := time.Now()
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %w", err)
+	}
+	out := &Response{
+		StatusCode: resp.StatusCode,
+		Header:     resp.Header,
+		Body:       body,
+		FinalURL:   resp.Request.URL.String(),
+		Elapsed:    time.Since(start),
+	}
+	if resp.TLS != nil {
+		out.TLS = resp.TLS
+	}
+	return out, nil
+}
+
 // HeadOrGet tries HEAD first (cheaper, lower impact) and falls back to
 // GET if the server doesn't support HEAD meaningfully (405/501 or
 // identical zero-length behavior isn't reliable enough to trust, so most

@@ -74,6 +74,7 @@ func DefaultRegistry() *Registry {
 			&ssrfRule{},
 			&cmdInjectionRule{},
 			&xxeRule{},
+			&hostHeaderRule{},
 		},
 	}
 }

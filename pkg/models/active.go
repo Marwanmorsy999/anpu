@@ -64,3 +64,12 @@ const (
 	// Used sparingly — only for headers declared in the API schema.
 	VectorHeader InputVectorKind = "header"
 )
+
+// Phase 12 additions.
+const (
+	// VectorXMLBody targets an endpoint that accepts an XML request body.
+	// Emitted by ExtractXMLVectors for POST/PUT endpoints whose Content-Type
+	// is application/xml or text/xml (detected from API schema or response).
+	// Only the xxeRule handles this kind.
+	VectorXMLBody InputVectorKind = "xml-body"
+)

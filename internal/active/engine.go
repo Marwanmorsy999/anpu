@@ -73,6 +73,7 @@ func DefaultRegistry() *Registry {
 			&crlfRule{},
 			&ssrfRule{},
 			&cmdInjectionRule{},
+			&xxeRule{},
 		},
 	}
 }

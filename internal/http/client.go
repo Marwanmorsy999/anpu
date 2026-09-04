@@ -471,6 +471,52 @@ func (c *Client) PostJSON(ctx context.Context, rawURL, body string, extraHeaders
 	return out, nil
 }
 
+// PostXML issues a POST request with an XML body through the same safety
+// settings as Get.  It is used by the XXE active rule (Phase 12) which
+// must send a well-formed XML document to endpoints that accept XML input.
+//
+// extraHeaders is merged into the request after Content-Type is set.
+func (c *Client) PostXML(ctx context.Context, rawURL, body string, extraHeaders map[string]string) (*Response, error) {
+	if c.limiter != nil {
+		if err := c.limiter.Wait(ctx); err != nil {
+			return nil, err
+		}
+	}
+	req, err := stdhttp.NewRequestWithContext(ctx, stdhttp.MethodPost, rawURL, strings.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("building POST request: %w", err)
+	}
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Content-Type", "application/xml")
+	req.Header.Set("Accept", "application/xml, text/xml, */*")
+	for k, v := range extraHeaders {
+		req.Header.Set(k, v)
+	}
+
+	start := time.Now()
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("reading POST response body: %w", err)
+	}
+	out := &Response{
+		StatusCode: resp.StatusCode,
+		Header:     resp.Header,
+		Body:       respBody,
+		FinalURL:   resp.Request.URL.String(),
+		Elapsed:    time.Since(start),
+	}
+	if resp.TLS != nil {
+		out.TLS = resp.TLS
+	}
+	return out, nil
+}
+
 // HeadOrGet tries HEAD first (cheaper, lower impact) and falls back to
 // GET if the server doesn't support HEAD meaningfully (405/501 or
 // identical zero-length behavior isn't reliable enough to trust, so most

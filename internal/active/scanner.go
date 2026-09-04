@@ -86,6 +86,42 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		}
 	}
 
+	// --- XML body pass (Phase 12: XXE detection) ---
+	// ExtractXMLVectors identifies POST/PUT endpoints that accept XML.
+	// The xxeRule handles VectorXMLBody; all other rules no-op via their guard.
+	xmlVectors := ExtractXMLVectors(sc.Endpoints)
+	for _, vec := range xmlVectors {
+		select {
+		case <-ctx.Done():
+			warnings = append(warnings, "active-tester: context cancelled during XML pass")
+			return scanner.StageResult{Findings: findings, Warnings: warnings}, nil
+		default:
+		}
+
+		totalVectors++
+
+		for _, rule := range s.registry.Rules() {
+			select {
+			case <-ctx.Done():
+				return scanner.StageResult{Findings: findings, Warnings: warnings}, nil
+			default:
+			}
+
+			result, err := rule.Test(ctx, s.client.WithAuth(sc.Auth.RequestHeaders()), vec)
+			totalProbes += result.RequestsMade
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf(
+					"active-tester: rule %s on XML vector %s: %v",
+					rule.ID(), vec.URL, err,
+				))
+				continue
+			}
+			if result.Found {
+				findings = append(findings, rule.ToFinding(result, sc.Target.Raw))
+			}
+		}
+	}
+
 	if sc.Verbose {
 		warnings = append(warnings, fmt.Sprintf(
 			"active-tester: tested %d vectors across %d endpoints (%d HTTP probes)",

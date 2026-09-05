@@ -709,3 +709,153 @@ func TestHostNonce_Format(t *testing.T) {
 		t.Error("two nonces should not be identical")
 	}
 }
+
+// --- NoSQL Injection ---
+
+func TestNosqlRule_JSONBodyAuthBypass(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		// Vulnerable: returns 200+token when $gt operator bypasses the check.
+		if strings.Contains(string(body), "$gt") {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"token":"abc123","user":{"role":"admin"}}`))
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":"invalid credentials"}`))
+	}))
+	defer srv.Close()
+
+	rule := &nosqlRule{}
+	vec := models.InputVector{URL: srv.URL + "/login", Kind: models.VectorJSONBody, Name: "password"}
+	result, err := rule.Test(context.Background(), testClient(t), vec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Found {
+		t.Error("expected nosqlRule to detect JSON body auth bypass")
+	}
+	if !strings.Contains(result.Evidence, "401") || !strings.Contains(result.Evidence, "200") {
+		t.Errorf("evidence should show status change 401→200, got: %s", result.Evidence)
+	}
+}
+
+func TestNosqlRule_QueryStringOperator(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.RawQuery
+		if strings.Contains(q, "%24gt") || strings.Contains(q, "$gt") || strings.Contains(q, "%5Bgt%5D") || strings.Contains(q, "[gt]") {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"username":"admin","email":"admin@example.com"}`))
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":"bad credentials"}`))
+	}))
+	defer srv.Close()
+
+	rule := &nosqlRule{}
+	vec := testVector(srv.URL+"/api/login", "username", "test")
+	result, err := rule.Test(context.Background(), testClient(t), vec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Found {
+		t.Error("expected nosqlRule to detect QS operator injection")
+	}
+}
+
+func TestNosqlRule_ErrorDisclosure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), "$gt") {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`CastError: Cast to string failed for value {"$gt":""} (type Object) at path "password"`))
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":"invalid"}`))
+	}))
+	defer srv.Close()
+
+	rule := &nosqlRule{}
+	vec := models.InputVector{URL: srv.URL + "/login", Kind: models.VectorJSONBody, Name: "password"}
+	result, err := rule.Test(context.Background(), testClient(t), vec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Found {
+		t.Error("expected nosqlRule to detect MongoDB error disclosure")
+	}
+}
+
+func TestNosqlRule_NoFinding_SafeEndpoint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Safe: always returns 401 regardless of input.
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":"invalid credentials"}`))
+	}))
+	defer srv.Close()
+
+	rule := &nosqlRule{}
+	vec := models.InputVector{URL: srv.URL + "/login", Kind: models.VectorJSONBody, Name: "password"}
+	result, err := rule.Test(context.Background(), testClient(t), vec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Found {
+		t.Errorf("expected no finding for safe endpoint, got: %s", result.Evidence)
+	}
+}
+
+func TestNosqlRule_SkipsXMLVector(t *testing.T) {
+	rule := &nosqlRule{}
+	vec := models.InputVector{URL: "https://example.com/api", Kind: models.VectorXMLBody, Name: "x"}
+	result, _ := rule.Test(context.Background(), testClient(t), vec)
+	if result.Found {
+		t.Error("nosqlRule should skip XML vectors")
+	}
+}
+
+func TestNosqlRule_ToFinding_AuthBypassIsHigh(t *testing.T) {
+	rule := &nosqlRule{}
+	res := models.ActiveRuleResult{
+		RuleID:   rule.ID(),
+		Vector:   models.InputVector{URL: "https://example.com/login", Kind: models.VectorJSONBody, Name: "password"},
+		Found:    true,
+		Evidence: "NoSQL injection (gt-operator) caused status change 401 → 200 — auth bypass.",
+	}
+	f := rule.ToFinding(res, "https://example.com")
+	if f.Severity != models.SeverityHigh {
+		t.Errorf("severity: got %q, want high", f.Severity)
+	}
+	if f.Confidence != models.ConfidenceHigh {
+		t.Errorf("confidence: got %q, want high (status change = definitive signal)", f.Confidence)
+	}
+	if f.CWE != "CWE-943" {
+		t.Errorf("CWE: got %q, want CWE-943", f.CWE)
+	}
+}
+
+func TestBuildJSONBodyForNosql(t *testing.T) {
+	body := buildJSONBodyForNosql("password", `{"$gt":""}`)
+	if !strings.Contains(body, `"password"`) {
+		t.Errorf("body should contain field name, got: %s", body)
+	}
+	if !strings.Contains(body, `$gt`) {
+		t.Errorf("body should contain operator, got: %s", body)
+	}
+}
+
+func TestInjectNosqlQS_NoExistingQuery(t *testing.T) {
+	u := injectNosqlQS("https://example.com/login", "username", "[$gt]=")
+	if !strings.Contains(u, "username[$gt]=") {
+		t.Errorf("QS injection: got %q", u)
+	}
+}
+
+func TestInjectNosqlQS_ExistingQuery(t *testing.T) {
+	u := injectNosqlQS("https://example.com/login?foo=bar", "username", "[$gt]=")
+	if !strings.HasPrefix(u, "https://example.com/login?foo=bar&username") {
+		t.Errorf("QS injection with existing query: got %q", u)
+	}
+}

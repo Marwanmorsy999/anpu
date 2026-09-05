@@ -75,6 +75,7 @@ func DefaultRegistry() *Registry {
 			&cmdInjectionRule{},
 			&xxeRule{},
 			&hostHeaderRule{},
+			&nosqlRule{},
 		},
 	}
 }

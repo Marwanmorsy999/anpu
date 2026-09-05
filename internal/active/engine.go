@@ -76,6 +76,7 @@ func DefaultRegistry() *Registry {
 			&xxeRule{},
 			&hostHeaderRule{},
 			&nosqlRule{},
+			&log4shellRule{},
 		},
 	}
 }

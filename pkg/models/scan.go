@@ -120,6 +120,9 @@ type ModuleConfig struct {
 	// Enabled on all profiles (Safe, Standard, Deep) — passive, zero extra
 	// HTTP cost beyond the page fetches already performed by other stages.
 	SRI bool
+	// Backup enables the Phase 12E backup file discovery scanner.
+	// Enabled on Standard and Deep profiles; disabled on Safe (active probing).
+	Backup bool
 	// Active enables the Phase 4 safe active testing engine.
 	// Only available on Standard and Deep profiles.
 	Active bool
@@ -166,6 +169,7 @@ func DefaultModuleConfig(p Profile) ModuleConfig {
 	mc.Subdomains = true
 	mc.Takeover = true
 	mc.Active = true // enabled on Standard and Deep
+	mc.Backup = true // enabled on Standard and Deep
 
 	if p == ProfileStandard {
 		// Standard stops short of the intrusive engines.

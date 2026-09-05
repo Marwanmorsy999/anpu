@@ -179,7 +179,7 @@ func applyBool(dst *bool, src *bool) {
 // ResolveModules computes the effective ModuleConfig for a scan given
 // the profile default, the config file, and the --no-nuclei/--no-zap CLI
 // flags (CLI flags win last).
-func ResolveModules(profile models.Profile, f *File, noNuclei, noZAP, noActive, noCSRF, noDeps, noTakeover, noSRI bool) models.ModuleConfig {
+func ResolveModules(profile models.Profile, f *File, noNuclei, noZAP, noActive, noCSRF, noDeps, noTakeover, noSRI, noBackup bool) models.ModuleConfig {
 	mc := models.DefaultModuleConfig(profile)
 	if f != nil {
 		applyBool(&mc.Recon, f.Modules.Recon)
@@ -221,6 +221,9 @@ func ResolveModules(profile models.Profile, f *File, noNuclei, noZAP, noActive, 
 	}
 	if noSRI {
 		mc.SRI = false
+	}
+	if noBackup {
+		mc.Backup = false
 	}
 	return mc
 }

@@ -50,6 +50,7 @@ func (a *Analyzer) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.St
 	if httpsAvailable {
 		findings = append(findings, checkCertificate(target.Raw, httpsHost, connState)...)
 		findings = append(findings, checkProtocolVersion(target.Raw, httpsHost, connState)...)
+		findings = append(findings, checkCipherSuites(ctx, target.Raw, httpsHost, port)...)
 	}
 
 	// Only check HTTP->HTTPS redirect behavior when the target itself was

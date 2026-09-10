@@ -87,26 +87,6 @@ func isDynamicSegment(seg string) bool {
 	return false
 }
 
-// xmlContentTypes are the MIME types that signal an endpoint accepts XML bodies.
-var xmlContentTypes = []string{
-	"application/xml",
-	"text/xml",
-	"application/soap+xml",
-	"application/xhtml+xml",
-}
-
-// isXMLContentType returns true when ct is a recognised XML MIME type.
-// Matching is prefix-based so "application/xml; charset=utf-8" also matches.
-func isXMLContentType(ct string) bool {
-	ct = strings.ToLower(strings.TrimSpace(ct))
-	for _, mime := range xmlContentTypes {
-		if strings.HasPrefix(ct, mime) {
-			return true
-		}
-	}
-	return false
-}
-
 // ExtractXMLVectors returns a single VectorXMLBody for each endpoint that
 // accepts an XML request body.  Detection is based on:
 //

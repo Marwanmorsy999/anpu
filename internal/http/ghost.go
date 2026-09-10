@@ -238,12 +238,9 @@ func (c *Client) WithGhost(enabled bool) *Client {
 				Timeout:       clone.http.Timeout,
 				CheckRedirect: clone.http.CheckRedirect,
 			}
-		} else if ghost, ok := at.base.(*GhostTransport); ok {
-			// Already ghost — nothing to do.
-			_ = ghost
 		}
-	} else if _, ok := clone.http.Transport.(*GhostTransport); ok {
-		// Already ghost.
+		// Any other base (already a GhostTransport, or a foreign
+		// RoundTripper) is left untouched — nothing to do.
 	}
 	return &clone
 }

@@ -42,7 +42,7 @@ func (r *xssRule) Test(ctx context.Context, client *anpuhttp.Client, v models.In
 		canary, detect = XSSCanary()
 		// Derive single-quote variant from the same id
 		// detect is like <b id="abcd1234"> → extract id
-		id := detect
+		var id string
 		if idx := strings.Index(detect, `"`); idx >= 0 {
 			rest := detect[idx+1:]
 			if end := strings.Index(rest, `"`); end >= 0 {

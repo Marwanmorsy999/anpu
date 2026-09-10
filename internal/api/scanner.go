@@ -152,7 +152,6 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			if f := CheckGraphQLAliasFlood(ctx, graphQLURL, authHeaders, apiClient, 10*time.Second); f != nil {
 				findings = append(findings, *f)
 			}
-			abuseRun++
 		}
 	}
 

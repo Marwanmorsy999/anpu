@@ -653,10 +653,8 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		if !silent {
 			fmt.Printf("  rate       : ghost adaptive 2 rps + Pareto jitter\n")
 		}
-	} else if stealth {
-		// Stealth without explicit rate limit still gets a tiny jitter
-		// via maybeJitter; no limiter needed.
 	}
+	// Stealth without explicit rate limit relies on per-request maybeJitter; no limiter needed.
 	apiCfg := api.Config{
 		OpenAPISource: openAPISource,
 		GraphQLURL:    graphQLURL,
@@ -810,9 +808,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		if err == nil {
 			// Wave 3 reputation: 2 keyless lookups (URLhaus + ThreatFox),
 			// surfaced as warnings. Fail-silent offline.
-			for _, note := range feeds.Reputation(cmd.Context(), target.Raw, target.Host) {
-				summary.Warnings = append(summary.Warnings, note)
-			}
+			summary.Warnings = append(summary.Warnings, feeds.Reputation(cmd.Context(), target.Raw, target.Host)...)
 		}
 		if err != nil {
 			if !batch {

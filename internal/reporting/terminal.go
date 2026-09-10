@@ -24,19 +24,6 @@ const (
 	clearSeq = "\x1b[2J\x1b[H"
 )
 
-// jackalBanner — Pyramid/Jackal wireframe, ANBU guardian inspiration
-const jackalBanner = phosphor + `
-       .--.            /\
-      /    \          /  \
-     | ^  ^ |        /____\
-     |  ◯   |        \    /
-      \ -- /          \  /
-       '--'            \/
-     ANPU  ·  Guardian` + reset + `
-  Guard what you build — Web Security Intelligence`
-
-const bigBanner = jackalBanner
-
 // anpuWordmark is the FIGlet-style "ANPU" block typography, styled and
 // recolored in code (amber). The Chafa jackal logo art was retired from
 // the display; the source files (anpu_logo.png, banner.txt,
@@ -77,14 +64,6 @@ func toPlainBlocks(s string) string {
 	)
 	return r.Replace(s)
 }
-
-// anbuBanner is kept as an alias so existing callers and scripts keep
-// working; it always renders the big banner.
-const anbuBanner = bigBanner
-
-// plainBanner renders when Plain mode is set or the terminal cannot do
-// block glyphs (TERM=dumb, CI logs).
-var plainBanner = strings.ReplaceAll(strings.ReplaceAll(bigBanner, "█", "#"), "░", "#")
 
 // BannerOptions controls human-oriented terminal output.
 // Silent suppresses banner, stage lines, and the results summary so

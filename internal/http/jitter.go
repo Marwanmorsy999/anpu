@@ -44,28 +44,5 @@ func ghostJitter() time.Duration {
 	return time.Duration(val) * time.Millisecond
 }
 
-// stealthJitter switches between uniform (non-ghost) and ghost Pareto
-// based on GhostEnabled. Kept for compatibility with client.go's
-// stealthJitter() — we override behavior when ghost is on.
-func stealthOrGhostJitter() time.Duration {
-	if GhostEnabled {
-		return ghostJitter()
-	}
-	// Fallback: uniform 50-250ms (preserves existing safe behavior
-	// when --ghost is off, per plan "RateLimiter fixed bucket when --ghost off").
-	uaMu.Lock()
-	n := uaRng.Intn(200)
-	uaMu.Unlock()
-	return time.Duration(50+n) * time.Millisecond
-}
-
-// maybeGhostJitter sleeps for ghost jitter if ghost or stealth is enabled.
-// Respects context cancellation.
-func (c *Client) maybeGhostJitter(ctx interface{ Done() <-chan struct{} }) error {
-	// This helper is not used directly; the real maybeJitter in client.go
-	// now delegates to stealthOrGhostJitter when GhostEnabled.
-	return nil
-}
-
 // Ensure rand import is used (avoid unused import if build tags change).
 var _ = rand.Float64

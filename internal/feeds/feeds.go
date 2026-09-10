@@ -187,7 +187,9 @@ func epssScore(ctx context.Context, cve string) float64 {
 		return -1
 	}
 	var f float64
-	fmt.Sscanf(doc.Data[0].Epss, "%f", &f)
+	if _, err := fmt.Sscanf(doc.Data[0].Epss, "%f", &f); err != nil {
+		return -1
+	}
 	return f
 }
 

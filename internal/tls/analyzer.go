@@ -234,6 +234,7 @@ func checkProtocolVersion(target, host string, state *tls.ConnectionState) []mod
 
 func tlsVersionName(v uint16) string {
 	switch v {
+	//nolint:staticcheck // SA1019: the analyzer must name SSLv3 to report servers that still negotiate it.
 	case tls.VersionSSL30:
 		return "SSLv3"
 	case tls.VersionTLS10:

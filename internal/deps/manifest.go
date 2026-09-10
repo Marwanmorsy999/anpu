@@ -101,7 +101,7 @@ func parsePackageJSON(data string) []manifestDep {
 	for _, m := range []map[string]string{doc.Dependencies, doc.DevDependencies} {
 		for name, raw := range m {
 			v := strings.TrimSpace(raw)
-			v = strings.TrimLeft(v, "^~>=< =")
+			v = strings.TrimLeft(v, "^~>=< ")
 			// Take the leading dotted version before any range operator or ||.
 			if i := strings.IndexAny(v, " |,"); i >= 0 {
 				v = v[:i]

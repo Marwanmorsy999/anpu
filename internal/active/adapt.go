@@ -9,13 +9,8 @@ import (
 // Master (ghost) — e.g., when WAF returns 403 for a payload, retry with
 // /**/ whitespace, %2e encoding, or next Vault token.
 //
-// This is a stub that provides encoding variants; callers can iterate via
+// Encoding variants are applied inline by AdaptNext; callers iterate via
 // AdaptNext when a response indicates blocking.
-var adaptEncodings = [][]string{
-	{`%2e`, `%252e`, `%c0%2e`},
-	{`/**/`, ` `, `%20`},
-	{`%0a`, `%0d%0a`, `\n`},
-}
 
 // AdaptNext returns the next encoding variant for a payload when the prior
 // response was 403/429/WAF. It cycles whitespace, dot-encoding, and vault

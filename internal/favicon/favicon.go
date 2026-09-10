@@ -182,10 +182,12 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	if len(icon) == 0 {
 		return scanner.StageResult{Warnings: []string{fmt.Sprintf("favicon: no icon fetched: %v", lastErr)}}, nil
 	}
-	// Quick sanity: must look like image magic (PNG, ICO, JPEG, SVG, GIF)
+	// Quick sanity: must look like image magic (PNG, ICO, JPEG, SVG, GIF).
+	// Anything else is usually an HTML fallback page served as the icon —
+	// still hashed, but at lower confidence.
+	confidence := models.ConfidenceHigh
 	if !(bytes.HasPrefix(icon, []byte("\x89PNG")) || bytes.HasPrefix(icon, []byte("\x00\x00\x01\x00")) || bytes.HasPrefix(icon, []byte("\xff\xd8\xff")) || bytes.Contains(icon[:min(512, len(icon))], []byte("<svg")) || bytes.HasPrefix(icon, []byte("GIF8"))) {
-		// Still hash, but confidence lower - many sites serve HTML as favicon fallback
-		// We'll still emit, flagged as low confidence.
+		confidence = models.ConfidenceMedium
 	}
 
 	h := shodanFaviconHash(icon)
@@ -196,7 +198,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		Title:           fmt.Sprintf("Favicon hash (Shodan mmh3) %d", h),
 		Description:     fmt.Sprintf("Favicon at %s hashed to Shodan http.favicon.hash %d (%d bytes, %s). Pivot in Shodan/Censys to find other hosts sharing this icon — useful for asset correlation and shadow-IT discovery.", iconURL, h, len(icon), resp.Header.Get("Content-Type")),
 		Severity:        models.SeverityInfo,
-		Confidence:      models.ConfidenceHigh,
+		Confidence:      confidence,
 		Category:        models.CategoryExposure,
 		Target:          sc.Target.Raw,
 		Evidence:        models.Evidence{Observed: fmt.Sprintf("mmh3=%d base64_len=%d url=%s", h, len(base64.StdEncoding.EncodeToString(icon)), iconURL), Location: "favicon.ico / link[rel=icon]"},

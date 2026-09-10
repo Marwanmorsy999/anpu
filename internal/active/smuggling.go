@@ -53,38 +53,34 @@ func (r *smugglingRule) Test(ctx context.Context, client *anpuhttp.Client, v mod
 	// If it returns 200 for both and the body contains the smuggled prefix or the status is consistent, we check for desync.
 	// Vulnerable pattern: server returns 200 for smuggling probe when it should reject, or the response differs in a way that suggests desync.
 	// We use a conservative signal: if baseline 200 and probe 200 but probe body length differs significantly and contains chunked markers.
-	bodyLower := strings.ToLower(string(resp.Body))
-	if baseStatus == 200 && resp.StatusCode == 200 {
-		// Check if body reflects smuggling artifacts or length is suspicious
-		if strings.Contains(bodyLower, "chunked") || strings.Contains(bodyLower, "0\r\n\r\n") {
-			// This is not definitive, so we need a second probe to confirm.
+	// A lone smuggling artifact in the body is not definitive, so the
+	// TE.CL second probe below always runs (budget permitting) to confirm.
+	// For now, smuggling is hard to detect without a second request smuggled.
+	// We use a second probe: TE.CL
+	if baseStatus == 200 && resp.StatusCode == 200 && result.RequestsMade < r.RequestBudget() {
+		probe2Headers := map[string]string{
+			"Content-Length":    "44",
+			"Transfer-Encoding": "chunked",
 		}
-		// For now, smuggling is hard to detect without a second request smuggled.
-		// We use a second probe: TE.CL
-		if result.RequestsMade < r.RequestBudget() {
-			probe2Headers := map[string]string{
-				"Content-Length":    "44",
-				"Transfer-Encoding": "chunked",
-			}
-			resp2, err2 := client.DoWithHeaders(ctx, "POST", v.URL, probe2Headers)
-			result.RequestsMade++
-			if err2 == nil && resp2 != nil {
-				// If POST with smuggling headers succeeds where it should fail, flag
-				if resp2.StatusCode == 200 && baseStatus == 200 {
-					// Check for inconsistent handling: one probe 200, other not, or both 200 but lengths differ greatly from baseline
-					lenDiff := len(resp.Body) - len(baseResp.Body)
-					lenDiff2 := len(resp2.Body) - len(baseResp.Body)
-					if (lenDiff > 100 || lenDiff < -100) && (lenDiff2 > 100 || lenDiff2 < -100) {
-						result.Found = true
-						result.Payload = "Content-Length: 6 + Transfer-Encoding: chunked"
-						result.Evidence = fmt.Sprintf("Possible smuggling desync: baseline %d (len %d) vs CL.TE probe %d (len %d) vs TE.CL probe %d (len %d). Server handled conflicting length headers inconsistently.", baseStatus, len(baseResp.Body), resp.StatusCode, len(resp.Body), resp2.StatusCode, len(resp2.Body))
-						return result, nil
-					}
+		resp2, err2 := client.DoWithHeaders(ctx, "POST", v.URL, probe2Headers)
+		result.RequestsMade++
+		if err2 == nil && resp2 != nil {
+			// If POST with smuggling headers succeeds where it should fail, flag
+			if resp2.StatusCode == 200 && baseStatus == 200 {
+				// Check for inconsistent handling: one probe 200, other not, or both 200 but lengths differ greatly from baseline
+				lenDiff := len(resp.Body) - len(baseResp.Body)
+				lenDiff2 := len(resp2.Body) - len(baseResp.Body)
+				if (lenDiff > 100 || lenDiff < -100) && (lenDiff2 > 100 || lenDiff2 < -100) {
+					result.Found = true
+					result.Payload = "Content-Length: 6 + Transfer-Encoding: chunked"
+					result.Evidence = fmt.Sprintf("Possible smuggling desync: baseline %d (len %d) vs CL.TE probe %d (len %d) vs TE.CL probe %d (len %d). Server handled conflicting length headers inconsistently.", baseStatus, len(baseResp.Body), resp.StatusCode, len(resp.Body), resp2.StatusCode, len(resp2.Body))
+					return result, nil
 				}
 			}
 		}
 	}
 	// Alternative signal: server returns 400 for one probe but 200 for baseline, yet the 400 body mentions desync keywords
+	bodyLower := strings.ToLower(string(resp.Body))
 	if resp.StatusCode == 400 && baseStatus == 200 {
 		if strings.Contains(bodyLower, "smuggling") || strings.Contains(bodyLower, "desync") || strings.Contains(bodyLower, "transfer-encoding") {
 			result.Found = true

@@ -108,9 +108,7 @@ func (s *Session) WaitForCallback(nonce string, timeout time.Duration) (protocol
 			}
 		}
 		s.mu.Unlock()
-		select {
-		case <-time.After(500 * time.Millisecond):
-		}
+		time.Sleep(500 * time.Millisecond)
 	}
 	return "", "", false
 }

@@ -308,15 +308,7 @@ func isSharedAddressSpace(ip net.IP) bool {
 	return false
 }
 
-// AuthedClient wraps Client and injects a fixed set of headers (typically
-// from an AuthContext) into every request.  Use Client.WithAuth to
-// create one.
-type AuthedClient struct {
-	*Client
-	headers map[string]string
-}
-
-// WithAuth returns an AuthedClient that merges extraHeaders into every
+// WithAuth returns a Client that merges extraHeaders into every
 // outgoing request.  When extraHeaders is nil or empty, the original
 // Client is returned unchanged (no allocation).
 func (c *Client) WithAuth(extraHeaders map[string]string) *Client {

@@ -24,10 +24,10 @@ type Limits struct {
 }
 
 func LimitsForProfile(profile models.Profile) Limits {
-	switch profile {
-	case models.ProfileDeep:
+	switch profile.Normalize() {
+	case models.ProfileUltra:
 		return Limits{MaxPages: 100, MaxDepth: 4}
-	case models.ProfileStandard:
+	case models.ProfileAdvanced:
 		return Limits{MaxPages: 25, MaxDepth: 2}
 	default:
 		return Limits{MaxPages: 1, MaxDepth: 0}

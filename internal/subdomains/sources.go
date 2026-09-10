@@ -85,7 +85,7 @@ func (s *Scanner) fetchCapped(ctx context.Context, url string, maxBytes int64) (
 	if err != nil {
 		return nil, 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, resp.StatusCode, fmt.Errorf("status %d", resp.StatusCode)
 	}

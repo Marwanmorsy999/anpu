@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -300,7 +301,7 @@ func CheckGraphQLAliasFlood(ctx context.Context, endpoint string, authHeaders ma
 	var sb strings.Builder
 	sb.WriteString(`{"query":"{`)
 	for i := 0; i < 100; i++ {
-		sb.WriteString(fmt.Sprintf("a%d: __typename ", i))
+		sb.WriteString("a" + strconv.Itoa(i) + ": __typename ")
 	}
 	sb.WriteString(`}"}`)
 	query := sb.String()

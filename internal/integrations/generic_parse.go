@@ -575,12 +575,12 @@ func parseJSONFindings(spec *ToolSpec, sc *scanner.ScanContext, out []byte, repr
 			for k, val := range t {
 				lk := strings.ToLower(k)
 				s, _ := val.(string)
-				switch {
-				case lk == "url" || lk == "matched-at" || lk == "link":
+				switch lk {
+				case "url", "matched-at", "link":
 					url = s
-				case lk == "title" || lk == "name" || lk == "templateid" || lk == "template_id":
+				case "title", "name", "templateid", "template_id":
 					title = s
-				case lk == "severity" || lk == "level":
+				case "severity", "level":
 					sev = s
 				}
 			}

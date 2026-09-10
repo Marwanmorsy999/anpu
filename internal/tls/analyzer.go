@@ -75,7 +75,7 @@ func probeTLS(ctx context.Context, host, port string) (*tls.ConnectionState, err
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	state := conn.ConnectionState()
 	return &state, nil
 }

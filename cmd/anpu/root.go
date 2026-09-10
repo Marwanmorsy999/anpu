@@ -331,6 +331,6 @@ func resolveConfigPath() string {
 }
 
 func fatal(err error) {
-	fmt.Fprintln(os.Stderr, "Error:", err)
+	_, _ = fmt.Fprintln(os.Stderr, "Error:", err)
 	os.Exit(1)
 }

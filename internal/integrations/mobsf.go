@@ -142,7 +142,7 @@ func (m *MobSFScanner) doJSON(ctx context.Context, server, key, method, path str
 		if err != nil {
 			return nil, err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		if _, err := io.Copy(fw, f); err != nil {
 			return nil, err
 		}
@@ -173,7 +173,7 @@ func (m *MobSFScanner) doJSON(ctx context.Context, server, key, method, path str
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
 		return nil, err

@@ -134,9 +134,10 @@ func pickTargets(sc *scanner.ScanContext) []string {
 		if err != nil || !strings.EqualFold(u.Hostname(), sc.Target.Host) {
 			continue
 		}
-		if ep.Category == models.EndpointAuth || ep.Category == models.EndpointAdminLike {
+		switch ep.Category {
+		case models.EndpointAuth, models.EndpointAdminLike:
 			auth = append(auth, ep.URL)
-		} else if ep.Category == models.EndpointAPI {
+		case models.EndpointAPI:
 			other = append(other, ep.URL)
 		}
 		if len(auth)+len(other) >= 2 {

@@ -32,7 +32,7 @@ func LoadFile(path string) (*Allowlist, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading scope file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var entries []string
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	stdhttp "net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -35,7 +34,7 @@ func NewProxyPool(path string) (*ProxyPool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening proxy pool %q: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var urls []*url.URL
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
@@ -145,14 +144,14 @@ func (p *ProxyPool) Size() int {
 // via the pool. It delegates to the underlying transport for non-proxy
 // logic but swaps the Proxy func per request.
 type PoolTransport struct {
-	base *stdhttp.Transport
+	base *http.Transport
 	pool *ProxyPool
 }
 
 // NewPoolTransport wraps a base transport with pool rotation.
-func NewPoolTransport(base *stdhttp.Transport, pool *ProxyPool) *PoolTransport {
+func NewPoolTransport(base *http.Transport, pool *ProxyPool) *PoolTransport {
 	if base == nil {
-		base = &stdhttp.Transport{}
+		base = &http.Transport{}
 	}
 	return &PoolTransport{base: base, pool: pool}
 }
@@ -197,7 +196,7 @@ func (t *PoolTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 				}
 			}
 			// Use a one-off client transport for this request
-			resp, err := (&stdhttp.Transport{
+			resp, err := (&http.Transport{
 				Proxy:                 tcopy.Proxy,
 				DialContext:           tcopy.DialContext,
 				TLSClientConfig:       tcopy.TLSClientConfig,
@@ -215,7 +214,7 @@ func (t *PoolTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	// http/https proxy: clone transport with ProxyURL set to pu
 	tcopy := t.base.Clone()
-	tcopy.Proxy = stdhttp.ProxyURL(pu)
+	tcopy.Proxy = http.ProxyURL(pu)
 	resp, err := tcopy.RoundTrip(req)
 	if err != nil {
 		t.pool.MarkBad(pu)
@@ -240,21 +239,21 @@ func (c *Client) WithProxyPool(poolPath string) (*Client, error) {
 	clone := *c
 	clone.viaProxy = true
 	GhostProxyPoolPath = poolPath
-	if tr, ok := c.http.Transport.(*stdhttp.Transport); ok {
+	if tr, ok := c.http.Transport.(*http.Transport); ok {
 		tcopy := tr.Clone()
 		poolRT := NewPoolTransport(tcopy, pool)
 		// Need to expose poolRT as http.RoundTripper; wrap so safeDialContext still honors viaProxy
 		tcopy.DialContext = clone.safeDialContext
-		clone.http = &stdhttp.Client{
+		clone.http = &http.Client{
 			Transport:     poolRT,
 			Timeout:       c.http.Timeout,
 			CheckRedirect: c.http.CheckRedirect,
 		}
 	} else if at, ok := c.http.Transport.(*authTransport); ok {
-		if inner, ok := at.base.(*stdhttp.Transport); ok {
+		if inner, ok := at.base.(*http.Transport); ok {
 			tcopy := inner.Clone()
 			poolRT := NewPoolTransport(tcopy, pool)
-			clone.http = &stdhttp.Client{
+			clone.http = &http.Client{
 				Transport: &authTransport{
 					base:    poolRT,
 					headers: at.headers,
@@ -263,11 +262,11 @@ func (c *Client) WithProxyPool(poolPath string) (*Client, error) {
 				CheckRedirect: c.http.CheckRedirect,
 			}
 		} else if ghost, ok := at.base.(*GhostTransport); ok {
-			if inner2, ok := ghost.base.(*stdhttp.Transport); ok {
+			if inner2, ok := ghost.base.(*http.Transport); ok {
 				tcopy := inner2.Clone()
 				poolRT := NewPoolTransport(tcopy, pool)
 				ghost2 := &GhostTransport{base: poolRT, headerOrder: ghost.headerOrder, spec: ghost.spec}
-				clone.http = &stdhttp.Client{
+				clone.http = &http.Client{
 					Transport: &authTransport{
 						base:    ghost2,
 						headers: at.headers,
@@ -278,10 +277,10 @@ func (c *Client) WithProxyPool(poolPath string) (*Client, error) {
 			}
 		}
 	} else if ghost, ok := c.http.Transport.(*GhostTransport); ok {
-		if inner, ok := ghost.base.(*stdhttp.Transport); ok {
+		if inner, ok := ghost.base.(*http.Transport); ok {
 			tcopy := inner.Clone()
 			poolRT := NewPoolTransport(tcopy, pool)
-			clone.http = &stdhttp.Client{
+			clone.http = &http.Client{
 				Transport: &GhostTransport{
 					base:        poolRT,
 					headerOrder: ghost.headerOrder,

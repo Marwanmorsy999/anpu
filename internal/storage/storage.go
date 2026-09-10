@@ -206,7 +206,7 @@ func (s *Store) ListScans(limit int) ([]ScanListItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []ScanListItem
 	for rows.Next() {
@@ -242,7 +242,7 @@ func (s *Store) GetScan(id string) (*models.ScanSummary, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var data string
 		if err := rows.Scan(&data); err != nil {
@@ -259,7 +259,7 @@ func (s *Store) GetScan(id string) (*models.ScanSummary, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer techRows.Close()
+	defer func() { _ = techRows.Close() }()
 	for techRows.Next() {
 		var t models.Technology
 		if err := techRows.Scan(&t.Name, &t.Category, &t.Version, &t.Confidence); err != nil {
@@ -272,7 +272,7 @@ func (s *Store) GetScan(id string) (*models.ScanSummary, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer epRows.Close()
+	defer func() { _ = epRows.Close() }()
 	for epRows.Next() {
 		var e models.Endpoint
 		var cat string

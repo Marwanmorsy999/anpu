@@ -18,7 +18,7 @@ func newHistoryCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("opening scan history database: %w", err)
 			}
-			defer store.Close()
+			defer func() { _ = store.Close() }()
 
 			scans, err := store.ListScans(limit)
 			if err != nil {

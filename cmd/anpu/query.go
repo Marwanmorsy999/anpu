@@ -50,7 +50,7 @@ Examples:
 			for _, f := range files {
 				summary, err := loadSummaryJSON(f)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "anpu: skipping %s: %v\n", f, err)
+					_, _ = fmt.Fprintf(os.Stderr, "anpu: skipping %s: %v\n", f, err)
 					continue
 				}
 				for _, finding := range summary.Findings {

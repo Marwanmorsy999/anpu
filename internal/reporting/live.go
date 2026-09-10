@@ -130,7 +130,7 @@ func (l *Live) Boot(target, profile string, n int) {
 	// Live scan start is the only place that clears scrollback for a
 	// focused canvas. --help and banner paths never clear.
 	if !l.plain && SupportsColor() {
-		fmt.Fprint(l.out, clearSeq)
+		_, _ = fmt.Fprint(l.out, clearSeq)
 	}
 	useColor := !l.plain && SupportsColor()
 	b, m, p, r := "", "", "", ""
@@ -177,11 +177,11 @@ func (l *Live) Boot(target, profile string, n int) {
 	if pad2 < 0 {
 		pad2 = 0
 	}
-	fmt.Fprintln(l.out, "")
-	fmt.Fprintln(l.out, top)
-	fmt.Fprintln(l.out, b+"│"+r+"  Target: "+tLine+strings.Repeat(" ", pad1)+b+"│"+r)
-	fmt.Fprintln(l.out, b+"│"+r+"  Profile: "+m+profUpper+r+"  "+dim+"·"+r+"  "+stageStr+"  "+dim+"·"+r+"  "+version.Version+strings.Repeat(" ", pad2)+b+"│"+r)
-	fmt.Fprintln(l.out, bot)
+	_, _ = fmt.Fprintln(l.out, "")
+	_, _ = fmt.Fprintln(l.out, top)
+	_, _ = fmt.Fprintln(l.out, b+"│"+r+"  Target: "+tLine+strings.Repeat(" ", pad1)+b+"│"+r)
+	_, _ = fmt.Fprintln(l.out, b+"│"+r+"  Profile: "+m+profUpper+r+"  "+dim+"·"+r+"  "+stageStr+"  "+dim+"·"+r+"  "+version.Version+strings.Repeat(" ", pad2)+b+"│"+r)
+	_, _ = fmt.Fprintln(l.out, bot)
 }
 
 func (l *Live) StageDone(s LiveStage) {
@@ -192,13 +192,13 @@ func (l *Live) StageDone(s LiveStage) {
 	defer l.mu.Unlock()
 	l.stopTickerLocked()
 	if h := l.tracker.Header(s.Phase, BannerOptions{Plain: l.plain}); h != "" {
-		fmt.Fprintln(l.out, h)
+		_, _ = fmt.Fprintln(l.out, h)
 	}
 	if s.Skipped {
 		if isOptionalTool(s.Label) {
 			l.skippedTools = append(l.skippedTools, s.Label)
 		}
-		fmt.Fprintln(l.out, l.finishLineLocked(s))
+		_, _ = fmt.Fprintln(l.out, l.finishLineLocked(s))
 		l.pos++
 		l.startNextLocked()
 		return
@@ -208,7 +208,7 @@ func (l *Live) StageDone(s LiveStage) {
 	if s.Done {
 		l.hits += s.NewFindings
 	}
-	fmt.Fprintln(l.out, line)
+	_, _ = fmt.Fprintln(l.out, line)
 	l.pos++
 	l.startNextLocked()
 	if s.Done && s.NewFindings > 0 {
@@ -218,7 +218,7 @@ func (l *Live) StageDone(s LiveStage) {
 			prefix = "  |--"
 			am, rs, mu = "", "", ""
 		}
-		fmt.Fprintf(l.out, "%s %s[!]%s +%d %s\n", prefix, am, rs, s.NewFindings, mu+"finding(s)"+rs)
+		_, _ = fmt.Fprintf(l.out, "%s %s[!]%s +%d %s\n", prefix, am, rs, s.NewFindings, mu+"finding(s)"+rs)
 	}
 }
 
@@ -235,7 +235,7 @@ func (l *Live) Close() {
 	defer l.mu.Unlock()
 	l.stopTickerLocked()
 	if l.current != "" {
-		fmt.Fprint(l.out, "\r"+strings.Repeat(" ", 80)+"\r")
+		_, _ = fmt.Fprint(l.out, "\r"+strings.Repeat(" ", 80)+"\r")
 		l.current = ""
 	}
 }
@@ -268,55 +268,55 @@ func (l *Live) Panel(summary *models.ScanSummary, reportPath string, quiet bool,
 		ph, am, mu, gr, rd = "", "", "", "", ""
 		rs = ""
 	}
-	fmt.Fprintln(l.out, "")
+	_, _ = fmt.Fprintln(l.out, "")
 	// Summary Matrix
-	fmt.Fprintf(l.out, "%s  %sGRADE %s%s  %s(%.1f/10)%s  ", mu, ph, RiskGrade(summary.RiskScore), rs, mu, summary.RiskScore, rs)
-	fmt.Fprintf(l.out, "%sCRITICAL %d%s  %sHIGH %d%s  %sMEDIUM %d%s  %sLOW %d%s",
+	_, _ = fmt.Fprintf(l.out, "%s  %sGRADE %s%s  %s(%.1f/10)%s  ", mu, ph, RiskGrade(summary.RiskScore), rs, mu, summary.RiskScore, rs)
+	_, _ = fmt.Fprintf(l.out, "%sCRITICAL %d%s  %sHIGH %d%s  %sMEDIUM %d%s  %sLOW %d%s",
 		rd, c[models.SeverityCritical], rs,
 		am, c[models.SeverityHigh], rs,
 		am, c[models.SeverityMedium], rs,
 		gr, c[models.SeverityLow], rs)
 	if quiet {
-		fmt.Fprintf(l.out, "  %sInfo suppressed%s", mu, rs)
+		_, _ = fmt.Fprintf(l.out, "  %sInfo suppressed%s", mu, rs)
 	} else {
-		fmt.Fprintf(l.out, "  %sInfo %d%s", mu, c[models.SeverityInfo], rs)
+		_, _ = fmt.Fprintf(l.out, "  %sInfo %d%s", mu, c[models.SeverityInfo], rs)
 	}
-	fmt.Fprintln(l.out, "")
+	_, _ = fmt.Fprintln(l.out, "")
 	if top != nil {
 		t := top.Title
 		if len(t) > 68 {
 			t = t[:65] + "..."
 		}
-		fmt.Fprintf(l.out, "  %sTop:%s %s %s[%s %.1f]%s\n", mu, rs, t, mu, strings.ToUpper(string(top.Severity)), top.RiskScore, rs)
+		_, _ = fmt.Fprintf(l.out, "  %sTop:%s %s %s[%s %.1f]%s\n", mu, rs, t, mu, strings.ToUpper(string(top.Severity)), top.RiskScore, rs)
 	} else {
-		fmt.Fprintf(l.out, "  %sTop:%s nominal\n", mu, rs)
+		_, _ = fmt.Fprintf(l.out, "  %sTop:%s nominal\n", mu, rs)
 	}
 	if reportPath != "" {
 		rep := reportPath
 		if len(rep) > 78 {
 			rep = "..." + rep[len(rep)-75:]
 		}
-		fmt.Fprintf(l.out, "  %sReport:%s %s\n", mu, rs, rep)
+		_, _ = fmt.Fprintf(l.out, "  %sReport:%s %s\n", mu, rs, rep)
 	}
 	if summary.SuppressedByConfidence > 0 {
-		fmt.Fprintf(l.out, "  %sNote:%s %d finding(s) below --min-confidence\n", mu, rs, summary.SuppressedByConfidence)
+		_, _ = fmt.Fprintf(l.out, "  %sNote:%s %d finding(s) below --min-confidence\n", mu, rs, summary.SuppressedByConfidence)
 	}
 	if len(summary.CodeFindings) > 0 {
-		fmt.Fprintf(l.out, "  %sLocal code:%s %d finding(s) in unscored appendix (not the target, excluded from grade)\n", mu, rs, len(summary.CodeFindings))
+		_, _ = fmt.Fprintf(l.out, "  %sLocal code:%s %d finding(s) in unscored appendix (not the target, excluded from grade)\n", mu, rs, len(summary.CodeFindings))
 	}
 	if len(summary.PhaseTimings) > 0 {
 		parts := make([]string, 0, len(summary.PhaseTimings))
 		for _, pt := range summary.PhaseTimings {
 			parts = append(parts, fmt.Sprintf("%s %.0fs/%d", pt.Phase, pt.Seconds, pt.Stages))
 		}
-		fmt.Fprintf(l.out, "  %sPhases:%s %s\n", mu, rs, strings.Join(parts, "  ·  "))
+		_, _ = fmt.Fprintf(l.out, "  %sPhases:%s %s\n", mu, rs, strings.Join(parts, "  ·  "))
 	}
 	if len(summary.SlowestStages) > 0 {
 		parts := make([]string, 0, len(summary.SlowestStages))
 		for _, st := range summary.SlowestStages {
 			parts = append(parts, fmt.Sprintf("%s %.1fs", st.Stage, st.Seconds))
 		}
-		fmt.Fprintf(l.out, "  %sSlowest:%s %s\n", mu, rs, strings.Join(parts, "  ·  "))
+		_, _ = fmt.Fprintf(l.out, "  %sSlowest:%s %s\n", mu, rs, strings.Join(parts, "  ·  "))
 	}
 	if len(summary.Warnings) > 0 {
 		// Filter out optional-tool noise — those are in next-steps, not warnings
@@ -328,41 +328,41 @@ func (l *Live) Panel(summary *models.ScanSummary, reportPath string, quiet bool,
 			filtered = append(filtered, w)
 		}
 		if len(filtered) > 0 {
-			fmt.Fprintf(l.out, "  %sNotes:%s\n", mu, rs)
+			_, _ = fmt.Fprintf(l.out, "  %sNotes:%s\n", mu, rs)
 			for _, w := range filtered {
-				fmt.Fprintf(l.out, "   %s·%s %s\n", mu, rs, w)
+				_, _ = fmt.Fprintf(l.out, "   %s·%s %s\n", mu, rs, w)
 			}
 		}
 	}
 	// Next-Steps Banner
 	if len(l.skippedTools) > 0 {
-		fmt.Fprintln(l.out, "")
-		fmt.Fprintf(l.out, "  %sNext:%s ", mu, rs)
+		_, _ = fmt.Fprintln(l.out, "")
+		_, _ = fmt.Fprintf(l.out, "  %sNext:%s ", mu, rs)
 		for i, t := range l.skippedTools {
 			if i > 0 {
-				fmt.Fprint(l.out, ", ")
+				_, _ = fmt.Fprint(l.out, ", ")
 			}
-			fmt.Fprintf(l.out, "%s%s%s", ph, t, rs)
+			_, _ = fmt.Fprintf(l.out, "%s%s%s", ph, t, rs)
 		}
-		fmt.Fprintln(l.out, " — not installed (optional)")
-		fmt.Fprintf(l.out, "  %sRun:%s anpu tools  ·  install: ", mu, rs)
+		_, _ = fmt.Fprintln(l.out, " — not installed (optional)")
+		_, _ = fmt.Fprintf(l.out, "  %sRun:%s anpu tools  ·  install: ", mu, rs)
 		switch l.skippedTools[0] {
 		case "Httpx":
-			fmt.Fprint(l.out, "go install github.com/projectdiscovery/httpx/cmd/httpx@latest")
+			_, _ = fmt.Fprint(l.out, "go install github.com/projectdiscovery/httpx/cmd/httpx@latest")
 		case "Katana":
-			fmt.Fprint(l.out, "go install github.com/projectdiscovery/katana/cmd/katana@latest")
+			_, _ = fmt.Fprint(l.out, "go install github.com/projectdiscovery/katana/cmd/katana@latest")
 		case "Naabu":
-			fmt.Fprint(l.out, "go install github.com/projectdiscovery/naabu/v2/cmd/naabu@latest")
+			_, _ = fmt.Fprint(l.out, "go install github.com/projectdiscovery/naabu/v2/cmd/naabu@latest")
 		case "DNSx":
-			fmt.Fprint(l.out, "go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest")
+			_, _ = fmt.Fprint(l.out, "go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest")
 		case "Dalfox":
-			fmt.Fprint(l.out, "go install github.com/hahwul/dalfox/v2@latest")
+			_, _ = fmt.Fprint(l.out, "go install github.com/hahwul/dalfox/v2@latest")
 		default:
-			fmt.Fprint(l.out, "see anpu tools")
+			_, _ = fmt.Fprint(l.out, "see anpu tools")
 		}
-		fmt.Fprintln(l.out, "")
+		_, _ = fmt.Fprintln(l.out, "")
 	}
-	fmt.Fprintln(l.out, "")
+	_, _ = fmt.Fprintln(l.out, "")
 }
 
 func StaticStageLine(s LiveStage, opts BannerOptions) string {
@@ -393,7 +393,7 @@ func (l *Live) stopTickerLocked() {
 	default:
 		close(l.stop)
 	}
-	fmt.Fprint(l.out, "\r"+strings.Repeat(" ", 80)+"\r")
+	_, _ = fmt.Fprint(l.out, "\r"+strings.Repeat(" ", 80)+"\r")
 }
 
 func (l *Live) tick(label string, start time.Time, stop chan struct{}) {
@@ -422,7 +422,7 @@ func (l *Live) tick(label string, start time.Time, stop chan struct{}) {
 				sp = muted + sp + reset
 			}
 			// Column aligned: %-15s
-			fmt.Fprintf(l.out, "\r  %-15s %s %s", label, sp, el)
+			_, _ = fmt.Fprintf(l.out, "\r  %-15s %s %s", label, sp, el)
 			l.mu.Unlock()
 			i++
 		}

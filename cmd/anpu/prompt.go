@@ -18,16 +18,16 @@ func askConfirm(in io.Reader, out io.Writer, assumeYes, interactive, strict bool
 	}
 	if !interactive {
 		if strict {
-			fmt.Fprintf(out, "%s [non-interactive without --yes: refusing]\n", question)
+			_, _ = fmt.Fprintf(out, "%s [non-interactive without --yes: refusing]\n", question)
 			return false
 		}
-		fmt.Fprintf(out, "%s [non-interactive: proceeding]\n", question)
+		_, _ = fmt.Fprintf(out, "%s [non-interactive: proceeding]\n", question)
 		return true
 	}
-	fmt.Fprintf(out, "%s [y/N]: ", question)
+	_, _ = fmt.Fprintf(out, "%s [y/N]: ", question)
 	line, err := bufio.NewReader(in).ReadString('\n')
 	if err != nil {
-		fmt.Fprintln(out, "no confirmation read — aborting install step")
+		_, _ = fmt.Fprintln(out, "no confirmation read — aborting install step")
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(line)) {

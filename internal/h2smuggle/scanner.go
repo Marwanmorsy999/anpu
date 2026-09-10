@@ -53,7 +53,7 @@ func liveALPN(host, port string) []string {
 	if err != nil {
 		return nil
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	if p := conn.ConnectionState().NegotiatedProtocol; p != "" {
 		return []string{p}
 	}

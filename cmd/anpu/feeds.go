@@ -80,7 +80,7 @@ func newWordlistsCmd() *cobra.Command {
 			for _, s := range sources {
 				n, err := fetchCapped(cmd.Context(), s.url, s.dest, 20000, 50)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "anpu: %s: %v (kept vendored copy)\n", s.dest, err)
+					_, _ = fmt.Fprintf(os.Stderr, "anpu: %s: %v (kept vendored copy)\n", s.dest, err)
 					continue
 				}
 				fmt.Printf("Updated %s (%d lines)\n", s.dest, n)
@@ -106,7 +106,7 @@ func fetchCapped(ctx context.Context, url, dest string, maxBytes, maxLines int) 
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return 0, fmt.Errorf("status %d", resp.StatusCode)
 	}

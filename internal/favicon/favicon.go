@@ -186,7 +186,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	// Anything else is usually an HTML fallback page served as the icon —
 	// still hashed, but at lower confidence.
 	confidence := models.ConfidenceHigh
-	if !(bytes.HasPrefix(icon, []byte("\x89PNG")) || bytes.HasPrefix(icon, []byte("\x00\x00\x01\x00")) || bytes.HasPrefix(icon, []byte("\xff\xd8\xff")) || bytes.Contains(icon[:min(512, len(icon))], []byte("<svg")) || bytes.HasPrefix(icon, []byte("GIF8"))) {
+	if !bytes.HasPrefix(icon, []byte("\x89PNG")) && !bytes.HasPrefix(icon, []byte("\x00\x00\x01\x00")) && !bytes.HasPrefix(icon, []byte("\xff\xd8\xff")) && !bytes.Contains(icon[:min(512, len(icon))], []byte("<svg")) && !bytes.HasPrefix(icon, []byte("GIF8")) {
 		confidence = models.ConfidenceMedium
 	}
 

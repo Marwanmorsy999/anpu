@@ -146,7 +146,7 @@ func (s *Scanner) queryCTLogs(ctx context.Context, host string) ([]string, strin
 	if err != nil {
 		return nil, fmt.Sprintf("crt.sh query failed (continuing with other sources): %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Sprintf("crt.sh returned status %d (continuing with other sources)", resp.StatusCode)
 	}

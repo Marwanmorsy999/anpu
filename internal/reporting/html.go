@@ -325,7 +325,7 @@ func WriteHTML(summary *models.ScanSummary, path string) error {
 	if err != nil {
 		return fmt.Errorf("creating HTML report file %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if err := tmpl.Execute(f, data); err != nil {
 		return fmt.Errorf("rendering HTML report: %w", err)

@@ -429,7 +429,7 @@ func (s *Scanner) fetchBody(ctx context.Context, host string) (string, string) {
 			return "", fmt.Sprintf("takeover: GET %s: %v", host, err)
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	buf, _ := io.ReadAll(io.LimitReader(resp.Body, 32*1024))
 	return string(buf), ""

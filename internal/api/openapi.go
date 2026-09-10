@@ -126,7 +126,7 @@ func parseOpenAPIDocument(raw []byte, source string, baseURL string) ([]models.A
 	if err := json.Unmarshal(raw, &doc); err != nil || (doc.Paths == nil && doc.OpenAPI == "" && doc.Swagger == "") {
 		// YAML pre-pass: unmarshal YAML into the same struct, then continue.
 		var ydoc openAPIDoc
-		if yerr := yaml.Unmarshal(raw, &ydoc); yerr == nil && !(ydoc.Paths == nil && ydoc.OpenAPI == "" && ydoc.Swagger == "") {
+		if yerr := yaml.Unmarshal(raw, &ydoc); yerr == nil && (ydoc.Paths != nil || ydoc.OpenAPI != "" || ydoc.Swagger != "") {
 			doc = ydoc
 		} else if err != nil {
 			return nil, fmt.Errorf("openapi: parse JSON/YAML from %q: %w", source, err)
@@ -307,7 +307,7 @@ func readSource(ctx context.Context, source string, authHeaders map[string]strin
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return io.ReadAll(io.LimitReader(f, 4<<20))
 }
 

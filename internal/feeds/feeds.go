@@ -116,7 +116,7 @@ func RefreshKEV(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return 0, fmt.Errorf("kev status %d", resp.StatusCode)
 	}
@@ -170,7 +170,7 @@ func epssScore(ctx context.Context, cve string) float64 {
 	if err != nil {
 		return -1
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return -1
 	}
@@ -252,7 +252,7 @@ func advisoryNote(ctx context.Context, cve string) string {
 	if err != nil || resp == nil {
 		return ""
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return ""
 	}
@@ -301,7 +301,7 @@ func urlhausLookup(ctx context.Context, targetURL string) string {
 	if err != nil || resp == nil {
 		return ""
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return ""
 	}
@@ -335,7 +335,7 @@ func threatfoxLookup(ctx context.Context, host string) string {
 	if err != nil || resp == nil {
 		return ""
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return ""
 	}

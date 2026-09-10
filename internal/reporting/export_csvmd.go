@@ -46,7 +46,7 @@ func WriteCSV(summary *models.ScanSummary, path string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	w := csv.NewWriter(f)
 	defer w.Flush()
 	if err := w.Write([]string{"severity", "confidence", "category", "id", "title", "url", "cwe", "source", "detection_method", "description", "evidence", "references"}); err != nil {
@@ -63,7 +63,7 @@ func WriteCSV(summary *models.ScanSummary, path string) error {
 // WriteMarkdown writes a human-readable Markdown report.
 func WriteMarkdown(summary *models.ScanSummary, path string) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# ANPU scan: %s\n\n", summary.Target)
+	_, _ = fmt.Fprintf(&b, "# ANPU scan: %s\n\n", summary.Target)
 	fmt.Fprintf(&b, "- Profile: %s\n- Status: %s\n- Risk score: %.1f\n- Findings: %d\n- Endpoints: %d\n- Technologies: %d\n\n",
 		summary.Profile, summary.Status, summary.RiskScore, len(summary.Findings), len(summary.Endpoints), len(summary.Technologies))
 	if len(summary.Technologies) > 0 {
@@ -73,7 +73,7 @@ func WriteMarkdown(summary *models.ScanSummary, path string) error {
 			if t.Version != "" {
 				v = " " + t.Version
 			}
-			fmt.Fprintf(&b, "- %s%s (%s)\n", t.Name, v, t.Category)
+			_, _ = fmt.Fprintf(&b, "- %s%s (%s)\n", t.Name, v, t.Category)
 		}
 		b.WriteString("\n")
 	}

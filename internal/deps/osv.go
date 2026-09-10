@@ -379,10 +379,8 @@ func queryOSV(ctx context.Context, pkgs []osvPackage) (map[string][]osvVuln, []s
 		hctx, hcancel := context.WithTimeout(ctx, 8*time.Second)
 		defer hcancel()
 		for _, id := range hydrateIDs {
-			select {
-			case <-hctx.Done():
+			if hctx.Err() != nil {
 				break
-			default:
 			}
 			resp, err := client.Get(hctx, osvBaseURL+"/v1/vulns/"+id)
 			if err != nil || resp == nil || resp.StatusCode != 200 || len(resp.Body) == 0 {

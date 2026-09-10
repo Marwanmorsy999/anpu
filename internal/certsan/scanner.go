@@ -52,7 +52,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	if err != nil {
 		return scanner.StageResult{Warnings: []string{fmt.Sprintf("certsan: TLS handshake failed: %v", trimErr(err))}}, nil
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	state := conn.ConnectionState()
 	if len(state.PeerCertificates) == 0 {
 		return scanner.StageResult{}, nil

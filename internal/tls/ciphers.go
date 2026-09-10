@@ -178,7 +178,7 @@ func probeCipherGroup(ctx context.Context, host, port string, ciphers []uint16) 
 	}
 
 	tlsConn := tls.Client(rawConn, tlsConf)
-	defer tlsConn.Close()
+	defer func() { _ = tlsConn.Close() }()
 
 	if err := tlsConn.HandshakeContext(dialCtx); err != nil {
 		return false, 0

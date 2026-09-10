@@ -89,7 +89,7 @@ func Send(ctx context.Context, webhookURL string, result *diff.Result) error {
 	if err != nil {
 		return fmt.Errorf("sending webhook: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("webhook returned HTTP %d", resp.StatusCode)
@@ -121,24 +121,24 @@ func slackPayload(result *diff.Result) ([]byte, error) {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s *ANPU watch — %s*\n", emoji, result.Target))
-	sb.WriteString(fmt.Sprintf("Risk: %.1f → %.1f  (Δ %+.1f)\n",
-		result.RiskBefore, result.RiskAfter, result.RiskDelta))
+	_, _ = fmt.Fprintf(&sb, "%s *ANPU watch — %s*\n", emoji, result.Target)
+	_, _ = fmt.Fprintf(&sb, "Risk: %.1f → %.1f  (Δ %+.1f)\n",
+		result.RiskBefore, result.RiskAfter, result.RiskDelta)
 
 	if result.FindingsAdded > 0 {
-		sb.WriteString(fmt.Sprintf("• %d new finding(s)\n", result.FindingsAdded))
+		_, _ = fmt.Fprintf(&sb, "• %d new finding(s)\n", result.FindingsAdded)
 		for _, fc := range result.Findings {
 			if fc.Kind == "added" {
-				sb.WriteString(fmt.Sprintf("  `%s` %s — %s\n",
-					fc.Finding.Severity, fc.Finding.Confidence, fc.Finding.Title))
+				_, _ = fmt.Fprintf(&sb, "  `%s` %s — %s\n",
+					fc.Finding.Severity, fc.Finding.Confidence, fc.Finding.Title)
 			}
 		}
 	}
 	if result.FindingsRemoved > 0 {
-		sb.WriteString(fmt.Sprintf("• %d finding(s) resolved\n", result.FindingsRemoved))
+		_, _ = fmt.Fprintf(&sb, "• %d finding(s) resolved\n", result.FindingsRemoved)
 	}
 	if result.EndpointsAdded > 0 {
-		sb.WriteString(fmt.Sprintf("• %d new endpoint(s)\n", result.EndpointsAdded))
+		_, _ = fmt.Fprintf(&sb, "• %d new endpoint(s)\n", result.EndpointsAdded)
 	}
 	if result.FindingsAdded == 0 && result.FindingsChanged == 0 &&
 		result.FindingsRemoved == 0 && result.EndpointsAdded == 0 {

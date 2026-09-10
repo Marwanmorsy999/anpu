@@ -25,18 +25,18 @@ func summaryText(result *diff.Result) string {
 	fmt.Fprintf(&sb, "ANPU watch — %s\nRisk: %.1f → %.1f (Δ %+.1f)\n",
 		result.Target, result.RiskBefore, result.RiskAfter, result.RiskDelta)
 	if result.FindingsAdded > 0 {
-		fmt.Fprintf(&sb, "%d new finding(s)\n", result.FindingsAdded)
+		_, _ = fmt.Fprintf(&sb, "%d new finding(s)\n", result.FindingsAdded)
 		for _, fc := range result.Findings {
 			if fc.Kind == "added" {
-				fmt.Fprintf(&sb, "- [%s/%s] %s\n", fc.Finding.Severity, fc.Finding.Confidence, fc.Finding.Title)
+				_, _ = fmt.Fprintf(&sb, "- [%s/%s] %s\n", fc.Finding.Severity, fc.Finding.Confidence, fc.Finding.Title)
 			}
 		}
 	}
 	if result.FindingsRemoved > 0 {
-		fmt.Fprintf(&sb, "%d finding(s) resolved\n", result.FindingsRemoved)
+		_, _ = fmt.Fprintf(&sb, "%d finding(s) resolved\n", result.FindingsRemoved)
 	}
 	if result.EndpointsAdded > 0 {
-		fmt.Fprintf(&sb, "%d new endpoint(s)\n", result.EndpointsAdded)
+		_, _ = fmt.Fprintf(&sb, "%d new endpoint(s)\n", result.EndpointsAdded)
 	}
 	if result.FindingsAdded == 0 && result.FindingsChanged == 0 &&
 		result.FindingsRemoved == 0 && result.EndpointsAdded == 0 {
@@ -77,7 +77,7 @@ func SendTelegram(ctx context.Context, botToken, chatID string, result *diff.Res
 	if err != nil {
 		return fmt.Errorf("sending telegram: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("telegram returned HTTP %d", resp.StatusCode)
 	}
@@ -97,7 +97,7 @@ func postJSON(ctx context.Context, webhookURL string, body []byte, who string) e
 	if err != nil {
 		return fmt.Errorf("sending %s: %w", who, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("%s returned HTTP %d", who, resp.StatusCode)
 	}

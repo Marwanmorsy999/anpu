@@ -24,7 +24,7 @@ func newShowCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("opening scan history database: %w", err)
 			}
-			defer store.Close()
+			defer func() { _ = store.Close() }()
 
 			summary, err := store.GetScan(args[0])
 			if err != nil {
@@ -48,7 +48,7 @@ func newShowCmd() *cobra.Command {
 					return fmt.Errorf("unknown --format %q: must be html, json, sarif, csv, or md", format)
 				}
 				if exportErr == nil {
-					fmt.Fprintf(os.Stderr, "Wrote %s to %s\n", format, exportPath)
+					_, _ = fmt.Fprintf(os.Stderr, "Wrote %s to %s\n", format, exportPath)
 				}
 				return exportErr
 			}

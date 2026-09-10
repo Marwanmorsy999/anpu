@@ -63,9 +63,8 @@ func (n *NaabuScanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanne
 	}
 	if n.availableExternal(ctx) {
 		topPorts := "100"
-		if sc.Config.Profile == models.ProfileUltra {
-			topPorts = "1000"
-		} else if sc.Config.Profile == models.ProfileDeep {
+		switch sc.Config.Profile {
+		case models.ProfileUltra, models.ProfileDeep:
 			topPorts = "1000"
 		}
 		args := []string{"-host", host, "-silent", "-json", "-top-ports", topPorts, "-rate", "1000"}

@@ -62,7 +62,7 @@ func (m *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	allow := parseAllow(opts.Header.Get("Allow"), opts.Header.Get("Access-Control-Allow-Methods"))
 
 	for verb, info := range riskyMethods {
-		if !allow[verb] && !(verb == "TRACE") {
+		if !allow[verb] && verb != "TRACE" {
 			continue
 		}
 		if verb == "TRACE" {

@@ -114,7 +114,7 @@ func historyPair(target string) (base, current *models.ScanSummary, err error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening scan history database: %w", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 	items, err := store.ListScans(50)
 	if err != nil {
 		return nil, nil, err

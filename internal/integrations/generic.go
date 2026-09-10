@@ -406,7 +406,7 @@ func (g *GenericScanner) execute(ctx context.Context, sc *scanner.ScanContext, b
 		}
 		tmpCleanup = append(tmpCleanup, func() { _ = os.Remove(f.Name()) })
 		for _, l := range lines {
-			fmt.Fprintln(f, l)
+			_, _ = fmt.Fprintln(f, l)
 		}
 		_ = f.Close()
 		repl["{targetsfile}"] = f.Name()
@@ -418,7 +418,7 @@ func (g *GenericScanner) execute(ctx context.Context, sc *scanner.ScanContext, b
 		}
 		tmpCleanup = append(tmpCleanup, func() { _ = os.Remove(f.Name()) })
 		for _, l := range urlList(sc) {
-			fmt.Fprintln(f, l)
+			_, _ = fmt.Fprintln(f, l)
 		}
 		_ = f.Close()
 		repl["{urlsfile}"] = f.Name()
@@ -539,7 +539,7 @@ func defaultResolversFile() (string, error) {
 		return "", err
 	}
 	for _, r := range defaultPublicResolvers {
-		fmt.Fprintln(f, r)
+		_, _ = fmt.Fprintln(f, r)
 	}
 	if err := f.Close(); err != nil {
 		_ = os.Remove(f.Name())

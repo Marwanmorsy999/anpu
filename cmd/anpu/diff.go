@@ -24,7 +24,7 @@ func newDiffCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("opening scan history database: %w", err)
 			}
-			defer store.Close()
+			defer func() { _ = store.Close() }()
 
 			before, err := store.GetScan(args[0])
 			if err != nil {

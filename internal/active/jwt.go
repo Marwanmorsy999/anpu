@@ -39,7 +39,7 @@ func looksLikeJWT(s string) bool {
 		}
 		// base64url characters only
 		for _, c := range p {
-			if !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '=') {
+			if (c < 'A' || c > 'Z') && (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' && c != '_' && c != '=' {
 				return false
 			}
 		}

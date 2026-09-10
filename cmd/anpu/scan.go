@@ -524,10 +524,10 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 	// --disable/--enable are ignored when --only is present (warn).
 	if len(onlyMods) > 0 {
 		if len(disableMods) > 0 {
-			fmt.Fprintf(os.Stderr, "anpu: --disable is ignored when --only is present (only %q will run)\n", strings.Join(onlyMods, ","))
+			_, _ = fmt.Fprintf(os.Stderr, "anpu: --disable is ignored when --only is present (only %q will run)\n", strings.Join(onlyMods, ","))
 		}
 		if len(enableMods) > 0 {
-			fmt.Fprintf(os.Stderr, "anpu: --enable is ignored when --only is present (only %q will run)\n", strings.Join(onlyMods, ","))
+			_, _ = fmt.Fprintf(os.Stderr, "anpu: --enable is ignored when --only is present (only %q will run)\n", strings.Join(onlyMods, ","))
 		}
 		disableAllModules(&modules)
 		applyModuleToggles(&modules, nil, onlyMods)
@@ -543,7 +543,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 	// Explicit --openapi/--graphql with a disabled API module warns instead
 	// of silently forcing the stage on (--only stays absolute).
 	if (openAPISource != "" || graphQLURL != "") && !modules.API {
-		fmt.Fprintf(os.Stderr, "anpu: --openapi/--graphql ignored (API module disabled; use --enable api or --only api)\n")
+		_, _ = fmt.Fprintf(os.Stderr, "anpu: --openapi/--graphql ignored (API module disabled; use --enable api or --only api)\n")
 	}
 
 	// Wire OOB host for Log4Shell JNDI probing (Phase 12I).
@@ -556,7 +556,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 	if oobInteractshEnabled {
 		sess, serr := oob.NewSession("")
 		if serr != nil {
-			fmt.Fprintf(os.Stderr, "anpu: interactsh unavailable, continuing without OOB confirmation: %v\n", serr)
+			_, _ = fmt.Fprintf(os.Stderr, "anpu: interactsh unavailable, continuing without OOB confirmation: %v\n", serr)
 		} else {
 			active.InteractSession = sess
 			defer func() {
@@ -698,10 +698,10 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 			proceed = askConfirm(os.Stdin, os.Stderr, false, stdinInteractive(), false,
 				fmt.Sprintf("Proceed (installs up to %d tools as their stages run)?", len(missing)))
 		} else if !silent {
-			fmt.Fprintln(os.Stderr, "anpu: auto-install confirmed (--yes / non-interactive / file input)")
+			_, _ = fmt.Fprintln(os.Stderr, "anpu: auto-install confirmed (--yes / non-interactive / file input)")
 		}
 		if !proceed {
-			fmt.Fprintln(os.Stderr, "anpu: auto-install declined — continuing with embedded coverage only")
+			_, _ = fmt.Fprintln(os.Stderr, "anpu: auto-install declined — continuing with embedded coverage only")
 			autoInstallEnabled = false
 			integrations.AutoInstallEnabled = false
 		} else if !silent {
@@ -719,7 +719,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 			if !batch {
 				return fmt.Errorf("target validation failed: %w", err)
 			}
-			fmt.Fprintf(os.Stderr, "anpu: skipping target %q: %v\n", rawTarget, err)
+			_, _ = fmt.Fprintf(os.Stderr, "anpu: skipping target %q: %v\n", rawTarget, err)
 			scanErrors++
 			continue
 		}
@@ -727,7 +727,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 			if !batch {
 				return err
 			}
-			fmt.Fprintf(os.Stderr, "anpu: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "anpu: %v\n", err)
 			scanErrors++
 			continue
 		}
@@ -814,7 +814,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 			if !batch {
 				return fmt.Errorf("scan pipeline failed: %w", err)
 			}
-			fmt.Fprintf(os.Stderr, "anpu: scan failed for %s: %v\n", target.Raw, err)
+			_, _ = fmt.Fprintf(os.Stderr, "anpu: scan failed for %s: %v\n", target.Raw, err)
 			scanErrors++
 			continue
 		}
@@ -825,7 +825,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		if riskAcceptPath != "" {
 			entries, rerr := findings.LoadRiskAccept(riskAcceptPath)
 			if rerr != nil {
-				fmt.Fprintf(os.Stderr, "anpu: %v\n", rerr)
+				_, _ = fmt.Fprintf(os.Stderr, "anpu: %v\n", rerr)
 			} else {
 				kept, suppressed, notes := findings.ApplyRiskAccept(summary.Findings, entries, time.Now())
 				summary.Findings = kept
@@ -854,7 +854,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 				if !batch {
 					return err
 				}
-				fmt.Fprintf(os.Stderr, "anpu: writing HTML for %s: %v\n", target.Raw, err)
+				_, _ = fmt.Fprintf(os.Stderr, "anpu: writing HTML for %s: %v\n", target.Raw, err)
 				scanErrors++
 				continue
 			}
@@ -866,7 +866,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 				if !batch {
 					return err
 				}
-				fmt.Fprintf(os.Stderr, "anpu: writing JSON for %s: %v\n", target.Raw, err)
+				_, _ = fmt.Fprintf(os.Stderr, "anpu: writing JSON for %s: %v\n", target.Raw, err)
 				scanErrors++
 				continue
 			}
@@ -880,7 +880,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 				if !batch {
 					return err
 				}
-				fmt.Fprintf(os.Stderr, "anpu: writing SARIF for %s: %v\n", target.Raw, err)
+				_, _ = fmt.Fprintf(os.Stderr, "anpu: writing SARIF for %s: %v\n", target.Raw, err)
 				scanErrors++
 				continue
 			}
@@ -956,7 +956,7 @@ func collectTargets(cmd *cobra.Command, targetArg string, stdinFlag bool, listFi
 		if err != nil {
 			return nil, fmt.Errorf("reading target list %q: %w", listFile, err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		lines, err := readTargetLines(f)
 		if err != nil {
 			return nil, err
@@ -1727,7 +1727,7 @@ func applyModuleToggles(mc *models.ModuleConfig, disable, enable []string) {
 			if models.SetModuleByName(mc, name, on) {
 				return true
 			}
-			fmt.Fprintf(os.Stderr, "anpu: unknown module %q in --enable/--disable (ignored)\n", name)
+			_, _ = fmt.Fprintf(os.Stderr, "anpu: unknown module %q in --enable/--disable (ignored)\n", name)
 			return false
 		}
 		return true

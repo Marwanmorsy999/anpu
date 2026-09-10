@@ -449,7 +449,7 @@ func probeAXFR(ctx context.Context, addr, domain string) bool {
 	if err != nil {
 		return false
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	_ = conn.SetDeadline(time.Now().Add(6 * time.Second))
 	if _, err := conn.Write(pkt); err != nil {
 		return false

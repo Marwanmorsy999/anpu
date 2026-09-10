@@ -411,7 +411,7 @@ func (c *Client) DoWithSession(ctx context.Context, method, rawURL string, heade
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if c.jar != nil {
 		c.jar.SetCookies(req.URL, resp.Cookies())
 	}
@@ -846,7 +846,7 @@ func (c *Client) Get(ctx context.Context, rawURL string) (*Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	c.saveJar(req, resp)
 
 	limited := io.LimitReader(resp.Body, MaxBodyBytes)
@@ -898,7 +898,7 @@ func (c *Client) DoWithHeaders(ctx context.Context, method, rawURL string, heade
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	c.saveJar(req, resp)
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes))
@@ -951,7 +951,7 @@ func (c *Client) PostJSON(ctx context.Context, rawURL, body string, extraHeaders
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	c.saveJar(req, resp)
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes))
@@ -1004,7 +1004,7 @@ func (c *Client) PostRaw(ctx context.Context, rawURL, contentType, body string, 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	c.saveJar(req, resp)
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes))
@@ -1056,7 +1056,7 @@ func (c *Client) PostXML(ctx context.Context, rawURL, body string, extraHeaders 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	c.saveJar(req, resp)
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes))
@@ -1111,7 +1111,7 @@ func (c *Client) GetWithHost(ctx context.Context, rawURL, hostOverride string, e
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	c.saveJar(req, resp)
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes))
@@ -1177,7 +1177,7 @@ func (c *Client) PostMultipart(ctx context.Context, rawURL string, params map[st
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	c.saveJar(req, resp)
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes))
 	if err != nil {
@@ -1219,7 +1219,7 @@ func (c *Client) HeadOrGet(ctx context.Context, rawURL string) (*Response, error
 	c.applyJar(req)
 	resp, err := c.http.Do(req)
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		c.saveJar(req, resp)
 		if resp.StatusCode != stdhttp.StatusMethodNotAllowed && resp.StatusCode != stdhttp.StatusNotImplemented {
 			out := &Response{

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -189,10 +190,10 @@ func (s *Scanner) Run(_ context.Context, sc *scanner.ScanContext) (scanner.Stage
 	}
 	sb.WriteString("buckets: " + strings.Join(counts, ", ") + "\n")
 	for _, h := range hits[:n] {
-		sb.WriteString(fmt.Sprintf("- %s [%s] %s\n", h.Param, strings.Join(h.Buckets, ","), h.URL))
+		sb.WriteString("- " + h.Param + " [" + strings.Join(h.Buckets, ",") + "] " + h.URL + "\n")
 	}
 	if len(hits) > maxSamples {
-		sb.WriteString(fmt.Sprintf("…and %d more", len(hits)-maxSamples))
+		sb.WriteString("…and " + strconv.Itoa(len(hits)-maxSamples) + " more")
 	}
 
 	return scanner.StageResult{Findings: []models.Finding{{

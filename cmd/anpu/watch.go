@@ -114,7 +114,7 @@ func runWatch(
 	if err != nil {
 		return fmt.Errorf("opening storage: %w", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	iteration := 0
 	var exitErr error
@@ -122,20 +122,20 @@ func runWatch(
 	for {
 		iteration++
 		if interval > 0 {
-			fmt.Fprintf(os.Stderr, "[watch] iteration %d — %s\n", iteration, target)
+			_, _ = fmt.Fprintf(os.Stderr, "[watch] iteration %d — %s\n", iteration, target)
 		}
 
 		// Load the previous scan BEFORE running so we get the true baseline
 		// (runWatchScan saves the new scan; loading after would return it).
 		prev, loadErr := store.LatestScanForTarget(target)
 		if loadErr != nil {
-			fmt.Fprintf(os.Stderr, "[watch] warning: could not load previous scan: %v\n", loadErr)
+			_, _ = fmt.Fprintf(os.Stderr, "[watch] warning: could not load previous scan: %v\n", loadErr)
 		}
 
 		summary, scanErr := runWatchScan(ctx, target, profileStr, minConf, scopeFile, autoInst, yesFlag)
 		if scanErr != nil {
 			// Graceful degradation: log and keep watching.
-			fmt.Fprintf(os.Stderr, "[watch] scan error: %v\n", scanErr)
+			_, _ = fmt.Fprintf(os.Stderr, "[watch] scan error: %v\n", scanErr)
 		} else {
 			if prev == nil {
 				fmt.Printf("[watch] baseline established (%d finding(s), risk %.1f/10)\n",
@@ -159,7 +159,7 @@ func runWatch(
 		if summary != nil && prev != nil {
 			wResult := diff.Compare(prev, summary)
 			for _, wErr := range notify.Fanout(ctx, targets, wResult, webhookOn) {
-				fmt.Fprintf(os.Stderr, "[watch] notify error: %v\n", wErr)
+				_, _ = fmt.Fprintf(os.Stderr, "[watch] notify error: %v\n", wErr)
 			}
 		}
 
@@ -175,7 +175,7 @@ func runWatch(
 
 		select {
 		case <-ctx.Done():
-			fmt.Fprintln(os.Stderr, "[watch] stopped")
+			_, _ = fmt.Fprintln(os.Stderr, "[watch] stopped")
 			return exitErr
 		case <-time.After(waitDur):
 		}
@@ -215,7 +215,7 @@ func runWatchScan(ctx context.Context, target, profileStr string, minConf models
 	if err != nil {
 		return nil, fmt.Errorf("opening storage to load result: %w", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	summary, err := store.LatestScanForTarget(target)
 	if err != nil {

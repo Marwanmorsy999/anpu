@@ -365,7 +365,7 @@ func colorizeHelpText(text string, colorOK bool) string {
 // PrintAuthorizationWarning writes the authorization notice to stderr
 // so stdout stays clean for piped machine output.
 func PrintAuthorizationWarning() {
-	fmt.Fprint(os.Stderr, AuthorizationWarning)
+	_, _ = fmt.Fprint(os.Stderr, AuthorizationWarning)
 }
 
 // StageLine renders a single "Stage   ✓" / "Stage   ✗" / "Stage   -" line.

@@ -246,7 +246,7 @@ func (z *ZapScanner) runDocker(ctx context.Context, sc *scanner.ScanContext) ([]
 	if tmpErr != nil {
 		return nil, []string{fmt.Sprintf("ZAP temp dir: %v", tmpErr)}, tmpErr
 	}
-	defer os.RemoveAll(workDir)
+	defer func() { _ = os.RemoveAll(workDir) }()
 	reportName := "zap-report.json"
 	args := []string{
 		"run", "--rm",

@@ -238,7 +238,7 @@ func joinLines(parts []string) string {
 // FormatRecipe renders one recipe block for `anpu tools install <name>`.
 func FormatRecipe(r Recipe, goos string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s (binary: %s, level: %s)\n", r.Name, r.Binary, r.Level)
+	_, _ = fmt.Fprintf(&b, "%s (binary: %s, level: %s)\n", r.Name, r.Binary, r.Level)
 	b.WriteString("  install: " + InstallHint(r, goos) + "\n")
 	if r.Adversarial {
 		b.WriteString("  gate: requires --adversarial --confirm-authorized (state-touching/exfil-capable)\n")

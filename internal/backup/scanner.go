@@ -196,10 +196,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	var wg sync.WaitGroup
 
 	for _, p := range probes {
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			break
-		default:
 		}
 		wg.Add(1)
 		go func(p probe) {

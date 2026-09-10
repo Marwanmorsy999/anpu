@@ -40,10 +40,9 @@ jobs:
         run: go test -coverprofile=coverage.out -covermode=atomic ./... && go tool cover -func=coverage.out | tail -20
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
-          # v2 line: v1 binaries are built with go1.24 and refuse
-          # go1.25+ targets at load ("used to build ... is lower").
+          # v2 line (v1 binaries refuse go1.25+ targets at load).
           # Pinned exact; tree verified clean against this version.
           version: v2.13.2
 

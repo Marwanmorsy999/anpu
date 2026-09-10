@@ -128,7 +128,7 @@ func fetchCapped(ctx context.Context, url, dest string, maxBytes, maxLines int) 
 	if len(kept) == 0 {
 		return 0, fmt.Errorf("no usable lines")
 	}
-	if err := os.WriteFile(dest, []byte(strings.Join(kept, "\n")+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(dest, []byte(strings.Join(kept, "\n")+"\n"), 0o600); err != nil {
 		return 0, err
 	}
 	return len(kept), nil

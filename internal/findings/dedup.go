@@ -5,7 +5,7 @@
 package findings
 
 import (
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505 -- SHA-1 derives stable non-secret finding IDs only; never integrity or secrecy.
 	"encoding/hex"
 	"net/url"
 	"sort"
@@ -138,7 +138,7 @@ func mergeGroup(group []models.Finding) models.Finding {
 // that re-running a scan against unchanged output yields the same IDs
 // (useful for diffing scans over time / SARIF stability).
 func stableID(f models.Finding) string {
-	h := sha1.New()
+	h := sha1.New() // #nosec G401 -- SHA-1 derives stable non-secret finding IDs only; never integrity or secrecy.
 	h.Write([]byte(f.DedupKey()))
 	sum := h.Sum(nil)
 	return "anpu-" + hex.EncodeToString(sum)[:12]

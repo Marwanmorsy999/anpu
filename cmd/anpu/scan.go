@@ -669,7 +669,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 		return findings.FilterByConfidence(fs, minConf)
 	}
 
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o750); err != nil {
 		return fmt.Errorf("creating output directory: %w", err)
 	}
 
@@ -896,7 +896,7 @@ func runScan(cmd *cobra.Command, targetArg, profileStr string, jsonOut, htmlOut,
 			if err := store.SaveScan(summary); err != nil {
 				summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not save scan to history: %v", err))
 			}
-			store.Close()
+			_ = store.Close()
 		}
 
 		if jsonlOut {
@@ -952,7 +952,7 @@ func collectTargets(cmd *cobra.Command, targetArg string, stdinFlag bool, listFi
 		if targetArg != "" {
 			return nil, fmt.Errorf("pass targets via --list or as an argument, not both")
 		}
-		f, err := os.Open(listFile)
+		f, err := os.Open(listFile) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).
 		if err != nil {
 			return nil, fmt.Errorf("reading target list %q: %w", listFile, err)
 		}

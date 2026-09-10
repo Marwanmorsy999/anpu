@@ -46,7 +46,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	addr := net.JoinHostPort(host, port)
 	dialer := &net.Dialer{Timeout: 8 * time.Second}
 	conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{
-		InsecureSkipVerify: true, //nolint:gosec // reporting on the cert, not trusting it
+		InsecureSkipVerify: true, // #nosec G402 -- scanner must complete handshakes with misconfigured targets to analyze them.
 		ServerName:         host,
 	})
 	if err != nil {

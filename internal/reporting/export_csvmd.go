@@ -42,7 +42,7 @@ func WriteCSV(summary *models.ScanSummary, path string) error {
 		}
 		return fs[i].ID < fs[j].ID
 	})
-	f, err := os.Create(path)
+	f, err := os.Create(path) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).
 	if err != nil {
 		return err
 	}
@@ -95,7 +95,7 @@ func WriteMarkdown(summary *models.ScanSummary, path string) error {
 		fmt.Fprintf(&b, "### %s\n\n- ID: `%s`\n- Severity: %s, Confidence: %s\n- URL: %s\n\n%s\n\n",
 			f.Title, f.ID, f.Severity, f.Confidence, f.URL, f.Description)
 	}
-	return os.WriteFile(path, []byte(b.String()), 0o644)
+	return os.WriteFile(path, []byte(b.String()), 0o600)
 }
 
 func mdCell(s string) string {

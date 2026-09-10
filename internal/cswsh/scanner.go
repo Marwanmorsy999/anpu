@@ -137,7 +137,7 @@ func handshakeStatus(raw string) (int, error) {
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 	if strings.EqualFold(u.Scheme, "wss") {
-		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: host}) //nolint:gosec // handshake probe only
+		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: host}) // #nosec G402 -- wss handshake probe only; cert is observed, not trusted.
 		if err := tlsConn.Handshake(); err != nil {
 			return 0, err
 		}

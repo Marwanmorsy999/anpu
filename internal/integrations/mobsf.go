@@ -138,15 +138,14 @@ func (m *MobSFScanner) doJSON(ctx context.Context, server, key, method, path str
 		if err != nil {
 			return nil, err
 		}
-		f, err := os.Open(filePath)
+		f, err := os.Open(filePath) // #nosec G304 -- operator-supplied APK path (ANPU_APK) for upload to the operator MobSF server.
 		if err != nil {
 			return nil, err
 		}
+		defer f.Close()
 		if _, err := io.Copy(fw, f); err != nil {
-			f.Close()
 			return nil, err
 		}
-		f.Close()
 		for k, vs := range form {
 			for _, v := range vs {
 				_ = w.WriteField(k, v)

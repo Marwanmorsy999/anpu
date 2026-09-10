@@ -45,7 +45,7 @@ Examples:
 			if target == "" {
 				target = "imported"
 			}
-			data, err := os.ReadFile(path)
+			data, err := os.ReadFile(path) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).
 			if err != nil {
 				return fmt.Errorf("reading %s: %w", path, err)
 			}
@@ -71,7 +71,7 @@ Examples:
 					Endpoints []models.Endpoint `json:"endpoints"`
 				}{findings, endpoints}
 				raw, _ := json.MarshalIndent(doc, "", "  ")
-				if err := os.WriteFile(output, raw, 0o644); err != nil {
+				if err := os.WriteFile(output, raw, 0o600); err != nil {
 					return err
 				}
 				fmt.Printf("Wrote %s\n", output)

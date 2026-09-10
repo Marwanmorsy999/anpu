@@ -377,20 +377,20 @@ func (g *GenericScanner) execute(ctx context.Context, sc *scanner.ScanContext, b
 			if err != nil {
 				return nil, "", fmt.Sprintf("%s skipped: set ANPU_RESOLVERS=/path/to/resolvers.txt", spec.Name)
 			}
-			tmpCleanup = append(tmpCleanup, func() { os.Remove(rs) })
+			tmpCleanup = append(tmpCleanup, func() { _ = os.Remove(rs) }) // #nosec G703 -- flagged path derives from the operator's own CLI input; escaping the intended tree is operator-inflicted.
 		}
 		repl["{resolvers}"] = rs
 	}
 	if spec.RequiresCodeDir {
 		cd := strings.TrimSpace(os.Getenv("ANPU_CODE_DIR"))
-		if info, err := os.Stat(cd); err != nil || !info.IsDir() {
+		if info, err := os.Stat(cd); err != nil || !info.IsDir() { // #nosec G703 -- flagged path derives from the operator's own CLI input; escaping the intended tree is operator-inflicted.
 			return nil, "", fmt.Sprintf("%s skipped: set ANPU_CODE_DIR=/path/to/local/code (local code scope only)", spec.Name)
 		}
 		repl["{codedir}"] = cd
 	}
 	if spec.RequiresAPK {
 		apk := strings.TrimSpace(os.Getenv("ANPU_APK"))
-		if info, err := os.Stat(apk); err != nil || info.IsDir() {
+		if info, err := os.Stat(apk); err != nil || info.IsDir() { // #nosec G703 -- flagged path derives from the operator's own CLI input; escaping the intended tree is operator-inflicted.
 			return nil, "", fmt.Sprintf("%s skipped: set ANPU_APK=/path/to/app.apk (mobile scope; static first, dynamic never auto-run)", spec.Name)
 		}
 		repl["{apk}"] = apk
@@ -404,11 +404,11 @@ func (g *GenericScanner) execute(ctx context.Context, sc *scanner.ScanContext, b
 		if err != nil {
 			return nil, "", fmt.Sprintf("%s: temp targets file: %v", spec.Name, err)
 		}
-		tmpCleanup = append(tmpCleanup, func() { os.Remove(f.Name()) })
+		tmpCleanup = append(tmpCleanup, func() { _ = os.Remove(f.Name()) })
 		for _, l := range lines {
 			fmt.Fprintln(f, l)
 		}
-		f.Close()
+		_ = f.Close()
 		repl["{targetsfile}"] = f.Name()
 	}
 	if spec.UrlsFile {
@@ -416,11 +416,11 @@ func (g *GenericScanner) execute(ctx context.Context, sc *scanner.ScanContext, b
 		if err != nil {
 			return nil, "", fmt.Sprintf("%s: temp urls file: %v", spec.Name, err)
 		}
-		tmpCleanup = append(tmpCleanup, func() { os.Remove(f.Name()) })
+		tmpCleanup = append(tmpCleanup, func() { _ = os.Remove(f.Name()) })
 		for _, l := range urlList(sc) {
 			fmt.Fprintln(f, l)
 		}
-		f.Close()
+		_ = f.Close()
 		repl["{urlsfile}"] = f.Name()
 	}
 	if spec.TmpDir {
@@ -428,7 +428,7 @@ func (g *GenericScanner) execute(ctx context.Context, sc *scanner.ScanContext, b
 		if err != nil {
 			return nil, "", fmt.Sprintf("%s: temp dir: %v", spec.Name, err)
 		}
-		tmpCleanup = append(tmpCleanup, func() { os.RemoveAll(dir) })
+		tmpCleanup = append(tmpCleanup, func() { _ = os.RemoveAll(dir) })
 		repl["{tmpdir}"] = dir
 	}
 	// Unsafe mode runs the fuller-strength arg set where defined
@@ -451,7 +451,7 @@ func (g *GenericScanner) execute(ctx context.Context, sc *scanner.ScanContext, b
 	}
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(runCtx, bin, expanded...)
+	cmd := exec.CommandContext(runCtx, bin, expanded...) // #nosec G204 -- ANPU orchestrates operator-installed security tools by resolved path with bounded read-only flags.
 	switch spec.Stdin {
 	case StdinHost:
 		cmd.Stdin = strings.NewReader(sc.Target.Host + "\n")
@@ -542,7 +542,7 @@ func defaultResolversFile() (string, error) {
 		fmt.Fprintln(f, r)
 	}
 	if err := f.Close(); err != nil {
-		os.Remove(f.Name())
+		_ = os.Remove(f.Name())
 		return "", err
 	}
 	return f.Name(), nil

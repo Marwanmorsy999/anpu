@@ -98,7 +98,7 @@ func Open(path string) (*Store, error) {
 	// SQLITE_BUSY errors between the write transaction and read paths.
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("initializing schema: %w", err)
 	}
 	return &Store{db: db}, nil

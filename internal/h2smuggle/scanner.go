@@ -49,7 +49,7 @@ func liveALPN(host, port string) []string {
 	}
 	dialer := &net.Dialer{Timeout: 6 * time.Second}
 	conn, err := tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(host, port),
-		&tls.Config{InsecureSkipVerify: true, ServerName: host, NextProtos: []string{"h2", "http/1.1"}}) //nolint:gosec // fingerprint only
+		&tls.Config{InsecureSkipVerify: true, ServerName: host, NextProtos: []string{"h2", "http/1.1"}}) // #nosec G402 -- fingerprint-only handshake probe; cert is observed, not trusted.
 	if err != nil {
 		return nil
 	}

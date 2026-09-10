@@ -134,7 +134,7 @@ func (s *Scanner) Run(_ context.Context, sc *scanner.ScanContext) (scanner.Stage
 		if err != nil || info.Size() == 0 || info.Size() > maxFileSize {
 			return nil
 		}
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(path) // #nosec G122,G304 -- operator-owned checkout (ANPU_CODE_DIR); a TOCTOU here is self-inflicted at worst.
 		if err != nil {
 			return nil
 		}

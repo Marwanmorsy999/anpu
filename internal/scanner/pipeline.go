@@ -535,13 +535,13 @@ func saveCheckpoint(path, target, profile string, completed map[string]StageResu
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(path, data, 0o644)
+	_ = os.WriteFile(path, data, 0o600)
 }
 
 // loadCheckpoint reads a checkpoint file for --resume.
 func loadCheckpoint(path string) (checkpointFile, error) {
 	var cp checkpointFile
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).
 	if err != nil {
 		return cp, err
 	}

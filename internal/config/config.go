@@ -174,7 +174,7 @@ type File struct {
 // for the file to not exist — callers should treat that as "use
 // defaults / CLI flags only".
 func Load(path string) (*File, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &File{}, nil

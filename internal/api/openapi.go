@@ -303,7 +303,7 @@ func readSource(ctx context.Context, source string, authHeaders map[string]strin
 		}
 		return resp.Body, nil
 	}
-	f, err := os.Open(source)
+	f, err := os.Open(source) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).
 	if err != nil {
 		return nil, err
 	}

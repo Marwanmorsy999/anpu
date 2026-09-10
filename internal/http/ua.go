@@ -108,16 +108,16 @@ var accepts = []string{
 
 var (
 	uaMu  sync.Mutex
-	uaRng = rand.New(rand.NewSource(0x616e7075)) // deterministic seed, re-seeded at init with crypto/rand
+	uaRng = rand.New(rand.NewSource(0x616e7075)) // #nosec G404 -- deterministic seed, re-seeded at init with crypto/rand; UA rotation is not key material.
 )
 
 func init() {
 	// Re-seed with crypto/rand entropy where available; fallback stays deterministic for tests.
 	var seed [8]byte
 	if _, err := crand.Read(seed[:]); err == nil {
-		uaRng.Seed(int64(binary.LittleEndian.Uint64(seed[:])))
+		uaRng.Seed(int64(binary.LittleEndian.Uint64(seed[:]))) // #nosec G115 -- bit-preserving seed conversion; sign is irrelevant.
 	} else {
-		uaRng.Seed(int64(rand.Uint64()))
+		uaRng.Seed(int64(rand.Uint64())) // #nosec G115,G404 -- deterministic fallback only; UA rotation is not key material.
 	}
 }
 

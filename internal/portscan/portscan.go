@@ -93,7 +93,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	lies := 0
 	for _, p := range []int{1, 9} {
 		if conn, err := s.dialContext(ctx, "tcp", net.JoinHostPort(host, fmt.Sprintf("%d", p))); err == nil {
-			conn.Close()
+			_ = conn.Close()
 			lies++
 		}
 	}
@@ -124,7 +124,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 			conn, err := s.dialContext(ctx, "tcp", addr)
 			if err == nil {
-				conn.Close()
+				_ = conn.Close()
 				mu.Lock()
 				open = append(open, openPort{port, svc})
 				mu.Unlock()

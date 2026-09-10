@@ -69,7 +69,7 @@ func probeTLS(ctx context.Context, host, port string) (*tls.ConnectionState, err
 		ServerName: host,
 		// We want to see the *actual* certificate the server presents,
 		// including if it's invalid, so we can report on it accurately.
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: true,             // #nosec G402 -- scanner must complete handshakes with misconfigured targets to analyze them.
 		MinVersion:         tls.VersionSSL30, //nolint:staticcheck // intentionally permissive to observe legacy config
 	})
 	if err != nil {

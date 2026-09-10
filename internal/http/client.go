@@ -111,7 +111,7 @@ func newClient(insecureSkipVerify, allowLocalNetwork bool) *Client {
 			// InsecureSkipVerify is intentionally left false by default.
 			// TLS validity is *reported on*, not silently bypassed — see
 			// internal/tls.
-			InsecureSkipVerify: insecureSkipVerify, //nolint:gosec // opt-in only, see NewInsecureClient doc
+			InsecureSkipVerify: insecureSkipVerify, // #nosec G402 -- opt-in insecure client only (see NewInsecureClient doc); scanner must analyze misconfigured targets.
 			MinVersion:         tls.VersionTLS12,
 		},
 		MaxIdleConnsPerHost:   10,
@@ -551,7 +551,7 @@ func stealthTLSConfig(insecureSkipVerify bool) *tls.Config {
 	choice := uaRng.Intn(3)
 	uaMu.Unlock()
 	cfg := &tls.Config{
-		InsecureSkipVerify: insecureSkipVerify, //nolint:gosec
+		InsecureSkipVerify: insecureSkipVerify, // #nosec G402 -- scanner must complete handshakes with misconfigured targets to analyze them.
 	}
 	switch choice {
 	case 0:

@@ -172,7 +172,7 @@ func probeCipherGroup(ctx context.Context, host, port string, ciphers []uint16) 
 	tlsConf := &tls.Config{
 		ServerName:         host,
 		CipherSuites:       ciphers,
-		InsecureSkipVerify: true, // we're probing suites, not validating the cert
+		InsecureSkipVerify: true, // #nosec G402 -- probing cipher suites, not validating the cert.
 		MinVersion:         tls.VersionTLS10,
 		MaxVersion:         tls.VersionTLS12, // TLS 1.3 ignores CipherSuites list
 	}

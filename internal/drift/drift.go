@@ -42,7 +42,7 @@ type Result struct {
 
 // LoadSummary reads a ScanSummary report JSON.
 func LoadSummary(path string) (*models.ScanSummary, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
@@ -59,7 +59,7 @@ func LoadPins(path string) (map[string]string, error) {
 	if strings.TrimSpace(path) == "" {
 		return nil, nil
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).
 	if err != nil {
 		return nil, fmt.Errorf("reading pins %s: %w", path, err)
 	}
@@ -117,5 +117,5 @@ func WritePins(path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(data, '\n'), 0o644)
+	return os.WriteFile(path, append(data, '\n'), 0o600)
 }

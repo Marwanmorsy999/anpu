@@ -118,7 +118,7 @@ func (n *NucleiScanner) Run(ctx context.Context, sc *scanner.ScanContext) (scann
 	args := []string{"-target", sc.Target.Raw, "-jsonl", "-silent", "-no-color"}
 	args = append(args, nucleiTemplateTagsForProfile(sc.Config.Profile)...)
 
-	cmd := exec.CommandContext(runCtx, n.resolvedPath(), args...)
+	cmd := exec.CommandContext(runCtx, n.resolvedPath(), args...) // #nosec G204 -- ANPU orchestrates operator-installed security tools by resolved path with bounded read-only flags.
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return scanner.StageResult{}, fmt.Errorf("creating nuclei stdout pipe: %w", err)

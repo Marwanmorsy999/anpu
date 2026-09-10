@@ -28,7 +28,7 @@ func LoadFile(path string) (*Allowlist, error) {
 	if path == "" {
 		return nil, nil
 	}
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).
 	if err != nil {
 		return nil, fmt.Errorf("reading scope file: %w", err)
 	}

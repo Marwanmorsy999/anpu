@@ -26,7 +26,7 @@ type RiskAcceptEntry struct {
 //	    reason: "WAF covers this; retest in Q3"
 //	    expires: 2026-12-31
 func LoadRiskAccept(path string) ([]RiskAcceptEntry, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).
 	if err != nil {
 		return nil, fmt.Errorf("reading risk-accept file: %w", err)
 	}

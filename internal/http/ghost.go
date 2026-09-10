@@ -86,7 +86,7 @@ func ghostChromeSpec() utls.ClientHelloID {
 // config is the Go-side mirror for non-UTLS fallbacks).
 func ghostTLSConfig(insecureSkipVerify bool) *tls.Config {
 	return &tls.Config{
-		InsecureSkipVerify: insecureSkipVerify, //nolint:gosec
+		InsecureSkipVerify: insecureSkipVerify, // #nosec G402 -- scanner must complete handshakes with misconfigured targets to analyze them.
 		MinVersion:         tls.VersionTLS12,
 		CurvePreferences: []tls.CurveID{
 			tls.X25519, tls.CurveP256, tls.CurveP384,

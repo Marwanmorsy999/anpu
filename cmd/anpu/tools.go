@@ -388,7 +388,7 @@ func externalToolPath(binary string) (string, error) {
 	}
 
 	for _, candidate := range candidates {
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() { // #nosec G703 -- flagged path derives from the operator's own CLI input; escaping the intended tree is operator-inflicted.
 			return candidate, nil
 		}
 	}
@@ -403,5 +403,5 @@ func externalToolAvailable(binary string) bool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	return exec.CommandContext(ctx, path, "-version").Run() == nil
+	return exec.CommandContext(ctx, path, "-version").Run() == nil // #nosec G204 -- ANPU orchestrates operator-installed security tools by resolved path with bounded read-only flags.
 }

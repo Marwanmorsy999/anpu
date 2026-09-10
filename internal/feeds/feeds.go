@@ -128,10 +128,10 @@ func RefreshKEV(ctx context.Context) (int, error) {
 	if err := json.Unmarshal(data, &cat); err != nil {
 		return 0, err
 	}
-	if err := os.MkdirAll(CacheDir(), 0o755); err != nil {
+	if err := os.MkdirAll(CacheDir(), 0o750); err != nil {
 		return 0, err
 	}
-	if err := os.WriteFile(kevPath(), data, 0o644); err != nil {
+	if err := os.WriteFile(kevPath(), data, 0o600); err != nil {
 		return 0, err
 	}
 	return len(cat.Vulnerabilities), nil

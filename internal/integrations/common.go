@@ -68,7 +68,7 @@ func findExecutable(binary string) (string, error) {
 	}
 
 	for _, candidate := range candidates {
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() { // #nosec G703 -- flagged path derives from the operator's own CLI input; escaping the intended tree is operator-inflicted.
 			return candidate, nil
 		}
 	}
@@ -121,7 +121,7 @@ func goToolDirs() []string {
 func versionCheck(ctx context.Context, path string) bool {
 	for _, flag := range []string{"--version", "-version"} {
 		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		err := exec.CommandContext(checkCtx, path, flag).Run()
+		err := exec.CommandContext(checkCtx, path, flag).Run() // #nosec G204 -- ANPU orchestrates operator-installed security tools by resolved path with bounded read-only flags.
 		cancel()
 		if err == nil {
 			return true
@@ -136,7 +136,7 @@ func runCapture(ctx context.Context, timeout time.Duration, path string, args ..
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(runCtx, path, args...)
+	cmd := exec.CommandContext(runCtx, path, args...) // #nosec G204 -- ANPU orchestrates operator-installed security tools by resolved path with bounded read-only flags.
 	var out, serr bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &serr

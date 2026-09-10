@@ -132,7 +132,7 @@ func confRank(c models.Confidence) int {
 }
 
 func loadSummaryJSON(path string) (*models.ScanSummary, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).
 	if err != nil {
 		return nil, err
 	}

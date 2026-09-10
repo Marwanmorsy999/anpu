@@ -116,7 +116,7 @@ func mmh3_32(data []byte, seed uint32) uint32 {
 		k1 *= c2
 		h ^= k1
 	}
-	h ^= uint32(len(data))
+	h ^= uint32(len(data)) // #nosec G115 -- data is a memory-resident fetch; multi-GB inputs cannot occur.
 	h ^= h >> 16
 	h *= 0x85ebca6b
 	h ^= h >> 13
@@ -139,7 +139,7 @@ func shodanFaviconHash(icon []byte) int32 {
 		buf.WriteString(b64[i:end])
 		buf.WriteByte('\n')
 	}
-	return int32(mmh3_32(buf.Bytes(), 0))
+	return int32(mmh3_32(buf.Bytes(), 0)) // #nosec G115 -- Shodan's http.favicon.hash IS a signed 32-bit reinterpretation of the digest.
 }
 
 func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {

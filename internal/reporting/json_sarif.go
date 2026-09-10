@@ -19,7 +19,7 @@ func WriteJSON(summary *models.ScanSummary, path string) error {
 	if err != nil {
 		return fmt.Errorf("marshaling JSON report: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("writing JSON report to %s: %w", path, err)
 	}
 	return nil
@@ -205,7 +205,7 @@ func WriteSARIF(summary *models.ScanSummary, path string) error {
 	if err != nil {
 		return fmt.Errorf("marshaling SARIF report: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("writing SARIF report to %s: %w", path, err)
 	}
 	return nil

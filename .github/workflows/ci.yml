@@ -42,7 +42,9 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.64
+          # Exact patch: the action cannot resolve minor-only tags, and
+          # this is the version the tree is verified clean against.
+          version: v1.64.8
 
       - name: govulncheck
         run: |

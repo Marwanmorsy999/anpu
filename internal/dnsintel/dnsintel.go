@@ -10,9 +10,9 @@ package dnsintel
 
 import (
 	"context"
+	crand "crypto/rand"
 	"encoding/binary"
 	"fmt"
-	"math/rand"
 	"net"
 	"strings"
 	"time"
@@ -414,28 +414,33 @@ func probeAXFR(ctx context.Context, addr, domain string) bool {
 	// Build DNS query (see RFC 1035 4.1).
 	msg := make([]byte, 0, 512)
 	// Header
-	id := uint16(rand.Intn(65536))
+	var idBuf [2]byte
+	if _, err := crand.Read(idBuf[:]); err != nil {
+		return false
+	}
+	id := binary.BigEndian.Uint16(idBuf[:])
 	hdr := make([]byte, 12)
 	binary.BigEndian.PutUint16(hdr[0:2], id) // ID
 	binary.BigEndian.PutUint16(hdr[2:4], 0)  // Flags all 0
 	binary.BigEndian.PutUint16(hdr[4:6], 1)  // QDCOUNT
 	// ANCOUNT, NSCOUNT, ARCOUNT already 0
 	msg = append(msg, hdr...)
-	// QNAME
+	// QNAME (labels capped at 63 octets per RFC 1035 2.3.4; longer
+	// labels are skipped so the length byte below cannot overflow).
 	for _, label := range strings.Split(domain, ".") {
-		if label == "" {
+		if label == "" || len(label) > 63 {
 			continue
 		}
-		msg = append(msg, byte(len(label)))
+		msg = append(msg, byte(len(label))) // #nosec G115 -- length guarded to 0-63 above.
 		msg = append(msg, label...)
 	}
 	msg = append(msg, 0) // terminator
 	// QTYPE AXFR (252) + QCLASS IN (1)
 	msg = append(msg, 0, 252, 0, 1)
 
-	// TCP prefix
+	// TCP prefix (msg is bounded: header + labels + 5 bytes, far below 64K).
 	pkt := make([]byte, 2+len(msg))
-	binary.BigEndian.PutUint16(pkt[0:2], uint16(len(msg)))
+	binary.BigEndian.PutUint16(pkt[0:2], uint16(len(msg))) // #nosec G115 -- bounded well under 65535 (see above).
 	copy(pkt[2:], msg)
 
 	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)

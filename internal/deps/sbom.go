@@ -122,12 +122,12 @@ func writeSBOM(outputDir, target string, pkgs []osvPackage) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o750); err != nil {
 		return "", err
 	}
 	path := filepath.Join(outputDir, fmt.Sprintf("sbom-%s-%s.cyclonedx.json",
 		slugHost(target), time.Now().Format("2006-01-02-150405")))
-	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
 		return "", err
 	}
 	return path, nil

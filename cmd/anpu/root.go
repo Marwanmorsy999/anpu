@@ -316,7 +316,7 @@ func defaultDataDir() string {
 
 func defaultDBPath() string {
 	dir := defaultDataDir()
-	_ = os.MkdirAll(dir, 0o755)
+	_ = os.MkdirAll(dir, 0o750)
 	return filepath.Join(dir, "anpu.db")
 }
 

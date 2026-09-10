@@ -31,7 +31,7 @@ type ProxyPool struct {
 // from a file at path. Empty lines and comments are skipped.
 // Supports http, https, socks5 schemes.
 func NewProxyPool(path string) (*ProxyPool, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).
 	if err != nil {
 		return nil, fmt.Errorf("opening proxy pool %q: %w", path, err)
 	}

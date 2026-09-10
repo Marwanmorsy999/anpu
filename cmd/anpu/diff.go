@@ -44,7 +44,7 @@ func newDiffCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("encoding diff: %w", err)
 				}
-				if err := os.WriteFile(output, append(data, '\n'), 0o644); err != nil {
+				if err := os.WriteFile(output, append(data, '\n'), 0o600); err != nil {
 					return fmt.Errorf("writing diff: %w", err)
 				}
 			}

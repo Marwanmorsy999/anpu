@@ -1,0 +1,43 @@
+# ANPU vendored wordlists — small reviewed subsets for offline/bounded use.
+# Full upstream: SecLists (https://github.com/danielmiessler/SecLists).
+# Refresh (opt-in, bounded): anpu wordlists update
+admin
+api
+assets
+backup
+config
+dashboard
+debug
+dev
+env
+graphql
+health
+info
+login
+metrics
+old
+panel
+private
+server-status
+sitemap.xml
+robots.txt
+status
+test
+tmp
+upload
+uploads
+v1
+v2
+version
+wp-admin
+wp-login.php
+.git/HEAD
+.env
+server-info
+phpinfo.php
+actuator
+actuator/health
+telescope
+elmah.axd
+trace.axd
+debug/pprof/

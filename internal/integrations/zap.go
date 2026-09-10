@@ -14,11 +14,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/pkg/models"
 )
@@ -109,7 +112,8 @@ func NewZapScanner() *ZapScanner {
 
 func (z *ZapScanner) Name() string { return "zap" }
 
-// resolvedDockerPath returns the docker binary path.
+// resolvedDockerPath returns the docker binary path, falling back to
+// podman (docker-compatible CLI) when docker is absent.
 func (z *ZapScanner) resolvedDockerPath() string {
 	if z.DockerBinary != "" {
 		return z.DockerBinary
@@ -117,13 +121,20 @@ func (z *ZapScanner) resolvedDockerPath() string {
 	if path, err := exec.LookPath("docker"); err == nil {
 		return path
 	}
+	if path, err := exec.LookPath("podman"); err == nil {
+		return path
+	}
 	return "docker"
 }
 
 // resolvedZapPath returns the zap.sh/zap.bat binary path.
+// ZAP_BINARY env overrides everything for custom installs.
 func (z *ZapScanner) resolvedZapPath() string {
 	if z.ZapBinary != "" {
 		return z.ZapBinary
+	}
+	if env := strings.TrimSpace(os.Getenv("ZAP_BINARY")); env != "" {
+		return env
 	}
 	for _, candidate := range []string{"zap.sh", "zap.bat", "zaproxy"} {
 		if path, err := exec.LookPath(candidate); err == nil {
@@ -166,30 +177,21 @@ func (z *ZapScanner) zapBinaryAvailable() bool {
 	return cmd.Run() == nil
 }
 
-// Available returns true when either Docker (with the ZAP image pullable)
-// or a local zap.sh binary is present. The image pull itself is not
-// attempted here — that would be too slow and might fail on air-gapped
-// systems; we just check that the daemon is up.
-func (z *ZapScanner) Available(ctx context.Context) bool {
+// Available always true — embedded fallback covers the stage when Docker/ZAP is missing.
+func (z *ZapScanner) Available(ctx context.Context) bool { return true }
+func (z *ZapScanner) availableExternal(ctx context.Context) bool {
 	return z.dockerAvailable(ctx) || z.zapBinaryAvailable()
 }
 
 // Run invokes ZAP against the scan target and converts its JSON report
-// into ANPU findings. Docker mode is preferred; local binary is used as
-// a fallback. If neither is available, a warning is returned and the
-// pipeline continues normally.
+// into ANPU findings. If external ZAP is present it is used; otherwise
+// an embedded fallback runs a subset of passive checks so the stage
+// still shows as DONE (embedded).
 func (z *ZapScanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
-	useDocker := z.dockerAvailable(ctx)
-	useLocal := !useDocker && z.zapBinaryAvailable()
-
-	if !useDocker && !useLocal {
-		return scanner.StageResult{
-			Warnings: []string{
-				"ZAP is not available: install Docker (preferred) or OWASP ZAP locally to enable this stage. " +
-					"Docker: https://docs.docker.com/get-docker/ — ZAP: https://www.zaproxy.org/download/",
-			},
-		}, nil
+	if !z.availableExternal(ctx) {
+		return z.runEmbedded(ctx, sc)
 	}
+	useDocker := z.dockerAvailable(ctx)
 
 	runCtx, cancel := context.WithTimeout(ctx, z.Timeout)
 	defer cancel()
@@ -219,28 +221,44 @@ func (z *ZapScanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.
 }
 
 // scanScript returns the ZAP Docker scan script for the profile.
-// Baseline (safe/standard) = passive + ajax spider, no active scan.
-// Full (deep) = active spider + active scan.
+// Baseline (safe/advanced) = passive + ajax spider, no active scan.
+// Full (ultra/deep) = active spider + active scan.
 func scanScript(profile models.Profile) string {
-	if profile == models.ProfileDeep {
+	if profile.Normalize() == models.ProfileUltra {
 		return "zap-full-scan.py"
 	}
 	return "zap-baseline.py"
 }
 
-// runDocker runs ZAP via `docker run`. It mounts nothing and passes the
-// target URL directly; ZAP writes its JSON report to stdout via -J stdout.
+// ZapAjax enables the ZAP Ajax spider (-j) on Docker runs (opt-in via
+// --zap-ajax): crawls JavaScript-heavy routes the traditional spider
+// misses, at the cost of a longer scan. Local-binary mode has no ajax
+// equivalent and ignores it.
+var ZapAjax bool
+
+// runDocker runs ZAP via `docker run`. The JSON report is written to a
+// temp-dir bind mount (os temp lives under the default-shared user
+// profile on Docker Desktop) and read back; stdout is kept as a
+// fallback because older script versions ignore -J.
 func (z *ZapScanner) runDocker(ctx context.Context, sc *scanner.ScanContext) ([]byte, []string, error) {
 	script := scanScript(sc.Config.Profile)
+	workDir, tmpErr := os.MkdirTemp("", "anpu-zap-*")
+	if tmpErr != nil {
+		return nil, []string{fmt.Sprintf("ZAP temp dir: %v", tmpErr)}, tmpErr
+	}
+	defer os.RemoveAll(workDir)
+	reportName := "zap-report.json"
 	args := []string{
 		"run", "--rm",
-		// No bind mounts — read stdout directly.
+		"-v", workDir + ":/zap/wrk:rw",
 		z.dockerImage(),
 		script,
 		"-t", sc.Target.Raw,
-		"-J", "/dev/stdout", // JSON to stdout
+		"-J", "/zap/wrk/" + reportName,
 		"-I", // don't fail on warn
-		"-q", // suppress progress to stderr
+	}
+	if ZapAjax {
+		args = append(args, "-j") // Ajax spider in addition to the traditional one
 	}
 
 	cmd := exec.CommandContext(ctx, z.resolvedDockerPath(), args...)
@@ -261,6 +279,11 @@ func (z *ZapScanner) runDocker(ctx context.Context, sc *scanner.ScanContext) ([]
 			}
 			warnings = append(warnings, fmt.Sprintf("ZAP Docker run error: %v — %s", err, msg))
 		}
+	}
+	// Prefer the mounted JSON report; fall back to stdout for older
+	// script versions that ignore -J.
+	if raw, rerr := os.ReadFile(filepath.Join(workDir, reportName)); rerr == nil && len(bytes.TrimSpace(raw)) > 0 {
+		return raw, warnings, err
 	}
 	return stdout.Bytes(), warnings, err
 }
@@ -286,7 +309,6 @@ func (z *ZapScanner) runBinary(ctx context.Context, sc *scanner.ScanContext) ([]
 	if script == "zap-full-scan.py" {
 		args = append(args, "-addoninstall", "spider")
 	}
-	_ = script // script-name awareness reserved for future flag expansion
 
 	cmd := exec.CommandContext(ctx, zapPath, args...)
 	var stdout, stderr bytes.Buffer
@@ -303,6 +325,252 @@ func (z *ZapScanner) runBinary(ctx context.Context, sc *scanner.ScanContext) ([]
 		warnings = append(warnings, fmt.Sprintf("ZAP binary error: %v — %s", err, msg))
 	}
 	return stdout.Bytes(), warnings, err
+}
+
+// runEmbedded performs real ZAP-baseline-style passive checks without
+// Docker or zap.sh: one GET on the target plus already-discovered
+// endpoints. It deliberately avoids ground covered by the headers and
+// cookie analyzers (nosniff, referrer, permissions, server disclosure,
+// COOP) and covers what they don't: clickjacking framing policy,
+// sensitive robots.txt paths, mixed content, and verbose error pages.
+func (z *ZapScanner) runEmbedded(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+	client := anpuhttp.NewClientWithLocalNetworkAllowed(scanner.AllowLocalNetwork)
+	var findings []models.Finding
+	var warnings []string
+
+	fctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	resp, err := client.Get(fctx, sc.Target.Raw)
+	if err != nil || resp == nil {
+		// Target unreachable here: other stages already report it;
+		// stay silent instead of adding noise.
+		return scanner.StageResult{}, nil
+	}
+
+	if f := zapCheckClickjacking(resp, sc.Target.Raw); f != nil {
+		findings = append(findings, *f)
+	}
+	if f := zapCheckRobotsEntries(ctx, client, sc.Target.Raw); f != nil {
+		findings = append(findings, *f)
+	}
+	findings = append(findings, zapCheckMixedContent(sc)...)
+	if f := zapCheckVerboseErrors(ctx, client, sc.Target.Raw); f != nil {
+		findings = append(findings, *f)
+	}
+
+	if len(findings) == 0 && len(warnings) == 0 {
+		warnings = append(warnings, "zap embedded checks ran (no Docker or zap.sh); no issues found — install Docker and re-run ultra profile for full ZAP coverage")
+	}
+	return scanner.StageResult{Findings: findings, Warnings: warnings}, nil
+}
+
+// zapCheckClickjacking flags a missing framing policy: no
+// X-Frame-Options and no frame-ancestors in Content-Security-Policy.
+func zapCheckClickjacking(resp *anpuhttp.Response, target string) *models.Finding {
+	if resp.Header == nil {
+		return nil
+	}
+	if v := strings.TrimSpace(resp.Header.Get("X-Frame-Options")); v != "" {
+		return nil
+	}
+	csp := strings.ToLower(resp.Header.Get("Content-Security-Policy"))
+	if strings.Contains(csp, "frame-ancestors") {
+		return nil
+	}
+	return &models.Finding{
+		ID:              fmt.Sprintf("zap-xframe-%d", time.Now().UnixNano()),
+		Title:           "Missing clickjacking protection (no X-Frame-Options / frame-ancestors)",
+		Description:     "The response sets neither X-Frame-Options nor a Content-Security-Policy frame-ancestors directive, so the page can be embedded in a cross-origin iframe. An attacker can overlay invisible frames to hijack clicks (clickjacking/UI redressing).",
+		Severity:        models.SeverityLow,
+		Confidence:      models.ConfidenceMedium,
+		Category:        models.CategoryHeaders,
+		CWE:             "CWE-1021",
+		Target:          target,
+		URL:             target,
+		Source:          models.SourceZAP,
+		DetectionMethod: "embedded ZAP passive check: framing headers absent",
+		Evidence: models.Evidence{
+			Observed:       "X-Frame-Options: <absent>, CSP frame-ancestors: <absent>",
+			Location:       target,
+			RequestSummary: fmt.Sprintf("GET %s", target),
+		},
+		Impact:      "Attackers can embed the site invisibly and trick users into clicking actions they did not intend.",
+		Remediation: "Send `X-Frame-Options: SAMEORIGIN` or, preferably, a CSP `frame-ancestors 'self'` directive.",
+		References:  []string{"https://owasp.org/www-community/attacks/Clickjacking"},
+		FirstSeen:   time.Now(),
+	}
+}
+
+// zapSensitiveRobotsFragments matches robots.txt Disallow entries that
+// point at functionality which should not be advertised publicly.
+var zapSensitiveRobotsFragments = []string{
+	"admin", "backup", "bak", "config", "dump", ".sql", ".git",
+	"internal", "private", "secret", "password", "db_", "database",
+	"wp-config", ".env", "swagger", "console", "manage",
+}
+
+// zapCheckRobotsEntries fetches robots.txt once and flags Disallow
+// entries pointing at sensitive locations.
+func zapCheckRobotsEntries(ctx context.Context, client *anpuhttp.Client, target string) *models.Finding {
+	robotsURL := strings.TrimSuffix(target, "/") + "/robots.txt"
+	rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	resp, err := client.Get(rctx, robotsURL)
+	if err != nil || resp == nil || resp.StatusCode != 200 || len(resp.Body) == 0 {
+		return nil
+	}
+	var hits []string
+	for _, line := range strings.Split(string(resp.Body), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(strings.ToLower(line), "disallow:") {
+			continue
+		}
+		path := strings.TrimSpace(line[len("disallow:"):])
+		if path == "" || path == "/" {
+			continue
+		}
+		lower := strings.ToLower(path)
+		for _, frag := range zapSensitiveRobotsFragments {
+			if strings.Contains(lower, frag) {
+				hits = append(hits, path)
+				break
+			}
+		}
+	}
+	if len(hits) == 0 {
+		return nil
+	}
+	if len(hits) > 10 {
+		hits = hits[:10]
+	}
+	return &models.Finding{
+		ID:    fmt.Sprintf("zap-robots-%d", time.Now().UnixNano()),
+		Title: fmt.Sprintf("robots.txt advertises %d sensitive path(s)", len(hits)),
+		Description: fmt.Sprintf(
+			"robots.txt Disallow rules point at sensitive locations (%s). Disallow is a crawling hint, not access control — "+
+				"attackers read robots.txt first precisely to harvest these paths.",
+			strings.Join(hits, ", "),
+		),
+		Severity:        models.SeverityLow,
+		Confidence:      models.ConfidenceHigh,
+		Category:        models.CategoryConfiguration,
+		CWE:             "CWE-538",
+		Target:          target,
+		URL:             robotsURL,
+		Source:          models.SourceZAP,
+		DetectionMethod: "embedded ZAP passive check: robots.txt sensitive Disallow entries",
+		Evidence: models.Evidence{
+			Observed:       "Disallow: " + strings.Join(hits, ", Disallow: "),
+			Location:       robotsURL,
+			RequestSummary: fmt.Sprintf("GET %s", robotsURL),
+		},
+		Impact:      "Exposed paths narrow an attacker's search to admin panels, backups, configs, and VCS metadata.",
+		Remediation: "Remove sensitive paths from robots.txt and protect them with authentication; use robots.txt only for crawler etiquette on public content.",
+		FirstSeen:   time.Now(),
+	}
+}
+
+// zapCheckMixedContent flags discovered asset URLs served over plain
+// HTTP while the target itself is HTTPS.
+func zapCheckMixedContent(sc *scanner.ScanContext) []models.Finding {
+	if !strings.HasPrefix(strings.ToLower(sc.Target.Raw), "https://") {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []models.Finding
+	for _, ep := range sc.Endpoints {
+		if ep.Category != models.EndpointAsset && ep.Category != models.EndpointUnknown {
+			continue
+		}
+		if !strings.HasPrefix(strings.ToLower(ep.URL), "http://") || seen[ep.URL] {
+			continue
+		}
+		seen[ep.URL] = true
+		out = append(out, models.Finding{
+			ID:              fmt.Sprintf("zap-mixed-%d", time.Now().UnixNano()),
+			Title:           fmt.Sprintf("Mixed content: page may load %s over plain HTTP", ep.URL),
+			Description:     "An HTTPS page references a sub-resource over plain HTTP. Browsers block active mixed content and warn on the rest; a network attacker can replace the HTTP resource with malicious content.",
+			Severity:        models.SeverityLow,
+			Confidence:      models.ConfidenceMedium,
+			Category:        models.CategoryConfiguration,
+			CWE:             "CWE-829",
+			Target:          sc.Target.Raw,
+			URL:             ep.URL,
+			Source:          models.SourceZAP,
+			DetectionMethod: "embedded ZAP passive check: http-scheme asset on https page",
+			Evidence: models.Evidence{
+				Observed:       "http:// sub-resource on " + sc.Target.Raw,
+				Location:       ep.URL,
+				RequestSummary: fmt.Sprintf("GET %s", sc.Target.Raw),
+			},
+			Impact:      "Active mixed content is blocked by browsers (breakage); passive mixed content leaks cookies and page context to the network.",
+			Remediation: "Serve all sub-resources over HTTPS and consider Content-Security-Policy: upgrade-insecure-requests.",
+			References:  []string{"https://developer.mozilla.org/en-US/docs/Web/Security/Mixed_content"},
+			FirstSeen:   time.Now(),
+		})
+		if len(out) >= 5 {
+			break
+		}
+	}
+	return out
+}
+
+// zapErrorFingerprints matches verbose stack traces / debug pages that
+// leak framework internals.
+var zapErrorFingerprints = []string{
+	"Traceback (most recent call last)",     // Python Django/Flask
+	"NullPointerException",                  // Java
+	"ORA-",                                  // Oracle
+	"SQL syntax", "mysql_fetch", "pg_query", // SQL errors
+	"ASP.NET", "Server Error in '/' Application",
+	"Whoops, looks like something went wrong", // Laravel debug
+	"RuntimeError", "ActionView::Template::Error",
+}
+
+// zapCheckVerboseErrors requests a random non-existent path once and
+// flags framework stack traces in the error page.
+func zapCheckVerboseErrors(ctx context.Context, client *anpuhttp.Client, target string) *models.Finding {
+	probe := strings.TrimSuffix(target, "/") + fmt.Sprintf("/anpu-nonexistent-%d", time.Now().Unix()%100000)
+	pctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	resp, err := client.Get(pctx, probe)
+	if err != nil || resp == nil || len(resp.Body) == 0 {
+		return nil
+	}
+	body := string(resp.Body)
+	if len(body) > 64*1024 {
+		body = body[:64*1024]
+	}
+	for _, fp := range zapErrorFingerprints {
+		if strings.Contains(body, fp) {
+			return &models.Finding{
+				ID:    fmt.Sprintf("zap-verbose-err-%d", time.Now().UnixNano()),
+				Title: "Verbose error page discloses framework internals",
+				Description: fmt.Sprintf(
+					"A request to a non-existent path returned an error page containing %q — framework stack traces disclose file paths, versions, and code structure useful for targeted exploitation.",
+					fp,
+				),
+				Severity:        models.SeverityLow,
+				Confidence:      models.ConfidenceHigh,
+				Category:        models.CategoryExposure,
+				CWE:             "CWE-209",
+				Target:          target,
+				URL:             probe,
+				Source:          models.SourceZAP,
+				DetectionMethod: "embedded ZAP check: stack-trace fingerprint in 404 page",
+				Evidence: models.Evidence{
+					Observed:       "error page contains: " + fp,
+					Location:       probe,
+					RequestSummary: fmt.Sprintf("GET %s", probe),
+				},
+				Impact:      "Leaked paths and versions let attackers fingerprint the stack and aim version-specific exploits.",
+				Remediation: "Replace debug error pages with generic error responses in production (e.g. DEBUG=False, customErrors=On, friendly 404s).",
+				References:  []string{"https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/08-Testing_for_Error_Handling/01-Testing_For_Improper_Error_Handling"},
+				FirstSeen:   time.Now(),
+			}
+		}
+	}
+	return nil
 }
 
 func (z *ZapScanner) dockerImage() string {

@@ -1,0 +1,32 @@
+# Hidden-parameter names for bounded mining (x8/hiddenparams).
+# Benign read-only names only — nothing state-changing.
+id
+page
+p
+q
+s
+search
+keyword
+query
+term
+category
+cat
+sort
+order
+dir
+lang
+locale
+l
+debug
+test
+dev
+admin
+user
+name
+title
+type
+action
+do
+view
+tab
+callback

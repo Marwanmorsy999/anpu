@@ -1,0 +1,11 @@
+# API version variants for bounded sibling fuzz (apiversion).
+/v2
+/v3
+/v4
+/api/v2
+/api/v3
+/v1
+/api/v1
+/api/latest
+/latest
+/v2.0

@@ -27,6 +27,12 @@ type InputVector struct {
 	Name string
 	// OriginalValue is the original value observed at this location.
 	OriginalValue string
+	// Schema is the schema-declared type for this location ("string",
+	// "integer", "boolean", ...). Empty when the location was discovered
+	// by crawling rather than from a schema.
+	Schema string
+	// Required reports whether the schema marks this location required.
+	Required bool
 }
 
 // InputVectorKind classifies an injection point.
@@ -53,6 +59,13 @@ type ActiveRuleResult struct {
 	Found bool
 	// RequestsMade is how many HTTP requests this rule consumed.
 	RequestsMade int
+	// OOBConfirmed is true when an out-of-band callback proved server-side
+	// execution (interactsh session observed the nonce). Rules that support
+	// OOB set it; ToFinding implementations upgrade severity/confidence.
+	OOBConfirmed bool
+	// OOBProtocol and OOBRemote describe the observed callback.
+	OOBProtocol string
+	OOBRemote   string
 }
 
 // Phase 5 additions: API-aware injection points.
@@ -72,4 +85,17 @@ const (
 	// is application/xml or text/xml (detected from API schema or response).
 	// Only the xxeRule handles this kind.
 	VectorXMLBody InputVectorKind = "xml-body"
+)
+
+// Adversarial additions: WebSocket injection point.
+const (
+	// VectorWebSocket targets a WebSocket endpoint (ws:// or wss://) discovered
+	// via JavaScript intelligence. The Name field holds the WebSocket URL.
+	VectorWebSocket InputVectorKind = "websocket"
+)
+
+// Master addition: gRPC injection point.
+const (
+	// VectorGRPC targets a gRPC service method discovered via reflection.
+	VectorGRPC InputVectorKind = "grpc"
 )

@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -83,7 +83,7 @@ jobs:
 
       - name: Upload Scan Reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: anpu-security-scan-${{ github.run_id }}
           path: ./reports/

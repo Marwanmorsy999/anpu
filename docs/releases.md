@@ -78,7 +78,7 @@ go build -o anpu ./cmd/anpu
 ./anpu --help
 ```
 
-ANPU currently targets Go 1.25. Dependencies are declared in `go.mod` and locked by `go.sum`.
+ANPU currently targets Go 1.26. Dependencies are declared in `go.mod` and locked by `go.sum`.
 
 ### Docker
 

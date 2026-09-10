@@ -213,11 +213,13 @@ func extractURLs(body, assetURL, targetRaw string, cap int) []models.Endpoint {
 		if raw == "" {
 			continue
 		}
-		// URL-shaped only: absolute, protocol-relative, rooted, or
-		// a relative ref containing / or . (bare words are code).
+		// URL-shaped only: absolute, protocol-relative, rooted, or a
+		// relative ref containing a path separator. Dotted-only
+		// strings (`.split(`, `Math.trunc(` in minified bundles) are
+		// code fragments, not links — requiring `/` keeps them out.
 		if !strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://") &&
 			!strings.HasPrefix(raw, "//") && !strings.HasPrefix(raw, "/") &&
-			!strings.ContainsAny(raw, "/.") {
+			!strings.Contains(raw, "/") {
 			continue
 		}
 		resolved := joinAssetURL(raw, assetURL, targetRaw)

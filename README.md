@@ -8,7 +8,7 @@
 
 [Install](#3-installation) · [Documentation](#5-architecture) · [Releases](https://github.com/Marwanmorsy999/anpu/releases)
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/Marwanmorsy999/anpu/ci.yml?branch=main&style=flat-square)](https://github.com/Marwanmorsy999/anpu/actions) [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://go.dev/) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](https://github.com/Marwanmorsy999/anpu/blob/main/LICENSE) [![SARIF](https://img.shields.io/badge/SARIF-Supported-success?style=flat-square)](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?style=flat-square&logo=Docker)](https://docs.docker.com/)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/Marwanmorsy999/anpu/ci.yml?branch=main&style=flat-square)](https://github.com/Marwanmorsy999/anpu/actions) [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go)](https://go.dev/) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](https://github.com/Marwanmorsy999/anpu/blob/main/LICENSE) [![SARIF](https://img.shields.io/badge/SARIF-Supported-success?style=flat-square)](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?style=flat-square&logo=Docker)](https://docs.docker.com/)
 
 ### Quick links
 
@@ -230,6 +230,25 @@ Good starter work is tracked with the [`good first issue`](https://github.com/Ma
 ## 12. Responsible use
 
 ANPU performs network requests and, depending on the profile, may perform active discovery. **Only scan targets you own or are explicitly authorized to test.** Built-in guardrails reduce accidental harm but do not establish authorization.
+
+## 13. Zero-dependency first scan
+
+The default `safe` profile needs no external tools. Nuclei, ZAP, and the ~80 wrapper binaries are optional and degrade gracefully with a warning:
+
+```sh
+anpu tools              # show built-in engines vs optional binaries
+anpu scan https://example.com   # safe profile, zero external dependencies
+```
+
+Install recipes for optional tools: `anpu tools install --help`.
+
+## 14. Known limitations / Roadmap
+
+- **Module import path:** `go.mod` declares `github.com/anpu-project/anpu` while the repository lives at `github.com/Marwanmorsy999/anpu`. The `anpu-project` path is currently canonical for imports; it will only change via a coordinated rename or org transfer.
+- **External tools:** many wrappers require manual setup or `--adversarial --confirm-authorized`. See `anpu tools` and `docs/scanners.md` for the minimal set per profile.
+- **Web frontend:** the companion site is demo-data only; the CLI remains fully local.
+- **Large orchestrator:** `cmd/anpu/scan.go` is intentionally monolithic pending a phased split.
+- **Wordlists/rules:** vendored subsets only; refresh policy is opt-in (see `docs/scanners.md`).
 
 ## License
 

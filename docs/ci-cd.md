@@ -6,12 +6,12 @@ ANPU is designed to run directly inside CI runners. It does not require a cloud 
 
 For a normal CI security gate:
 
-- `--profile standard` enables the broader built-in checks and Nuclei when the binary is available.
+- `--profile advanced` enables the broader built-in checks and Nuclei when the binary is available.
 - `--fail-on high` returns a non-zero exit status when a high or critical finding is present.
 - `--sarif` writes a SARIF 2.1.0 report suitable for SARIF-compatible security tooling.
 - `--output ./reports` keeps generated reports in a predictable directory.
 
-The default `safe` profile is passive/low-impact. `standard` and `deep` add active checks, so only use them against targets you own or are explicitly authorized to test.
+The default `safe` profile is passive/low-impact. `advanced` and `ultra` add active checks, so only use them against targets you own or are explicitly authorized to test.
 
 ## Repository CI
 
@@ -33,7 +33,7 @@ A separate security workflow builds ANPU, runs it against a controlled Juice Sho
 
 ## GitHub Actions example
 
-The following workflow builds ANPU from source, scans an authorized staging target, and uploads the generated SARIF report as a workflow artifact. The current repository workflow uses `actions/checkout@v4` and `actions/setup-go@v5` with Go 1.25.
+The following workflow builds ANPU from source, scans an authorized staging target, and uploads the generated SARIF report as a workflow artifact. The current repository workflow uses `actions/checkout@v7` and `actions/setup-go@v7` with the Go version from `go.mod`.
 
 ```yaml
 name: ANPU Security Scan
@@ -54,12 +54,12 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version-file: go.mod
 
       - name: Build ANPU
         run: go build -o anpu ./cmd/anpu
@@ -68,14 +68,14 @@ jobs:
         run: |
           mkdir -p reports
           ./anpu scan https://staging.example.com \
-            --profile standard \
+            --profile advanced \
             --fail-on high \
             --sarif \
             --output ./reports
 
       - name: Upload SARIF report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: anpu-sarif
           path: ./reports/*.sarif
@@ -99,7 +99,7 @@ The same pattern works in GitLab CI, Azure Pipelines, Jenkins, or any other runn
 ```sh
 go build -o anpu ./cmd/anpu
 ./anpu scan https://authorized-staging.example.com \
-  --profile standard \
+  --profile advanced \
   --sarif \
   --fail-on high \
   --output ./reports

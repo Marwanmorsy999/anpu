@@ -97,7 +97,7 @@ The image can then be used for an authorized target with a mounted reports direc
 docker run --rm \
   -v "$(pwd)/reports:/reports" \
   anpu scan https://staging.example.com \
-  --profile standard \
+  --profile advanced \
   --sarif \
   --output /reports
 ```

@@ -131,14 +131,14 @@ After extracting the archive:
 The default profile is `safe`. For a broader authorized assessment:
 
 ```sh
-./anpu scan https://example.com --profile standard --json --sarif
+./anpu scan https://example.com --profile advanced --json --sarif
 ```
 
 For CI gating:
 
 ```sh
 ./anpu scan https://staging.example.com \
-  --profile standard \
+  --profile advanced \
   --sarif \
   --fail-on high \
   --output ./reports

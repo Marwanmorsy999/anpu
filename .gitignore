@@ -1,5 +1,8 @@
 /anpu
+*.exe
 /reports/
+/report/
+/test_report/
 *.db
 anpu.yaml
 .DS_Store

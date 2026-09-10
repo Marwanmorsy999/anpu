@@ -184,7 +184,7 @@ Takeover checks every discovered subdomain against 21 provider fingerprints (CNA
 
 The port scanner uses TCP connect probes against a curated set of common service ports. ANPU includes sanity/false-positive safeguards so environments that accept unexpected connections do not blindly turn every port into a finding.
 
-Port scanning is enabled for deep discovery and is not part of the default safe profile.
+Port scanning is enabled for `ultra` discovery and is not part of the default safe profile.
 
 ## Sensitive paths
 
@@ -234,7 +234,7 @@ anpu tools
 
 ## OWASP ZAP
 
-ZAP runs full (`zap-full-scan.py`, deep) or baseline scans via Docker or a local `zap.sh` when either is present (podman is accepted as a Docker-compatible runtime; `ZAP_BINARY` overrides discovery). Without external ZAP, an embedded fallback performs real passive checks — clickjacking framing policy, sensitive `robots.txt` paths, mixed content, and verbose error pages — instead of skipping.
+ZAP runs full (`zap-full-scan.py`) or baseline scans via Docker or a local `zap.sh` when either is present (podman is accepted as a Docker-compatible runtime; `ZAP_BINARY` overrides discovery). Without external ZAP, an embedded fallback performs real passive checks — clickjacking framing policy, sensitive `robots.txt` paths, mixed content, and verbose error pages — instead of skipping.
 
 ## XSS confirmation (Dalfox)
 

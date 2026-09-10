@@ -6,6 +6,7 @@ package reporting
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/anpu-project/anpu/pkg/models"
@@ -20,6 +21,49 @@ func WriteJSON(summary *models.ScanSummary, path string) error {
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("writing JSON report to %s: %w", path, err)
+	}
+	return nil
+}
+
+// jsonlFinding is the compact per-finding record streamed with --jsonl.
+// One line per finding, jq-friendly, pipeable into nuclei/dalfox-style
+// chains or `jq -s` for aggregation.
+type jsonlFinding struct {
+	Target     string            `json:"target"`
+	ID         string            `json:"id"`
+	Title      string            `json:"title"`
+	Severity   models.Severity   `json:"severity"`
+	Confidence models.Confidence `json:"confidence"`
+	Category   models.Category   `json:"category"`
+	CWE        string            `json:"cwe,omitempty"`
+	URL        string            `json:"url,omitempty"`
+	Parameter  string            `json:"parameter,omitempty"`
+	RiskScore  float64           `json:"risk_score"`
+	Source     models.Source     `json:"source"`
+	RiskGrade  string            `json:"risk_grade"`
+}
+
+// WriteFindingsJSONL streams one compact JSON object per finding to w.
+func WriteFindingsJSONL(w io.Writer, summary *models.ScanSummary) error {
+	enc := json.NewEncoder(w)
+	for _, f := range summary.Findings {
+		rec := jsonlFinding{
+			Target:     summary.Target,
+			ID:         f.ID,
+			Title:      f.Title,
+			Severity:   f.Severity,
+			Confidence: f.Confidence,
+			Category:   f.Category,
+			CWE:        f.CWE,
+			URL:        f.URL,
+			Parameter:  f.Parameter,
+			RiskScore:  f.RiskScore,
+			Source:     f.Source,
+			RiskGrade:  RiskGrade(f.RiskScore),
+		}
+		if err := enc.Encode(rec); err != nil {
+			return fmt.Errorf("encoding JSONL finding: %w", err)
+		}
 	}
 	return nil
 }

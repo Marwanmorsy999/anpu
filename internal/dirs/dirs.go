@@ -123,8 +123,7 @@ func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	if err != nil {
 		return scanner.StageResult{}, fmt.Errorf("fetching soft-404 baseline: %w", err)
 	}
-	notFoundStatus := baseA.StatusCode
-	notFoundHash := sha256.Sum256(baseA.Body)
+	notFoundHash := normHash(baseA.Body)
 	notFoundSize := len(baseA.Body)
 	var notFoundWords map[string]struct{}
 	catchAll := false
@@ -133,7 +132,7 @@ func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	if err == nil && baseB.StatusCode == baseA.StatusCode {
 		wA := wordSet(baseA.Body)
 		wB := wordSet(baseB.Body)
-		if similarity(wA, wB) >= 0.85 {
+		if similarity(wA, wB) >= 0.80 {
 			catchAll = true
 			notFoundWords = wA
 		}
@@ -141,8 +140,12 @@ func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 
 	rootResp, err := d.client.Get(ctx, base+"/")
 	rootWords := map[string]struct{}{}
+	var rootNormHash [32]byte
+	rootHasBody := false
 	if err == nil && rootResp != nil && len(rootResp.Body) > 0 {
 		rootWords = wordSet(rootResp.Body)
+		rootNormHash = normHash(rootResp.Body)
+		rootHasBody = true
 	}
 
 	type hit struct {
@@ -181,20 +184,29 @@ func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 				return
 			}
 
-			if resp.StatusCode == notFoundStatus {
-				if catchAll {
-					if similarity(wordSet(resp.Body), notFoundWords) >= 0.85 {
-						return
-					}
-				} else if len(resp.Body) == notFoundSize && sha256.Sum256(resp.Body) == notFoundHash {
-					return
-				} else if similarity(wordSet(resp.Body), wordSet(baseA.Body)) >= 0.90 {
+			// App-shell suppression runs independent of status codes: SPA
+			// catch-alls and WAFs may serve the same template with 200 for
+			// missing paths while the baseline probe saw a different
+			// status, so a status-equality gate alone misses them.
+			probeWords := wordSet(resp.Body)
+			if normHash(resp.Body) == notFoundHash {
+				return
+			}
+			if rootHasBody && normHash(resp.Body) == rootNormHash {
+				return
+			}
+			if catchAll {
+				if similarity(probeWords, notFoundWords) >= 0.80 {
 					return
 				}
+			} else if len(resp.Body) == notFoundSize && sha256.Sum256(normalizeBody(resp.Body)) == notFoundHash {
+				return
+			} else if similarity(probeWords, wordSet(baseA.Body)) >= 0.85 {
+				return
 			}
 
 			if len(rootWords) > 0 &&
-				similarity(wordSet(resp.Body), rootWords) >= 0.90 {
+				similarity(probeWords, rootWords) >= 0.85 {
 				return
 			}
 
@@ -208,6 +220,15 @@ func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	var findings []models.Finding
 	for _, h := range hits {
 		sev, conf := classify(h.p.Class)
+		// A probed data file (*.txt, *.xml, *.json) served back as HTML
+		// is usually the application shell, not the requested file. The
+		// shell filters above catch identical templates; when one slips
+		// through, cap confidence so it never reads as a confirmed
+		// exposure.
+		if expectsDataFile(h.p.Path) && isHTMLContent(h.resp.Header.Get("Content-Type")) &&
+			conf.Rank() > models.ConfidenceLow.Rank() {
+			conf = models.ConfidenceLow
+		}
 		findings = append(findings, models.Finding{
 			ID:          "dirs-exposed-" + slug(h.p.Path),
 			Title:       fmt.Sprintf("%s returned HTTP %d", h.p.Path, h.resp.StatusCode),
@@ -340,12 +361,50 @@ func wordSet(body []byte) map[string]struct{} {
 	if len(body) > cap {
 		body = body[:cap]
 	}
-	words := wordRe.FindAllString(strings.ToLower(string(body)), -1)
+	words := wordRe.FindAllString(strings.ToLower(string(normalizeBody(body))), -1)
 	set := make(map[string]struct{}, len(words))
 	for _, w := range words {
 		set[w] = struct{}{}
 	}
 	return set
+}
+
+// highEntropyRe matches long random-looking tokens: nonces, hashes,
+// UUIDs without dashes, inline integrity values, per-request IDs.
+// Stripping them before comparison lets two renders of the same
+// application shell match even when embedded secrets rotate per
+// request, while genuinely different pages keep distinct vocabularies.
+var highEntropyRe = regexp.MustCompile(`[A-Za-z0-9+/=_-]{16,}`)
+
+// normalizeBody removes high-entropy tokens so template comparison is
+// stable across renders.
+func normalizeBody(body []byte) []byte {
+	const cap = 100 << 10
+	if len(body) > cap {
+		body = body[:cap]
+	}
+	return highEntropyRe.ReplaceAll(body, nil)
+}
+
+// normHash hashes the normalized body for exact template matching.
+func normHash(body []byte) [32]byte {
+	return sha256.Sum256(normalizeBody(body))
+}
+
+// expectsDataFile reports whether the probed path is expected to serve
+// a plain data file rather than an HTML page.
+func expectsDataFile(path string) bool {
+	lower := strings.ToLower(path)
+	for _, ext := range []string{".txt", ".xml", ".json", ".yml", ".yaml", ".log"} {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
+}
+
+func isHTMLContent(ct string) bool {
+	return strings.Contains(strings.ToLower(ct), "text/html")
 }
 
 var wordRe = regexp.MustCompile(`[a-z]{3,}`)

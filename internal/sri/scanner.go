@@ -69,6 +69,44 @@ var linkHrefAttr = regexp.MustCompile(`(?i)\bhref\s*=\s*["']([^"'>\s]+)["']`)
 // anywhere in a tag string.
 var integrityAttrPattern = regexp.MustCompile(`(?i)\bintegrity\s*=\s*["']`)
 
+// sriIncompatibleHosts are cross-origin hosts that serve per-visitor or
+// per-User-Agent dynamic content, making Subresource Integrity hashes
+// impractical: a pinned hash would break legitimate loads.
+// fonts.googleapis.com negotiates CSS per User-Agent; Meta's SDKs are
+// per-request dynamic. Flagging these as "missing SRI" is a well-known
+// false positive, so ANPU skips them (and annotates third-party
+// detections — see SRIIncompatibleHost).
+var sriIncompatibleHosts = []string{
+	"fonts.googleapis.com",
+	"connect.facebook.net",
+	"www.facebook.com",
+	"connect.facebook.com",
+}
+
+// SRIIncompatibleHost reports whether SRI cannot be meaningfully applied
+// to assets on the given host. Shared with the Nuclei normalizer so
+// third-party missing-sri detections on these hosts get an explanatory
+// annotation instead of a bare remediation.
+func SRIIncompatibleHost(host string) bool {
+	h := strings.ToLower(strings.TrimSpace(host))
+	// Strip scheme, path, and port if present.
+	for _, prefix := range []string{"https://", "http://"} {
+		h = strings.TrimPrefix(h, prefix)
+	}
+	if i := strings.IndexAny(h, "/?#"); i >= 0 {
+		h = h[:i]
+	}
+	if i := strings.LastIndex(h, ":"); i >= 0 {
+		h = h[:i]
+	}
+	for _, blocked := range sriIncompatibleHosts {
+		if h == blocked || strings.HasSuffix(h, "."+blocked) {
+			return true
+		}
+	}
+	return false
+}
+
 // Scanner is the pipeline stage for SRI checking.
 type Scanner struct {
 	client *anpuhttp.Client
@@ -202,6 +240,9 @@ func extractMissingIntegrity(body, targetHost string) []assetRef {
 		if !isCrossOrigin(assetURL, targetHost) {
 			continue
 		}
+		if SRIIncompatibleHost(hostOf(assetURL)) {
+			continue // SRI impractical here — flagging it is a known FP
+		}
 		if integrityAttrPattern.MatchString(tag) {
 			continue // integrity= present — safe
 		}
@@ -221,6 +262,9 @@ func extractMissingIntegrity(body, targetHost string) []assetRef {
 		assetURL := hrefMatch[1]
 		if !isCrossOrigin(assetURL, targetHost) {
 			continue
+		}
+		if SRIIncompatibleHost(hostOf(assetURL)) {
+			continue // SRI impractical here — flagging it is a known FP
 		}
 		if integrityAttrPattern.MatchString(tag) {
 			continue

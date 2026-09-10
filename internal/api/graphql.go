@@ -1,15 +1,14 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 
+	anpuhttp "github.com/anpu-project/anpu/internal/http"
+	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/pkg/models"
 )
 
@@ -80,34 +79,31 @@ type gqlTypeRef struct {
 //
 // endpoint is the full GraphQL endpoint URL (e.g. https://api.example.com/graphql).
 // auth is the request headers to inject (from the scan's AuthContext).
+// client, when non-nil, is the anpuhttp client (redirect guards, proxy,
+// limiter, local-net policy); otherwise a default is built.
 // timeout caps the HTTP request; 15 s is a reasonable default.
-func IntrospectGraphQL(ctx context.Context, endpoint string, authHeaders map[string]string, timeout time.Duration) (*models.GraphQLSchema, []models.APIEndpoint, error) {
+func IntrospectGraphQL(ctx context.Context, endpoint string, authHeaders map[string]string, client *anpuhttp.Client, timeout time.Duration) (*models.GraphQLSchema, []models.APIEndpoint, error) {
 	payload, err := json.Marshal(map[string]string{"query": introspectionQuery})
 	if err != nil {
 		return nil, nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return nil, nil, err
+	if client == nil {
+		client = anpuhttp.NewClientWithLocalNetworkAllowed(scanner.AllowLocalNetwork)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	for k, v := range authHeaders {
-		req.Header.Set(k, v)
-	}
-
-	c := &http.Client{Timeout: timeout}
-	resp, err := c.Do(req)
+	tctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	resp, err := client.PostJSON(tctx, endpoint, string(payload), authHeaders)
 	if err != nil {
 		return nil, nil, fmt.Errorf("graphql introspect POST: %w", err)
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-	if err != nil {
-		return nil, nil, fmt.Errorf("graphql introspect read body: %w", err)
+	if resp == nil {
+		return nil, nil, fmt.Errorf("graphql introspect POST: empty response")
 	}
+	if resp.StatusCode != 200 {
+		return nil, nil, fmt.Errorf("graphql introspect status %d", resp.StatusCode)
+	}
+	body := resp.Body
 
 	var result introspectionResponse
 	if err := json.Unmarshal(body, &result); err != nil {

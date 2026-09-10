@@ -11,8 +11,8 @@ import (
 )
 
 // sqliRule detects SQL injection indicators using error-based detection.
-// It injects a single quote and a comment sequence and looks for
-// database error strings in the response — a low false-positive signal.
+// It fetches a baseline first and only flags error strings that APPEAR
+// after injection — pages that always render errors stay silent.
 //
 // Safety: low-impact — a single quote triggers a DB parse error on
 // vulnerable systems but cannot modify data.
@@ -21,7 +21,7 @@ type sqliRule struct{}
 func (r *sqliRule) ID() models.ActiveRuleID    { return "sqli-error-based" }
 func (r *sqliRule) Name() string               { return "SQL Injection Indicator (Error-Based)" }
 func (r *sqliRule) Safety() models.SafetyLevel { return models.SafetyLowImpact }
-func (r *sqliRule) RequestBudget() int         { return 2 }
+func (r *sqliRule) RequestBudget() int         { return 3 }
 
 // sqliPayload is a minimal probe that triggers a SQL parse error on most
 // databases without modifying any data.
@@ -48,6 +48,30 @@ var sqliErrorSignatures = []string{
 
 func (r *sqliRule) Test(ctx context.Context, client *anpuhttp.Client, v models.InputVector) (models.ActiveRuleResult, error) {
 	result := models.ActiveRuleResult{RuleID: r.ID(), Vector: v, Payload: sqliPayload}
+
+	// Baseline first: an error string that is already present without
+	// injection proves nothing — skip the vector instead of flagging.
+	var baseline string
+	switch v.Kind {
+	case models.VectorJSONBody:
+		jsonBody, buildErr := buildJSONBody(v.Name, v.OriginalValue)
+		if buildErr != nil {
+			return result, nil
+		}
+		resp, err := client.PostJSON(ctx, v.URL, jsonBody, nil)
+		result.RequestsMade++
+		if err != nil || resp == nil {
+			return result, nil
+		}
+		baseline = strings.ToLower(string(resp.Body))
+	default:
+		resp, err := client.Get(ctx, v.URL)
+		result.RequestsMade++
+		if err != nil || resp == nil {
+			return result, nil
+		}
+		baseline = strings.ToLower(string(resp.Body))
+	}
 
 	var (
 		resp *anpuhttp.Response
@@ -80,10 +104,12 @@ func (r *sqliRule) Test(ctx context.Context, client *anpuhttp.Client, v models.I
 
 	body := strings.ToLower(string(resp.Body))
 	for _, sig := range sqliErrorSignatures {
-		if strings.Contains(body, sig) {
+		// Baseline-subtracted: the signature must be NEW after
+		// injection, otherwise the page always renders it.
+		if strings.Contains(body, sig) && !strings.Contains(baseline, sig) {
 			result.Found = true
 			result.Evidence = fmt.Sprintf(
-				"Database error signature %q found in response (status %d) after injecting single-quote into parameter %q",
+				"Database error signature %q appeared in response (status %d) after injecting single-quote into parameter %q (absent in baseline)",
 				sig, resp.StatusCode, v.Name,
 			)
 			break
@@ -96,9 +122,9 @@ func (r *sqliRule) ToFinding(res models.ActiveRuleResult, target string) models.
 	return models.Finding{
 		ID:              fmt.Sprintf("active-sqli-%d", time.Now().UnixNano()),
 		Title:           fmt.Sprintf("SQL injection indicator in parameter %q at %s", res.Vector.Name, res.Vector.URL),
-		Description:     fmt.Sprintf("Injecting a single-quote into parameter %q triggered a database error message in the response, indicating the parameter value is interpolated into a SQL query without sanitization.", res.Vector.Name),
-		Severity:        models.SeverityCritical,
-		Confidence:      models.ConfidenceHigh,
+		Description:     fmt.Sprintf("Injecting a single-quote into parameter %q triggered a database error message in the response (absent before injection), indicating the parameter value is interpolated into a SQL query without sanitization.", res.Vector.Name),
+		Severity:        models.SeverityHigh,
+		Confidence:      models.ConfidenceMedium,
 		Category:        models.CategoryVulnerability,
 		CWE:             "CWE-89",
 		OWASP:           "A03:2021 - Injection",
@@ -106,7 +132,7 @@ func (r *sqliRule) ToFinding(res models.ActiveRuleResult, target string) models.
 		URL:             res.Vector.URL,
 		Parameter:       res.Vector.Name,
 		Source:          models.SourceActive,
-		DetectionMethod: "error-based SQL injection: single-quote probe triggered a recognisable database error string",
+		DetectionMethod: "error-based SQL injection: baseline-subtracted single-quote probe triggered a recognisable database error string",
 		Evidence:        models.Evidence{Observed: res.Evidence, Location: res.Vector.URL, RequestSummary: fmt.Sprintf("GET %s (payload in %s=%q)", res.Vector.URL, res.Vector.Name, res.Payload)},
 		Impact:          "An attacker can read, modify, or delete database contents, bypass authentication, and potentially execute OS commands depending on the database and configuration.",
 		Remediation:     "Use parameterised queries or prepared statements. Never interpolate user input directly into SQL. Apply least-privilege DB accounts.",

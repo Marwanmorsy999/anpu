@@ -36,6 +36,8 @@ func ExtractAPIVectors(ep models.APIEndpoint) []models.InputVector {
 				Kind:          models.VectorQueryParam,
 				Name:          p.Name,
 				OriginalValue: original,
+				Schema:        p.Schema,
+				Required:      p.Required,
 			})
 
 		case models.APIParamInPath:
@@ -44,6 +46,8 @@ func ExtractAPIVectors(ep models.APIEndpoint) []models.InputVector {
 				Kind:          models.VectorPathSegment,
 				Name:          p.Name,
 				OriginalValue: original,
+				Schema:        p.Schema,
+				Required:      p.Required,
 			})
 
 		case models.APIParamInBody:
@@ -54,6 +58,8 @@ func ExtractAPIVectors(ep models.APIEndpoint) []models.InputVector {
 				Kind:          models.VectorJSONBody,
 				Name:          p.Name,
 				OriginalValue: original,
+				Schema:        p.Schema,
+				Required:      p.Required,
 			})
 
 		case models.APIParamInHeader:
@@ -64,8 +70,19 @@ func ExtractAPIVectors(ep models.APIEndpoint) []models.InputVector {
 					Kind:          models.VectorHeader,
 					Name:          p.Name,
 					OriginalValue: original,
+					Schema:        p.Schema,
+					Required:      p.Required,
 				})
 			}
+		case "grpc":
+			out = append(out, models.InputVector{
+				URL:           ep.URL,
+				Kind:          models.VectorGRPC,
+				Name:          p.Name,
+				OriginalValue: original,
+				Schema:        p.Schema,
+				Required:      p.Required,
+			})
 		}
 	}
 

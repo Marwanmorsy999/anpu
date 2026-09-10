@@ -83,25 +83,65 @@ func (d *Discovery) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.S
 	return scanner.StageResult{Findings: findings, Endpoints: endpoints, Warnings: warnings}, nil
 }
 
+// endpointKey is URL+Method for dedup.
+func endpointKey(ep models.Endpoint) string {
+	return ep.URL + "|" + ep.Method
+}
+
+// paramKey compares name+in+schema for params union.
+func paramKey(p models.APIParam) string {
+	return string(p.In) + "|" + p.Name + "|" + p.Schema
+}
+
+func unionParams(dst, src []models.APIParam) []models.APIParam {
+	seen := map[string]bool{}
+	for _, p := range dst {
+		seen[paramKey(p)] = true
+	}
+	for _, p := range src {
+		k := paramKey(p)
+		if !seen[k] {
+			seen[k] = true
+			dst = append(dst, p)
+		}
+	}
+	return dst
+}
+
+func mergeSources(dst, src []string) []string {
+	seen := map[string]bool{}
+	for _, s := range dst {
+		seen[s] = true
+	}
+	for _, s := range src {
+		if !seen[s] {
+			seen[s] = true
+			dst = append(dst, s)
+		}
+	}
+	return dst
+}
+
 // gatedEndpoints returns endpoints that appear in authEndpoints but not in
 // anonEndpoints — i.e. URLs only reachable after authentication.
+// Dedup key is URL+Method.
 func gatedEndpoints(anon, auth []models.Endpoint) []models.Endpoint {
 	anonSet := make(map[string]bool, len(anon))
 	for _, ep := range anon {
-		anonSet[ep.URL] = true
+		anonSet[endpointKey(ep)] = true
 	}
 	var gated []models.Endpoint
 	for _, ep := range auth {
-		if !anonSet[ep.URL] {
+		if !anonSet[endpointKey(ep)] {
 			gated = append(gated, ep)
 		}
 	}
 	return gated
 }
 
-// mergeEndpoints combines both endpoint slices, de-duplicating by URL and
-// merging source lists. Auth-only endpoints get "crawler-authenticated"
-// appended to their source list.
+// mergeEndpoints combines both endpoint slices, de-duplicating by URL+Method
+// and merging source lists plus params union (name+in+schema).
+// Auth-only endpoints get "crawler-authenticated" appended.
 func mergeEndpoints(anon, auth []models.Endpoint) []models.Endpoint {
 	index := make(map[string]*models.Endpoint, len(anon))
 	out := make([]models.Endpoint, 0, len(anon)+len(auth))
@@ -109,11 +149,12 @@ func mergeEndpoints(anon, auth []models.Endpoint) []models.Endpoint {
 	for i := range anon {
 		ep := anon[i]
 		out = append(out, ep)
-		index[ep.URL] = &out[len(out)-1]
+		index[endpointKey(ep)] = &out[len(out)-1]
 	}
 	for _, ep := range auth {
-		if existing, ok := index[ep.URL]; ok {
-			// Already known — add auth source tag if not present.
+		if existing, ok := index[endpointKey(ep)]; ok {
+			// Already known — merge sources, params, and auth tag.
+			existing.Sources = mergeSources(existing.Sources, ep.Sources)
 			hasAuth := false
 			for _, s := range existing.Sources {
 				if s == "crawler-authenticated" {
@@ -124,11 +165,12 @@ func mergeEndpoints(anon, auth []models.Endpoint) []models.Endpoint {
 			if !hasAuth {
 				existing.Sources = append(existing.Sources, "crawler-authenticated")
 			}
+			existing.Params = unionParams(existing.Params, ep.Params)
 		} else {
 			// Auth-only endpoint: tag it clearly.
 			ep.Sources = append(ep.Sources, "crawler-authenticated")
 			out = append(out, ep)
-			index[ep.URL] = &out[len(out)-1]
+			index[endpointKey(ep)] = &out[len(out)-1]
 		}
 	}
 	return out

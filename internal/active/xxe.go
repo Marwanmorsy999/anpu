@@ -54,7 +54,7 @@ type xxeRule struct{}
 func (r *xxeRule) ID() models.ActiveRuleID    { return "xxe-injection" }
 func (r *xxeRule) Name() string               { return "XML External Entity (XXE) Injection" }
 func (r *xxeRule) Safety() models.SafetyLevel { return models.SafetyLowImpact }
-func (r *xxeRule) RequestBudget() int         { return 2 }
+func (r *xxeRule) RequestBudget() int         { return 3 }
 
 // xxeErrorSignatures are parser error strings that indicate the server-side
 // XML parser processed and rejected the DOCTYPE (weaker signal than reflection).
@@ -96,7 +96,17 @@ var xxeStackTraceSignatures = []string{
 // xxeCanaryEntity is the entity name we define in the DOCTYPE.
 // The value is a deterministic-looking path segment; the rule generates
 // a per-invocation nonce appended to this prefix.
+// Non-ghost keeps `anpu-xxe-canary` (YARA allowlist); ghost uses
+// XXEEntity() from canary.go (no `anpu` substring).
 const xxeCanaryEntity = "anpu-xxe-canary"
+
+// xxeEntityForScan returns the entity name for this scan.
+func xxeEntityForScan() string {
+	if !GhostEnabled {
+		return xxeCanaryEntity
+	}
+	return XXEEntity()
+}
 
 // buildXXEPayload constructs a well-formed XML document with a DOCTYPE
 // that defines an internal entity named xxeCanaryEntity with value nonce,
@@ -109,18 +119,24 @@ const xxeCanaryEntity = "anpu-xxe-canary"
 // We use an internal entity (value is a literal string, not a URI) so the
 // probe never makes outbound connections — safe, no OOB infrastructure needed.
 func buildXXEPayload(nonce string) string {
+	entity := xxeEntityForScan()
+	root := XXERootTag()
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE anpu [
+<!DOCTYPE %s [
   <!ENTITY %s "%s">
 ]>
-<anpu><probe>&%s;</probe></anpu>`,
-		xxeCanaryEntity, nonce, xxeCanaryEntity)
+<%s><probe>&%s;</probe></%s>`,
+		root, entity, nonce, root, entity, root)
 }
 
 // xxeNonce generates a random 8-byte hex string used as the canary value.
 // The nonce is short enough to be practical as an entity value but
 // distinctive enough to avoid false-positive collisions with page content.
+// Ghost mode uses XXENonceValue() (no `anpu` substring).
 func xxeNonce() string {
+	if GhostEnabled {
+		return XXENonceValue()
+	}
 	b := make([]byte, 8)
 	if _, err := rand.Read(b); err != nil {
 		return "anpucanary12345678"
@@ -215,6 +231,38 @@ func (r *xxeRule) Test(ctx context.Context, client *anpuhttp.Client, v models.In
 		return result, nil
 	}
 
+	// Signal 5 (HIGH confidence): out-of-band confirmation. When an
+	// interactsh session is active, send one external-entity probe whose
+	// SYSTEM identifier is the canary URL; a callback proves the parser
+	// resolved the external entity (the XXE exfiltration primitive).
+	if InteractSession != nil && result.RequestsMade < r.RequestBudget() {
+		nonce := oobNonce("anpuxxe")
+		name := XXEOOBName(nonce)
+		root := XXERootTag()
+		oobPayload := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE %s [
+  <!ENTITY %% %s SYSTEM "%s">
+  %%%s;
+]>
+<%s><probe>oob</probe></%s>`, root, name, InteractSession.CallbackURL(nonce), name, root, root)
+		result.Payload = oobPayload
+		if _, perr := client.PostXML(ctx, v.URL, oobPayload, nil); perr == nil {
+			result.RequestsMade++
+			if proto, remote, ok := InteractSession.WaitForCallback(nonce, oobWait); ok {
+				result.Found = true
+				result.OOBConfirmed = true
+				result.OOBProtocol = proto
+				result.OOBRemote = remote
+				result.Evidence = fmt.Sprintf(
+					"OOB-confirmed XXE: the XML parser resolved an external entity to the canary URL (nonce %s); "+
+						"interactsh observed a %s callback from %s. External entity expansion is proven.",
+					nonce, proto, remote,
+				)
+				return result, nil
+			}
+		}
+	}
+
 	return result, nil
 }
 
@@ -225,7 +273,12 @@ func (r *xxeRule) ToFinding(res models.ActiveRuleResult, target string) models.F
 	title := "XML External Entity (XXE) injection indicator"
 
 	ev := res.Evidence
+	method := "XXE probe: DOCTYPE with internal entity reference; detected via reflection, parser error string, or status change"
 	switch {
+	case res.OOBConfirmed:
+		confidence = models.ConfidenceHigh
+		title = "XML External Entity (XXE) injection — external resolution confirmed out-of-band"
+		method = "XXE probe: external parameter entity to canary URL; outbound callback observed (CONFIRMED)"
 	case strings.Contains(ev, "entity reflection confirmed"):
 		confidence = models.ConfidenceHigh
 		title = "XML External Entity (XXE) injection — entity expansion confirmed"
@@ -256,7 +309,7 @@ func (r *xxeRule) ToFinding(res models.ActiveRuleResult, target string) models.F
 		URL:             res.Vector.URL,
 		Parameter:       "XML request body",
 		Source:          models.SourceActive,
-		DetectionMethod: "XXE probe: DOCTYPE with internal entity reference; detected via reflection, parser error string, or status change",
+		DetectionMethod: method,
 		Evidence: models.Evidence{
 			Observed:       res.Evidence,
 			Location:       res.Vector.URL,

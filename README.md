@@ -56,6 +56,8 @@ ANPU is a local-first security analysis CLI. It combines its own passive and low
 
 ANPU is **not** a from-scratch replacement for every security scanner. Its value is the orchestration and intelligence layer that turns multiple security signals into one understandable assessment.
 
+Scope notes: the scan grade is driven only by target findings — local-code results (`ANPU_CODE_DIR`/`ANPU_APK`) render as an unscored appendix and never move the grade. Permanently out of scope by policy: brute-forcers, exploit frameworks, DoS tunings, keyed APIs, and REPL-driven consoles; file-read/dump tools that need operator-owned inputs stay adversarial-gated natives-or-wrappers instead.
+
 ## 2. What it does
 
 - **Recon**: DNS resolution, robots.txt/sitemap.xml parsing, redirect-chain observation, and source-map exposure detection.
@@ -107,8 +109,8 @@ docker run --rm -v "$(pwd)/reports:/reports" anpu scan https://example.com --out
 # Safe (default) profile
 ./anpu scan https://example.com
 
-# Standard profile with machine-readable output
-./anpu scan https://example.com --profile standard --json --sarif
+# Advanced profile with machine-readable output
+./anpu scan https://example.com --profile advanced --json --sarif
 
 # View past scans
 ./anpu history
@@ -120,12 +122,12 @@ docker run --rm -v "$(pwd)/reports:/reports" anpu scan https://example.com --out
 ./anpu diff scan-old scan-new
 ```
 
-`safe` is the default and is designed for passive/low-impact analysis. `standard` and `deep` enable more active checks. Only use ANPU against systems you own or are explicitly authorized to test.
+`safe` is the default and is designed for passive/low-impact analysis (API/AuthZ anonymous probing as designed). `advanced` and `ultra` enable more active checks (aliases: `standard`→`advanced`, `deep`→`ultra`). Only use ANPU against systems you own or are explicitly authorized to test.
 
 ## 5. Architecture
 
 ```text
-cmd/anpu/              CLI entry point (scan, history, show, diff, tools)
+cmd/anpu/              CLI entry point (scan, safe, advanced, ultra, history, show, diff, watch, tools, search)
 
 internal/
   scanner/              scanner interface, target validation, pipeline orchestrator
@@ -145,7 +147,7 @@ internal/
   findings/             deduplication engine
   scoring/              transparent risk scoring
   storage/              SQLite persistence for scan history
-  integrations/         Nuclei integration + prepared ZAP interface
+  integrations/         Nuclei + ZAP (Docker/binary with embedded fallback) integrations
   reporting/            JSON / SARIF / HTML report generation and terminal UI
   config/               YAML config loading and CLI-flag resolution
 
@@ -160,9 +162,11 @@ docs/                   CLI, configuration, scanner, development, release, scori
 
 | Profile | Passive analysis | Active engines | Nuclei | Purpose |
 |---|:---:|:---:|:---:|---|
-| `safe` (default) | ✅ | Limited | ❌ by default | Low-impact baseline |
-| `standard` | ✅ | ✅ | ✅ when available | Broader security assessment |
-| `deep` | ✅ | ✅ | ✅ when available | Broader discovery and active analysis |
+| `safe` (default) | ✅ | Limited (API/AuthZ anonymous probing as designed) | ❌ by default | Low-impact baseline |
+| `advanced` (`standard` alias) | ✅ | ✅ | ✅ when available | Broader security assessment |
+| `ultra` (`deep` alias) | ✅ | ✅ | ✅ when available | Broader discovery and active analysis |
+| `adversarial` (`--adversarial --confirm-authorized` on authorized ultra) | ✅ | ✅ hazardous stateful (header/body/WS, JWT/mass-assign/race/smuggling/proto-pollute, sqli boolean differential + bundle, alias flood) | ✅ when available | Max + volume → Grade F 9.0, Benign/LowImpact only, no data destruction |
+| `ghost` (`--ghost --proxy-pool pool.txt --oob-host <private> --rate-limit 2` with ultra + adversarial) | ✅ | ✅ undetectable (Chrome 131 JA3, Pareto jitter, no-anpu canary, proxy rotation, 40-UA pool) | ✅ when available | Max power + volume → Grade F 9.0, authorized targets only |
 
 Module toggles in `anpu.yaml` can further enable or disable individual engines. `--no-nuclei` and `--no-zap` override integration settings for the current run.
 
@@ -178,7 +182,7 @@ See [docs/configuration.md](docs/configuration.md) for profile/module precedence
 ./anpu diff scan-old scan-new --json --output ./reports/diff.json
 
 # Fail CI when a scan contains high or critical findings
-./anpu scan https://example.com --profile standard --sarif --fail-on high
+./anpu scan https://example.com --profile advanced --sarif --fail-on high
 ```
 
 `--fail-on` exits non-zero after reports and scan history have been written. Supported thresholds are `low`, `medium`, `high`, and `critical`; the default is `none`.
@@ -203,7 +207,7 @@ Nuclei is optional. If a `nuclei` executable is available on `PATH`, ANPU can in
 
 ### OWASP ZAP
 
-The ZAP integration is currently **planned**. The interface exists as an extension point, but the ZAP driver is not implemented yet.
+ZAP is implemented via Docker/zap.sh when present, with an embedded passive fallback (clickjacking, robots, mixed content, error pages) otherwise. Check `anpu tools` for status.
 
 ## 10. Development
 

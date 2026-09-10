@@ -66,7 +66,7 @@ So the bonus is `0.0` for one source, `0.15` for two sources, `0.30` for three, 
 
 ## Aggregate scan score
 
-The overall scan score is not simply the average of findings. ANPU uses the highest individual finding score and then adds a volume bonus for medium-or-higher findings:
+The overall scan score is not simply the average of findings. ANPU uses the highest individual finding score and then adds a volume bonus for medium-or-higher findings: 
 
 ```text
 Aggregate = min(Max Finding Score + Volume Bonus, 10.0)
@@ -97,6 +97,10 @@ Finding score = (4.5 × 1.00) + 0.1 + 0.0
 ```
 
 The final scan score may be higher if other medium-or-higher findings are present because of the aggregate volume bonus.
+
+## Local-code appendix exclusion
+
+Findings about operator-supplied local material (`ANPU_CODE_DIR` checkout, `ANPU_APK` file) are partitioned into `code_findings` at merge time and rendered as a clearly-labeled unscored appendix. They are scored for display with the same function, but they are never counted (`severity_counts` covers target findings only), never aggregated into `risk_score`, never persisted to history, and therefore never diffed, queried, or trend-scored. The grade is driven only by target findings: a dirty local checkout cannot move the target's grade.
 
 ## Why transparency matters
 

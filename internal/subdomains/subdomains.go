@@ -58,6 +58,10 @@ type crtshResponse struct {
 }
 
 func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+	// Per-stage deadline: subdomains ≤60s total.
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
 	host := strings.ToLower(strings.TrimSuffix(sc.Target.Host, "."))
 	if host == "" || !strings.Contains(host, ".") {
 		return scanner.StageResult{}, nil
@@ -88,9 +92,20 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	}
 	collect(ctNames)
 
+	// Keyless passive indexes (Common Crawl, urlscan, CertSpotter,
+	// hackertarget, Anubis-DB) — all profiles, zero target traffic.
+	passiveNames, passiveWarns := s.queryPassiveSources(ctx, host)
+	warnings = append(warnings, passiveWarns...)
+	collect(passiveNames)
+
+	// dnsgen-style permutations on standard profile and up (never safe).
+	if sc.Config.Profile.Normalize() != models.ProfileSafe {
+		collect(permutate(host, foundMapKeys(found)))
+	}
+
 	// dnsBrute is already internally concurrent; wait for it before taking
 	// the candidate snapshot so deep-profile results cannot be missed.
-	if sc.Config.Profile == models.ProfileDeep {
+	if sc.Config.Profile.Normalize() == models.ProfileUltra {
 		collect(s.dnsBrute(ctx, host))
 	}
 
@@ -107,15 +122,15 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	findings := []models.Finding{{
 		ID:              "subdomains-discovered",
 		Title:           fmt.Sprintf("%d live subdomain(s) discovered", len(live)),
-		Description:     fmt.Sprintf("Certificate Transparency logs%s revealed hostnames under %q that resolve in public DNS. Each is part of the organization's internet-facing attack surface and should be inventoried and kept patched.", dnsBruteSuffix(sc.Config.Profile), host),
+		Description:     fmt.Sprintf("Passive certificate, crawl and search indexes%s revealed hostnames under %q that resolve in public DNS. Each is part of the organization's internet-facing attack surface and should be inventoried and kept patched.", enumSuffix(sc.Config.Profile), host),
 		Severity:        models.SeverityLow,
 		Confidence:      models.ConfidenceHigh,
 		Category:        models.CategoryExposure,
 		Target:          sc.Target.Raw,
 		URL:             sc.Target.Raw,
-		Evidence:        models.Evidence{Observed: strings.Join(shown, "\n") + extraSuffix(extra), Location: "DNS resolution + Certificate Transparency logs"},
+		Evidence:        models.Evidence{Observed: strings.Join(shown, "\n") + extraSuffix(extra), Location: "DNS resolution + passive subdomain indexes"},
 		Source:          models.SourceCustom,
-		DetectionMethod: "subdomain enumeration (CT logs + DNS)",
+		DetectionMethod: "subdomain enumeration (passive indexes + DNS)",
 		Impact:          "Forgotten or unmonitored subdomains frequently run outdated software and are a common initial-access path.",
 		Remediation:     "Inventory all subdomains; decommission unused hosts and keep remaining ones behind the same patching/monitoring regime as primary assets.",
 	}}
@@ -212,11 +227,15 @@ func foundMapKeys(m map[string]bool) []string {
 	return out
 }
 
-func dnsBruteSuffix(p models.Profile) string {
-	if p == models.ProfileDeep {
-		return " and DNS brute-forcing"
+func enumSuffix(p models.Profile) string {
+	switch p.Normalize() {
+	case models.ProfileUltra:
+		return ", name permutations and DNS brute-forcing"
+	case models.ProfileSafe:
+		return ""
+	default:
+		return " and name permutations"
 	}
-	return ""
 }
 func extraSuffix(extra int) string {
 	if extra > 0 {

@@ -35,10 +35,26 @@ var crlfPayloads = []string{
 	"%0d%0a " + crlfCanaryHeader + ": " + crlfCanaryValue,
 }
 
+// crlfPayloadsForScan returns the CRLF payloads and header name for this
+// scan. Ghost mode uses CRLFCanaryHeader() (no `anpu` substring).
+func crlfPayloadsForScan() ([]string, string) {
+	if !GhostEnabled {
+		return crlfPayloads, crlfCanaryHeader
+	}
+	header := CRLFCanaryHeader()
+	return []string{
+		"\r\n" + header + ": " + crlfCanaryValue,
+		"%0d%0a" + header + ": " + crlfCanaryValue,
+		"%0D%0A" + header + ": " + crlfCanaryValue,
+		"%0d%0a " + header + ": " + crlfCanaryValue,
+	}, header
+}
+
 func (r *crlfRule) Test(ctx context.Context, client *anpuhttp.Client, v models.InputVector) (models.ActiveRuleResult, error) {
 	result := models.ActiveRuleResult{RuleID: r.ID(), Vector: v}
 
-	for _, payload := range crlfPayloads {
+	payloads, header := crlfPayloadsForScan()
+	for _, payload := range payloads {
 		if result.RequestsMade >= r.RequestBudget() {
 			break
 		}
@@ -53,24 +69,24 @@ func (r *crlfRule) Test(ctx context.Context, client *anpuhttp.Client, v models.I
 		}
 
 		// Check if our injected header appears in the response headers.
-		if resp.Header.Get(crlfCanaryHeader) == crlfCanaryValue {
+		if resp.Header.Get(header) == crlfCanaryValue {
 			result.Found = true
 			result.Payload = payload
 			result.Evidence = fmt.Sprintf(
 				"Injected header %q: %q appeared in response headers after CRLF injection payload (status %d)",
-				crlfCanaryHeader, crlfCanaryValue, resp.StatusCode,
+				header, crlfCanaryValue, resp.StatusCode,
 			)
 			return result, nil
 		}
 
 		// Also check the response body for header-splitting evidence.
 		body := string(resp.Body)
-		if strings.Contains(strings.ToLower(body), strings.ToLower(crlfCanaryHeader)) {
+		if strings.Contains(strings.ToLower(body), strings.ToLower(header)) {
 			result.Found = true
 			result.Payload = payload
 			result.Evidence = fmt.Sprintf(
 				"Canary header name %q reflected in response body after CRLF payload (status %d) — possible log injection",
-				crlfCanaryHeader, resp.StatusCode,
+				header, resp.StatusCode,
 			)
 			return result, nil
 		}

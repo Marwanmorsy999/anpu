@@ -29,13 +29,29 @@ func (r *xssRule) RequestBudget() int         { return 2 }
 
 // xssCanary is injected as a value; we look for it reflected unescaped.
 // Using a non-executable tag means no JS runs even if reflected in a browser.
+// Ghost mode replaces the anpu prefix via canary.go (no `anpu-` substring).
 const xssCanary = `anpu-xss-<b id="anpucanary">`
 
 // xssDetect is the lowercase form we search for in responses.
 const xssDetect = `<b id="anpucanary">`
 
 func (r *xssRule) Test(ctx context.Context, client *anpuhttp.Client, v models.InputVector) (models.ActiveRuleResult, error) {
-	result := models.ActiveRuleResult{RuleID: r.ID(), Vector: v, Payload: xssCanary}
+	canary, detect := xssCanary, xssDetect
+	singleDetect := `<b id='anpucanary'>`
+	if GhostEnabled {
+		canary, detect = XSSCanary()
+		// Derive single-quote variant from the same id
+		// detect is like <b id="abcd1234"> → extract id
+		id := detect
+		if idx := strings.Index(detect, `"`); idx >= 0 {
+			rest := detect[idx+1:]
+			if end := strings.Index(rest, `"`); end >= 0 {
+				id = rest[:end]
+				singleDetect = strings.Replace(detect, `"`+id+`"`, `'`+id+`'`, 1)
+			}
+		}
+	}
+	result := models.ActiveRuleResult{RuleID: r.ID(), Vector: v, Payload: canary}
 
 	var (
 		resp *anpuhttp.Response
@@ -47,14 +63,14 @@ func (r *xssRule) Test(ctx context.Context, client *anpuhttp.Client, v models.In
 		// Build a proper JSON body without HTML-escaping the canary.
 		// json.NewEncoder with SetEscapeHTML(false) preserves < > & verbatim
 		// so the canary reaches the server exactly as written.
-		jsonBody, buildErr := buildJSONBody(v.Name, xssCanary)
+		jsonBody, buildErr := buildJSONBody(v.Name, canary)
 		if buildErr != nil {
 			return result, nil
 		}
 		resp, err = client.PostJSON(ctx, v.URL, jsonBody, nil)
 		result.RequestsMade++
 	default:
-		injected, buildErr := buildInjectedURL(v, xssCanary)
+		injected, buildErr := buildInjectedURL(v, canary)
 		if buildErr != nil {
 			return result, nil
 		}
@@ -68,12 +84,12 @@ func (r *xssRule) Test(ctx context.Context, client *anpuhttp.Client, v models.In
 
 	body := strings.ToLower(string(resp.Body))
 	// Check for unescaped reflection — look for the tag without HTML entity encoding.
-	if strings.Contains(body, xssDetect) ||
-		strings.Contains(body, `<b id='anpucanary'>`) {
+	if strings.Contains(body, strings.ToLower(detect)) ||
+		strings.Contains(body, strings.ToLower(singleDetect)) {
 		result.Found = true
 		result.Evidence = fmt.Sprintf(
 			"Canary %q reflected unescaped in response body (status %d, content-type: %s)",
-			xssCanary, resp.StatusCode, resp.Header.Get("Content-Type"),
+			canary, resp.StatusCode, resp.Header.Get("Content-Type"),
 		)
 	}
 	return result, nil

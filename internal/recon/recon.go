@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -17,6 +18,10 @@ import (
 	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/pkg/models"
 )
+
+func parseURL(raw string) (*url.URL, error) {
+	return url.Parse(raw)
+}
 
 // Recon implements scanner.Scanner for the recon pipeline stage.
 type Recon struct {
@@ -62,9 +67,19 @@ func (r *Recon) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Stage
 	findings = append(findings, robotsFindings...)
 	endpoints = append(endpoints, robotsEndpoints...)
 
+	// security.txt (RFC 9116) — declares who to contact about vulnerabilities.
+	findings = append(findings, r.fetchSecurityTxt(ctx, sc)...)
+
 	// sitemap.xml
 	sitemapEndpoints := r.fetchSitemap(ctx, sc)
 	endpoints = append(endpoints, sitemapEndpoints...)
+
+	// Historical URLs from public archives (passive — no target
+	// traffic). Seeds the crawler with retired endpoints and old
+	// parameters the live app no longer links to.
+	historyEndpoints, historyWarnings := fetchHistory(ctx, r.client, sc.Target.Host)
+	endpoints = append(endpoints, historyEndpoints...)
+	warnings = append(warnings, historyWarnings...)
 
 	// Redirect chain observation on the target itself.
 	resp, err := r.client.Get(ctx, sc.Target.Raw)
@@ -191,6 +206,50 @@ func (r *Recon) fetchRobots(ctx context.Context, sc *scanner.ScanContext) ([]mod
 	return findings, endpoints
 }
 
+// fetchSecurityTxt fetches /.well-known/security.txt (RFC 9116). A valid
+// file with a Contact: directive is good practice (info finding with the
+// contact for the report reader); a missing file produces nothing —
+// publication is encouraged but optional.
+func (r *Recon) fetchSecurityTxt(ctx context.Context, sc *scanner.ScanContext) []models.Finding {
+	secURL := joinURL(sc.Target.Raw, "/.well-known/security.txt")
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	resp, err := r.client.Get(ctx, secURL)
+	if err != nil || resp.StatusCode != 200 || len(resp.Body) == 0 {
+		return nil
+	}
+	body := string(resp.Body)
+	if len(body) > 8*1024 {
+		body = body[:8*1024]
+	}
+	contact := ""
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if idx := strings.Index(line, ":"); idx > 0 &&
+			strings.EqualFold(strings.TrimSpace(line[:idx]), "Contact") {
+			contact = strings.TrimSpace(line[idx+1:])
+			break
+		}
+	}
+	if contact == "" {
+		return nil
+	}
+	return []models.Finding{{
+		ID:              "recon-security-txt",
+		Title:           "security.txt contact published (RFC 9116)",
+		Description:     "The site publishes /.well-known/security.txt with a Contact directive, giving researchers a defined channel to report vulnerabilities. This is security hygiene worth keeping.",
+		Severity:        models.SeverityInfo,
+		Confidence:      models.ConfidenceHigh,
+		Category:        models.CategoryExposure,
+		Target:          sc.Target.Raw,
+		URL:             secURL,
+		Evidence:        models.Evidence{Observed: "Contact: " + truncate(contact, 200), Location: "/.well-known/security.txt"},
+		Source:          models.SourceRecon,
+		DetectionMethod: "fetch of /.well-known/security.txt",
+	}}
+}
+
 func (r *Recon) fetchSitemap(ctx context.Context, sc *scanner.ScanContext) []models.Endpoint {
 	sitemapURL := joinURL(sc.Target.Raw, "/sitemap.xml")
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -235,12 +294,19 @@ func categorizePath(p string) models.EndpointCategory {
 	}
 }
 
+func hostRoot(base string) string {
+	if u, err := parseURL(base); err == nil && u.Scheme != "" && u.Host != "" {
+		return u.Scheme + "://" + u.Host
+	}
+	return strings.TrimRight(base, "/")
+}
+
 func joinURL(base, path string) string {
-	base = strings.TrimRight(base, "/")
+	root := hostRoot(base)
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	return base + path
+	return root + path
 }
 
 func safeSlug(s string) string {

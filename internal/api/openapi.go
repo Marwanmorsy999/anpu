@@ -14,15 +14,19 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
+	anpuhttp "github.com/anpu-project/anpu/internal/http"
+	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/pkg/models"
+	"gopkg.in/yaml.v3"
 )
 
 // openAPIDoc is the minimal subset of an OpenAPI 3.x / Swagger 2.x
@@ -99,17 +103,36 @@ type propertySchema struct {
 // baseURL overrides the server base detected from the document; pass ""
 // to auto-detect.
 func LoadOpenAPI(source string, baseURL string) ([]models.APIEndpoint, error) {
-	raw, err := readSource(source)
+	return LoadOpenAPIWithAuth(context.Background(), source, baseURL, nil, nil)
+}
+
+// LoadOpenAPIWithAuth is the auth-aware variant used by the scanner pipeline.
+// It forwards parent ctx and authHeaders via anpuhttp (proxy/limiter/local-net
+// guards) so private schema URLs requiring Authorization succeed.
+func LoadOpenAPIWithAuth(ctx context.Context, source string, baseURL string, authHeaders map[string]string, client *anpuhttp.Client) ([]models.APIEndpoint, error) {
+	raw, err := readSource(ctx, source, authHeaders, client)
 	if err != nil {
 		return nil, fmt.Errorf("openapi: read %q: %w", source, err)
 	}
+	return parseOpenAPIDocument(raw, source, baseURL)
+}
 
+// parseOpenAPIDocument parses an already-fetched OpenAPI / Swagger
+// document. It lets callers (e.g. zero-config discovery) validate a
+// response body without fetching it twice. JSON is tried first with a
+// YAML→JSON pre-pass fallback (openapi.yaml, swagger.yaml).
+func parseOpenAPIDocument(raw []byte, source string, baseURL string) ([]models.APIEndpoint, error) {
 	var doc openAPIDoc
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		return nil, fmt.Errorf("openapi: parse JSON from %q: %w", source, err)
+	if err := json.Unmarshal(raw, &doc); err != nil || (doc.Paths == nil && doc.OpenAPI == "" && doc.Swagger == "") {
+		// YAML pre-pass: unmarshal YAML into the same struct, then continue.
+		var ydoc openAPIDoc
+		if yerr := yaml.Unmarshal(raw, &ydoc); yerr == nil && !(ydoc.Paths == nil && ydoc.OpenAPI == "" && ydoc.Swagger == "") {
+			doc = ydoc
+		} else if err != nil {
+			return nil, fmt.Errorf("openapi: parse JSON/YAML from %q: %w", source, err)
+		}
 	}
 
-	// Try YAML if JSON decode failed to populate the paths field.
 	if doc.Paths == nil && doc.OpenAPI == "" && doc.Swagger == "" {
 		return nil, fmt.Errorf("openapi: %q does not appear to be an OpenAPI/Swagger document (no 'openapi', 'swagger', or 'paths' field)", source)
 	}
@@ -170,6 +193,17 @@ func buildAPIEndpoint(base, path, method string, op *operation, sourceLabel stri
 		ep.Params = append(ep.Params, param)
 	}
 
+	// Seed query params with example values into the URL (mirroring
+	// resolvePath for path params): schema URLs must be realistic
+	// requests — gates and rules baseline against ep.URL.
+	if qs := seedQuery(ep.Params); qs != "" {
+		sep := "?"
+		if strings.Contains(fullURL, "?") {
+			sep = "&"
+		}
+		ep.URL = fullURL + sep + qs
+	}
+
 	if op.RequestBody != nil {
 		for ct, media := range op.RequestBody.Content {
 			ep.ContentType = ct
@@ -187,6 +221,23 @@ func buildAPIEndpoint(base, path, method string, op *operation, sourceLabel stri
 	}
 
 	return ep
+}
+
+// seedQuery encodes query-param examples as a query string for URL
+// seeding. Only params with a usable example are included.
+func seedQuery(params []models.APIParam) string {
+	var parts []string
+	for _, p := range params {
+		if p.In != models.APIParamInQuery || p.Name == "" {
+			continue
+		}
+		val := strings.TrimSpace(p.Example)
+		if val == "" {
+			continue
+		}
+		parts = append(parts, url.QueryEscape(p.Name)+"="+url.QueryEscape(val))
+	}
+	return strings.Join(parts, "&")
 }
 
 // detectBaseURL resolves a base URL from an OpenAPI 3 servers block or
@@ -228,15 +279,29 @@ func resolvePath(path string) string {
 	return out.String()
 }
 
-// readSource reads a local file or fetches a URL.
-func readSource(source string) ([]byte, error) {
+// readSource reads a local file or fetches a URL via anpuhttp
+// (redirect guards, proxy, limiter, local-net policy, auth headers).
+func readSource(ctx context.Context, source string, authHeaders map[string]string, client *anpuhttp.Client) ([]byte, error) {
 	if strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") {
-		resp, err := http.Get(source) //nolint:gosec // user-supplied URL is intentional
+		if client == nil {
+			client = anpuhttp.NewClientWithLocalNetworkAllowed(scanner.AllowLocalNetwork)
+		}
+		if len(authHeaders) > 0 {
+			client = client.WithAuth(authHeaders)
+		}
+		tctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		resp, err := client.Get(tctx, source)
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
-		return io.ReadAll(io.LimitReader(resp.Body, 4<<20)) // 4 MB cap
+		if resp.StatusCode != 200 {
+			return nil, fmt.Errorf("openapi: GET %q status %d", source, resp.StatusCode)
+		}
+		if len(resp.Body) > 4<<20 {
+			return resp.Body[:4<<20], nil
+		}
+		return resp.Body, nil
 	}
 	f, err := os.Open(source)
 	if err != nil {
@@ -302,6 +367,7 @@ func capped(s string, n int) string {
 // they flow through the existing crawler/authz/active pipeline unchanged.
 // GET endpoints are passed directly; non-GET endpoints are included with
 // their method set so downstream stages can filter if needed.
+// Schema params ride along so the active engine can build JSON vectors.
 func APIEndpointsToEndpoints(apiEPs []models.APIEndpoint) []models.Endpoint {
 	out := make([]models.Endpoint, 0, len(apiEPs))
 	for _, ae := range apiEPs {
@@ -315,6 +381,7 @@ func APIEndpointsToEndpoints(apiEPs []models.APIEndpoint) []models.Endpoint {
 			Method:   ae.Method,
 			Category: cat,
 			Sources:  []string{ae.Source},
+			Params:   ae.Params,
 		})
 	}
 	return out

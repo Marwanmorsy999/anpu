@@ -51,10 +51,14 @@ func (r *hostHeaderRule) Safety() models.SafetyLevel { return models.SafetyBenig
 func (r *hostHeaderRule) RequestBudget() int         { return 2 }
 
 // hostNonce generates a random canary subdomain label.
+// Ghost mode delegates to HostCanary() (no `anpu-` substring when --ghost).
 func hostNonce() string {
+	if GhostEnabled {
+		return HostCanary()
+	}
 	b := make([]byte, 6)
 	if _, err := rand.Read(b); err != nil {
-		return "anpu-canary-fallback"
+		return hostCanaryFallback()
 	}
 	return "anpu-" + hex.EncodeToString(b) + ".invalid"
 }

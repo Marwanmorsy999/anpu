@@ -26,6 +26,8 @@ func (r *cmdInjectionRule) RequestBudget() int         { return 2 }
 
 // Payloads use shell metacharacters that cause syntax errors when
 // interpolated into a shell command — visible in error output.
+// Non-ghost keeps `anpu-cmdi-canary` (YARA allowlist); ghost uses
+// CmdPayloads() from canary.go (no `anpu` substring).
 var cmdPayloads = []string{
 	`|echo anpu-cmdi-canary`,
 	`||echo anpu-cmdi-canary`,
@@ -46,10 +48,29 @@ var cmdErrorSignals = []string{
 	"anpu-cmdi-canary", // direct execution of our echo
 }
 
+func cmdPayloadsForScan() ([]string, []string) {
+	if !GhostEnabled {
+		return cmdPayloads, cmdErrorSignals
+	}
+	payloads := CmdPayloads()
+	signals := []string{
+		"sh:",
+		"/bin/sh",
+		"command not found",
+		"syntax error",
+		"unexpected token",
+		"is not recognized as an internal",
+		"'echo' is not recognized",
+		CmdCanary(), // direct execution of our echo
+	}
+	return payloads, signals
+}
+
 func (r *cmdInjectionRule) Test(ctx context.Context, client *anpuhttp.Client, v models.InputVector) (models.ActiveRuleResult, error) {
 	result := models.ActiveRuleResult{RuleID: r.ID(), Vector: v}
 
-	for _, payload := range cmdPayloads {
+	payloads, signals := cmdPayloadsForScan()
+	for _, payload := range payloads {
 		if result.RequestsMade >= r.RequestBudget() {
 			break
 		}
@@ -63,7 +84,7 @@ func (r *cmdInjectionRule) Test(ctx context.Context, client *anpuhttp.Client, v 
 			continue
 		}
 		body := strings.ToLower(string(resp.Body))
-		for _, sig := range cmdErrorSignals {
+		for _, sig := range signals {
 			if strings.Contains(body, strings.ToLower(sig)) {
 				result.Found = true
 				result.Payload = payload

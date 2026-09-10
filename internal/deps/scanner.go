@@ -1,14 +1,19 @@
 // Package deps detects known-vulnerable third-party JavaScript library
 // versions from data already collected by earlier pipeline stages.
 //
-// Two sources are checked — no extra HTTP requests are made:
+// Three sources are checked:
 //
 //  1. sc.Technologies — version strings extracted by the technology detector
-//     from HTTP headers or page content.
+//     from HTTP headers or page content (no extra requests).
 //
 //  2. sc.Endpoints — asset URLs (.js) whose filenames embed a version string
 //     (e.g. "jquery-3.4.1.min.js"). These are matched with a small set of
-//     per-library regex patterns.
+//     per-library regex patterns (no extra requests).
+//
+//  3. Manifests (Master P2, opt-in via NewWithClient) — requirements.txt,
+//     package.json, pom.xml, and go.mod discovered by the crawler are
+//     fetched (max 3 per scan) and parsed for pinned versions across
+//     npm/PyPI/Maven/Go ecosystems.
 //
 // Both sources are checked against a built-in vulnerability table. The table
 // covers the JS libraries most commonly found on web surfaces and the CVEs
@@ -23,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/pkg/models"
 )
@@ -95,6 +101,32 @@ var vulnTable = []vulnEntry{
 	{"highlight.js", "10.7.1", "9.0.0", "CVE-2021-23346", "5.3", models.SeverityLow,
 		"ReDoS via specially crafted CSS value", "Upgrade to highlight.js ≥ 10.7.1",
 		"https://nvd.nist.gov/vuln/detail/CVE-2021-23346"},
+	// ---- web servers (Server header version disclosure → CVE) ----
+	{"nginx", "1.25.3", "1.0.0", "CVE-2023-44487", "7.5", models.SeverityHigh,
+		"HTTP/2 Rapid Reset — unauthenticated DoS via stream multiplexing", "Upgrade to nginx ≥ 1.25.3 (or apply vendor patch)",
+		"https://nvd.nist.gov/vuln/detail/CVE-2023-44487"},
+	{"nginx", "1.20.1", "1.0.0", "CVE-2021-23017", "7.5", models.SeverityHigh,
+		"DNS resolver off-by-one heap write via crafted UDP response", "Upgrade to nginx ≥ 1.20.1",
+		"https://nvd.nist.gov/vuln/detail/CVE-2021-23017"},
+	{"Apache", "2.4.58", "2.4.0", "CVE-2023-25690", "9.8", models.SeverityCritical,
+		"HTTP request smuggling via mod_proxy_ajp", "Upgrade Apache to ≥ 2.4.58",
+		"https://nvd.nist.gov/vuln/detail/CVE-2023-25690"},
+	{"Apache", "2.4.59", "2.4.0", "CVE-2024-38476", "9.8", models.SeverityCritical,
+		"Apache HTTP Server proxy encoding bypass → RCE/SSRF", "Upgrade Apache to ≥ 2.4.59",
+		"https://nvd.nist.gov/vuln/detail/CVE-2024-38476"},
+	{"Apache", "2.4.56", "2.4.0", "CVE-2023-27522", "7.5", models.SeverityHigh,
+		"mod_proxy_uwsgi HTTP response smuggling", "Upgrade Apache to ≥ 2.4.56",
+		"https://nvd.nist.gov/vuln/detail/CVE-2023-27522"},
+	// Alias: technology detector sometimes reports "Apache httpd"
+	{"Apache httpd", "2.4.58", "2.4.0", "CVE-2023-25690", "9.8", models.SeverityCritical,
+		"HTTP request smuggling via mod_proxy_ajp (alias)", "Upgrade Apache to ≥ 2.4.58",
+		"https://nvd.nist.gov/vuln/detail/CVE-2023-25690"},
+	{"Apache httpd", "2.4.59", "2.4.0", "CVE-2024-38476", "9.8", models.SeverityCritical,
+		"Apache HTTP Server proxy encoding bypass (alias)", "Upgrade Apache to ≥ 2.4.59",
+		"https://nvd.nist.gov/vuln/detail/CVE-2024-38476"},
+	{"IIS", "10.0", "6.0", "CVE-2017-7269", "9.8", models.SeverityCritical,
+		"Buffer overflow in IIS WebDAV (ScStoragePathFromUrl) — RCE", "Upgrade IIS and disable WebDAV if unused",
+		"https://nvd.nist.gov/vuln/detail/CVE-2017-7269"},
 }
 
 // urlVersionPatterns extracts (libraryName, version) from a JS asset URL.
@@ -113,15 +145,30 @@ var urlVersionPatterns = []struct {
 }
 
 // Scanner is the pipeline stage for dependency vulnerability detection.
-type Scanner struct{}
+// An optional HTTP client (NewWithClient) enables manifest harvesting
+// (requirements.txt / package.json / pom.xml / go.mod); without it the
+// scanner stays fully passive on already-collected data.
+type Scanner struct {
+	client *anpuhttp.Client
+}
 
-func New() *Scanner                                 { return &Scanner{} }
+func New() *Scanner { return &Scanner{} }
+
+// NewWithClient returns a Scanner that also harvests dependency manifests
+// discovered by the crawler (bounded: 3 fetches, silent on failure).
+func NewWithClient(c *anpuhttp.Client) *Scanner {
+	return &Scanner{client: c}
+}
+
 func (s *Scanner) Name() string                     { return "deps-scanner" }
 func (s *Scanner) Available(_ context.Context) bool { return true }
 
 // Run checks known-vulnerable library versions against both sc.Technologies
-// and JS asset URLs already in sc.Endpoints.
-func (s *Scanner) Run(_ context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+// and JS asset URLs already in sc.Endpoints. Detections hit the built-in
+// advisory table first, then anything with a version is looked up live
+// against OSV.dev (free, keyless, one batched request) for advisories
+// newer than the table.
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
 	// Collect (library → version) from both sources. Later entries overwrite
 	// earlier ones only if they carry a version; versionless detections are
 	// kept as a fallback so we can still produce an advisory.
@@ -168,14 +215,82 @@ func (s *Scanner) Run(_ context.Context, sc *scanner.ScanContext) (scanner.Stage
 	}
 
 	var findings []models.Finding
+	staticCVEs := map[string]map[string]bool{}
 	for lib, det := range seen {
 		matching := advisoriesFor(lib, det.version)
+		if len(matching) > 0 && staticCVEs[lib] == nil {
+			staticCVEs[lib] = map[string]bool{}
+		}
 		for _, vuln := range matching {
+			staticCVEs[lib][strings.ToUpper(vuln.CVE)] = true
 			findings = append(findings, toFinding(vuln, det.version, det.evidence, sc.Target.Raw))
 		}
 	}
 
-	return scanner.StageResult{Findings: findings}, nil
+	// Master: harvest requirements.txt / package.json / pom.xml / go.mod
+	// endpoints discovered via crawler (bounded fetches, silent on failure).
+	// Runs before package resolution so manifest versions join the same
+	// batch as tech/asset detections.
+	if s.client != nil {
+		var manifestURLs []string
+		for _, ep := range sc.Endpoints {
+			if manifestKind(ep.URL) != "" {
+				manifestURLs = append(manifestURLs, ep.URL)
+			}
+		}
+		for _, dep := range harvestManifests(ctx, s.client, manifestURLs) {
+			lib := canonical(dep.name)
+			if existing, ok := seen[lib]; !ok || existing.version == "" {
+				seen[lib] = detection{
+					version:  dep.version,
+					evidence: fmt.Sprintf("version %s detected in manifest for %s", dep.version, dep.name),
+				}
+			}
+		}
+	}
+
+	// Live OSV.dev lookup for versioned detections across ecosystems (Master: pypi/maven/go via
+	// requirements.txt/pom.xml parsing osv.go:24 ecosystem PyPI same batch 20 cap 150 sort before cap).
+	// Single batch + up to 10 detail hydrations, silent on failure so offline scans keep working.
+	var pkgs []osvPackage
+	for lib, det := range seen {
+		if det.version == "" {
+			continue
+		}
+		if pkg, ok := resolveManifestDep(lib, det.version); ok {
+			pkgs = append(pkgs, pkg)
+		}
+	}
+	osvResults, osvWarnings := queryOSV(ctx, pkgs)
+	for lib, vulns := range osvResults {
+		for _, v := range vulns {
+			if f := osvFinding(osvPackage{display: lib, version: versionOf(pkgs, lib)}, v, staticCVEs[lib], sc.Target.Raw); f != nil {
+				findings = append(findings, *f)
+			}
+		}
+	}
+
+	// SBOM: emit a CycloneDX inventory of every resolved package@version
+	// into the report output dir (best-effort; warn, never fail).
+	if len(pkgs) > 0 && strings.TrimSpace(sc.Config.OutputDir) != "" {
+		if sbomPath, serr := writeSBOM(sc.Config.OutputDir, sc.Target.Raw, pkgs); serr != nil {
+			osvWarnings = append(osvWarnings, fmt.Sprintf("deps: SBOM write failed: %v", serr))
+		} else if sc.Verbose {
+			osvWarnings = append(osvWarnings, fmt.Sprintf("deps: SBOM written to %s", sbomPath))
+		}
+	}
+
+	return scanner.StageResult{Findings: findings, Warnings: osvWarnings}, nil
+}
+
+// versionOf returns the detected version for a display name.
+func versionOf(pkgs []osvPackage, display string) string {
+	for _, p := range pkgs {
+		if p.display == display {
+			return p.version
+		}
+	}
+	return ""
 }
 
 // advisoriesFor returns all vuln entries that apply to the given library and

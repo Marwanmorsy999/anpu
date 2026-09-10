@@ -44,43 +44,73 @@ func New(cfg Config) *Scanner {
 
 func (s *Scanner) Name() string { return "api-scanner" }
 
-// Available returns true when at least one API source is configured.
+// Available always returns true: with zero configuration the scanner
+// auto-discovers schemas at well-known locations, so there is always
+// something useful to attempt.
 func (s *Scanner) Available(_ context.Context) bool {
-	return s.cfg.OpenAPISource != "" || s.cfg.GraphQLURL != ""
+	return true
 }
 
-// Run executes the API scanning stage.
+// Run executes the API scanning stage. Per-stage deadline ≤30s for
+// discovery; abuse checks keep 10s each but run max 3 when introspection
+// fails.
 func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+	rctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	ctx = rctx
 	var findings []models.Finding
 	var warnings []string
 	var newEndpoints []models.Endpoint
 
+	openAPISource := s.cfg.OpenAPISource
+	graphQLURL := s.cfg.GraphQLURL
+
+	// anpuhttp client for all GraphQL probes (redirect guards, proxy,
+	// limiter, local-net policy).
+	apiClient := discoveryClient()
+
+	// Zero-config discovery: hunt well-known schema locations when the
+	// user supplied nothing. Read-only probes, bounded cost (≤30s).
+	if openAPISource == "" && graphQLURL == "" {
+		openAPISource, graphQLURL = DiscoverSchemas(ctx, apiClient, sc.Target.Raw)
+		if sc.Verbose && (openAPISource != "" || graphQLURL != "") {
+			warnings = append(warnings, fmt.Sprintf(
+				"api-scanner: auto-discovered schema openapi=%q graphql=%q", openAPISource, graphQLURL))
+		}
+	}
+
 	// --- OpenAPI / Swagger ---
-	if s.cfg.OpenAPISource != "" {
-		apiEPs, err := LoadOpenAPI(s.cfg.OpenAPISource, s.cfg.BaseURL)
+	if openAPISource != "" {
+		authHeaders := sc.Auth.RequestHeaders()
+		apiEPs, err := LoadOpenAPIWithAuth(ctx, openAPISource, s.cfg.BaseURL, authHeaders, apiClient)
 		if err != nil {
 			warnings = append(warnings, fmt.Sprintf("api-scanner: openapi load failed: %v", err))
 		} else {
 			converted := APIEndpointsToEndpoints(apiEPs)
 			newEndpoints = append(newEndpoints, converted...)
 			// Emit an info finding summarising the schema import.
-			findings = append(findings, schemaImportFinding(sc.Target.Raw, s.cfg.OpenAPISource, len(apiEPs)))
+			findings = append(findings, schemaImportFinding(sc.Target.Raw, openAPISource, len(apiEPs)))
 			if sc.Verbose {
 				warnings = append(warnings, fmt.Sprintf(
-					"api-scanner: loaded %d operations from %s", len(apiEPs), s.cfg.OpenAPISource))
+					"api-scanner: loaded %d operations from %s", len(apiEPs), openAPISource))
 			}
 		}
 	}
 
 	// --- GraphQL ---
-	if s.cfg.GraphQLURL != "" {
+	if graphQLURL != "" {
 		authHeaders := sc.Auth.RequestHeaders()
-		gqlSchema, gqlEndpoints, err := IntrospectGraphQL(ctx, s.cfg.GraphQLURL, authHeaders, 15*time.Second)
+		gqlSchema, gqlEndpoints, err := IntrospectGraphQL(ctx, graphQLURL, authHeaders, apiClient, 15*time.Second)
+		introspectOK := err == nil
 		if err != nil {
 			warnings = append(warnings, fmt.Sprintf("api-scanner: graphql introspect failed: %v", err))
 		} else {
 			// Emit a finding if introspection succeeded (misconfiguration signal).
-			if f := CheckGraphQLIntrospectionEnabled(s.cfg.GraphQLURL, gqlSchema); f != nil {
+			if f := CheckGraphQLIntrospectionEnabled(graphQLURL, gqlSchema); f != nil {
+				findings = append(findings, *f)
+			}
+			// Depth limits only testable against a live schema.
+			if f := CheckGraphQLDepthLimit(ctx, graphQLURL, authHeaders, apiClient, 10*time.Second); f != nil {
 				findings = append(findings, *f)
 			}
 			converted := APIEndpointsToEndpoints(gqlEndpoints)
@@ -92,6 +122,47 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 				))
 			}
 		}
+		// Schema-independent abuse checks (10s each, max 3 when
+		// introspection failed): batching, suggestions, GET, alias flood.
+		// Budget: 3 when introspection failed, 4 when ok (depth already ok).
+		budget := 3
+		if introspectOK {
+			budget = 4
+		}
+		abuseRun := 0
+		if abuseRun < budget {
+			if f := CheckGraphQLBatching(ctx, graphQLURL, authHeaders, apiClient, 10*time.Second); f != nil {
+				findings = append(findings, *f)
+			}
+			abuseRun++
+		}
+		if abuseRun < budget {
+			if f := CheckGraphQLFieldSuggestions(ctx, graphQLURL, authHeaders, apiClient, 10*time.Second); f != nil {
+				findings = append(findings, *f)
+			}
+			abuseRun++
+		}
+		if abuseRun < budget {
+			if f := CheckGraphQLGetQueries(ctx, graphQLURL, authHeaders, apiClient, 10*time.Second); f != nil {
+				findings = append(findings, *f)
+			}
+			abuseRun++
+		}
+		if abuseRun < budget {
+			if f := CheckGraphQLAliasFlood(ctx, graphQLURL, authHeaders, apiClient, 10*time.Second); f != nil {
+				findings = append(findings, *f)
+			}
+			abuseRun++
+		}
+	}
+
+	// --- gRPC (Master P2) ---
+	// Probe for gRPC reflection exposure (application/grpc, ListServices)
+	// Keep openapi.yaml/swagger.yaml/v3/api-docs handling via yaml pre-pass already in openapi.go:112.
+	// gRPC is probed via reflection ListServices application/grpc probe, vectors.go:81 add VectorGRPC.
+	if f := GRPCProbe(ctx, sc.Target.Raw, apiClient); f != nil {
+		findings = append(findings, *f)
+		newEndpoints = append(newEndpoints, ProbeGRPC(ctx, sc.Target.Raw, apiClient)...)
 	}
 
 	return scanner.StageResult{

@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/anpu-project/anpu/internal/api"
 	"github.com/anpu-project/anpu/pkg/models"
 )
 
@@ -169,6 +170,31 @@ func ExtractXMLVectors(eps []models.Endpoint) []models.InputVector {
 	return out
 }
 
+// OmitQueryParam returns a new URL string with the named query parameter
+// removed. All other parameters are preserved unchanged. It returns the
+// input unchanged (and no error) when the parameter is absent.
+func OmitQueryParam(rawURL, name string) (string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", err
+	}
+	q := u.Query()
+	if _, ok := q[name]; !ok {
+		for k := range q {
+			if strings.EqualFold(k, name) {
+				name = k
+				break
+			}
+		}
+		if _, ok := q[name]; !ok {
+			return rawURL, nil
+		}
+	}
+	q.Del(name)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
 // InjectQueryParam returns a new URL string with the named query parameter
 // replaced by payload.  All other parameters are preserved unchanged.
 func InjectQueryParam(rawURL, name, payload string) (string, error) {
@@ -200,4 +226,81 @@ func InjectPathSegment(rawURL, segment, payload string) (string, error) {
 	}
 	u.Path = strings.Join(parts, "/")
 	return u.String(), nil
+}
+
+// maxAPIVectorsPerEndpoint bounds schema-driven fan-out: schemas can
+// declare dozens of params per operation. Adversarial grade requires
+// broader coverage so header/body attacks are not artificially capped.
+const maxAPIVectorsPerEndpoint = 20
+
+// apiVectorsFor converts schema-declared params (carried on the
+// endpoint by the API scanner) into injectable vectors. Query params,
+// JSON body params, and header params are kept; path params are skipped
+// (the endpoint URL has placeholders resolved, so name-based injection
+// cannot target them). Header vectors are now enabled for adversarial
+// Host/Origin/Referrer probing.
+func apiVectorsFor(ep models.Endpoint) []models.InputVector {
+	if len(ep.Params) == 0 {
+		return nil
+	}
+	shim := models.APIEndpoint{URL: ep.URL, Method: ep.Method, Params: ep.Params}
+	var out []models.InputVector
+	for _, v := range api.ExtractAPIVectors(shim) {
+		if v.Kind != models.VectorQueryParam && v.Kind != models.VectorJSONBody && v.Kind != models.VectorHeader {
+			continue
+		}
+		// Seed schema query vectors with their example values: schema
+		// endpoint URLs are bare path templates, and rules (plus the
+		// endpoint gate) need a realistic request to work with.
+		if v.Kind == models.VectorQueryParam && v.OriginalValue != "" && !hasQueryParam(v.URL, v.Name) {
+			if seeded, err := InjectQueryParam(v.URL, v.Name, v.OriginalValue); err == nil {
+				v.URL = seeded
+			}
+		}
+		out = append(out, v)
+		if len(out) >= maxAPIVectorsPerEndpoint {
+			break
+		}
+	}
+	return out
+}
+
+// hasQueryParam reports whether rawURL already carries the named query
+// parameter (case-insensitive).
+func hasQueryParam(rawURL, name string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	for k := range u.Query() {
+		if strings.EqualFold(k, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// ExtractWebSocketVectors returns VectorWebSocket candidates discovered
+// via JavaScript intelligence (ws:// and wss:// URLs). These are prime
+// targets for adversarial header/body/WS injection (e.g., CSWSH, auth
+// bypass) and are handled by stateful adversarial rules.
+func ExtractWebSocketVectors(endpoints []models.Endpoint) []models.InputVector {
+	var out []models.InputVector
+	seen := map[string]bool{}
+	for _, ep := range endpoints {
+		lower := strings.ToLower(ep.URL)
+		if strings.HasPrefix(lower, "ws://") || strings.HasPrefix(lower, "wss://") {
+			if seen[ep.URL] {
+				continue
+			}
+			seen[ep.URL] = true
+			out = append(out, models.InputVector{
+				URL:           ep.URL,
+				Kind:          models.VectorWebSocket,
+				Name:          ep.URL,
+				OriginalValue: "",
+			})
+		}
+	}
+	return out
 }

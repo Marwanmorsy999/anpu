@@ -18,6 +18,7 @@ package takeover
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -47,10 +48,28 @@ type providerSig struct {
 
 // providerTable is the built-in list of providers and their signals.
 // Sources: EdOverflow/can-i-take-over-xyz, projectdiscovery/nuclei-templates.
+// matchesSuffix reports dot-boundary CNAME matching: exact or "."+suffix.
+func matchesSuffix(cname, suffix string) bool {
+	suffix = strings.ToLower(suffix)
+	if cname == suffix {
+		return true
+	}
+	return strings.HasSuffix(cname, "."+suffix)
+}
+
+// matchesS3Website reports s3-website*.amazonaws.com endpoints:
+// "<bucket>.s3-website[-<region>][.<region>].amazonaws.com".
+func matchesS3Website(cname string) bool {
+	if !strings.HasSuffix(cname, ".amazonaws.com") {
+		return false
+	}
+	return strings.Contains(cname, ".s3-website")
+}
+
 var providerTable = []providerSig{
 	{
 		Name:             "GitHub Pages",
-		CNAMESuffix:      []string{"github.io", "github.com"},
+		CNAMESuffix:      []string{"github.io"},
 		BodyFingerprints: []string{"There isn't a GitHub Pages site here.", "For root URLs (like http://example.com/) you must provide an index.html file"},
 		Severity:         models.SeverityHigh,
 	},
@@ -62,14 +81,14 @@ var providerTable = []providerSig{
 	},
 	{
 		Name:             "AWS S3",
-		CNAMESuffix:      []string{"s3.amazonaws.com", "s3-website"},
+		CNAMESuffix:      []string{"s3.amazonaws.com"},
 		BodyFingerprints: []string{"NoSuchBucket", "The specified bucket does not exist"},
 		Severity:         models.SeverityHigh,
 	},
 	{
 		Name:             "Netlify",
 		CNAMESuffix:      []string{"netlify.app", "netlify.com"},
-		BodyFingerprints: []string{"Not Found - Request ID", "netlify"},
+		BodyFingerprints: []string{"Not Found - Request ID", "The site you are looking for could not be found on Netlify."},
 		Severity:         models.SeverityHigh,
 	},
 	{
@@ -105,7 +124,7 @@ var providerTable = []providerSig{
 	{
 		Name:             "Surge.sh",
 		CNAMESuffix:      []string{"surge.sh"},
-		BodyFingerprints: []string{"project not found", "surge.sh"},
+		BodyFingerprints: []string{"project not found", "This Surge.sh project could not be found - the project does not exist."},
 		Severity:         models.SeverityHigh,
 	},
 	{
@@ -114,11 +133,77 @@ var providerTable = []providerSig{
 		BodyFingerprints: []string{"Project doesnt exist... yet!", "Project not found"},
 		Severity:         models.SeverityMedium,
 	},
+	{
+		Name:             "Vercel",
+		CNAMESuffix:      []string{"vercel.app", "vercel-dns.com"},
+		BodyFingerprints: []string{"The deployment could not be found on Vercel.", "DEPLOYMENT_NOT_FOUND"},
+		Severity:         models.SeverityHigh,
+	},
+	{
+		Name:             "Tumblr",
+		CNAMESuffix:      []string{"domains.tumblr.com"},
+		BodyFingerprints: []string{"Whatever you were looking for doesn't currently exist here"},
+		Severity:         models.SeverityHigh,
+	},
+	{
+		Name:             "Bitbucket",
+		CNAMESuffix:      []string{"bitbucket.io"},
+		BodyFingerprints: []string{"Repository not found"},
+		Severity:         models.SeverityHigh,
+	},
+	{
+		Name:             "Pantheon",
+		CNAMESuffix:      []string{"pantheonsite.io", "getpantheon.com"},
+		BodyFingerprints: []string{"The gods are wise, but do not know of the site yet."},
+		Severity:         models.SeverityHigh,
+	},
+	{
+		Name:             "Squarespace",
+		CNAMESuffix:      []string{"squarespace.com"},
+		BodyFingerprints: []string{"No Such Account"},
+		Severity:         models.SeverityHigh,
+	},
+	{
+		Name:             "BigCartel",
+		CNAMESuffix:      []string{"bigcartel.com"},
+		BodyFingerprints: []string{"Oops! We couldn't find that page."},
+		Severity:         models.SeverityHigh,
+	},
+	{
+		Name:             "Helpjuice",
+		CNAMESuffix:      []string{"helpjuice.com"},
+		BodyFingerprints: []string{"We could not find what you're looking for."},
+		Severity:         models.SeverityMedium,
+	},
+	{
+		Name:             "HelpScout Docs",
+		CNAMESuffix:      []string{"helpscoutdocs.com"},
+		BodyFingerprints: []string{"No settings were found for this company."},
+		Severity:         models.SeverityMedium,
+	},
+	{
+		Name:             "Ngrok",
+		CNAMESuffix:      []string{"ngrok.io"},
+		BodyFingerprints: []string{"ERR_NGROK_3200"},
+		Severity:         models.SeverityMedium,
+	},
+	{
+		Name:             "Firebase Hosting",
+		CNAMESuffix:      []string{"firebaseapp.com"},
+		BodyFingerprints: []string{"Site Not Found"},
+		Severity:         models.SeverityMedium,
+	},
+}
+
+// dnsResolver abstracts DNS lookups so tests can inject fixtures.
+type dnsResolver interface {
+	LookupCNAME(ctx context.Context, host string) (string, error)
+	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
 }
 
 // Scanner is the pipeline stage for subdomain takeover detection.
 type Scanner struct {
-	resolver *net.Resolver
+	resolver dnsResolver
 	client   *http.Client
 }
 
@@ -202,11 +287,11 @@ func (s *Scanner) check(ctx context.Context, host, target string) (*models.Findi
 	}
 	cname = strings.ToLower(strings.TrimSuffix(cname, "."))
 
-	// Find a matching provider.
+	// Find a matching provider (dot-boundary: exact or "."+suffix).
 	var matched *providerSig
 	for i := range providerTable {
 		for _, suffix := range providerTable[i].CNAMESuffix {
-			if strings.HasSuffix(cname, suffix) {
+			if matchesSuffix(cname, suffix) {
 				matched = &providerTable[i]
 				break
 			}
@@ -214,9 +299,16 @@ func (s *Scanner) check(ctx context.Context, host, target string) (*models.Findi
 		if matched != nil {
 			break
 		}
+		// S3 website endpoints: s3-website*.amazonaws.com.
+		if providerTable[i].Name == "AWS S3" && matchesS3Website(cname) {
+			matched = &providerTable[i]
+			break
+		}
 	}
 	if matched == nil {
-		return nil, "" // CNAME target not a known cloud provider
+		// Unknown provider: a CNAME whose target does not resolve at
+		// all is still dangling infrastructure worth investigating.
+		return s.checkDangling(ctx, host, cname, target)
 	}
 
 	// Fetch the subdomain and check body fingerprints.
@@ -260,6 +352,55 @@ func (s *Scanner) check(ctx context.Context, host, target string) (*models.Findi
 		},
 		Impact:      "Attacker can host phishing pages, steal cookies scoped to the parent domain, or abuse the domain's email reputation.",
 		Remediation: fmt.Sprintf("Remove the DNS CNAME record for %s, or re-provision the %s resource and point the CNAME to it.", host, matched.Name),
+		References: []string{
+			"https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/10-Test_for_Subdomain_Takeover",
+			"https://github.com/EdOverflow/can-i-take-over-xyz",
+		},
+		FirstSeen: time.Now(),
+	}
+	return f, ""
+}
+
+// checkDangling flags CNAME targets that do not resolve in public DNS
+// at all (NXDOMAIN). Any provider — fingerprinted or not — is claimable
+// when its DNS name is dead, so this catches takeovers the fingerprint
+// table has never heard of. Medium confidence: transient DNS failures
+// are possible, so the finding tells the operator to verify.
+func (s *Scanner) checkDangling(ctx context.Context, host, cname, target string) (*models.Finding, string) {
+	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if _, err := s.resolver.LookupIPAddr(rctx, cname); err == nil {
+		return nil, "" // target resolves — nothing dangling
+	} else {
+		var dnsErr *net.DNSError
+		if !errors.As(err, &dnsErr) || !dnsErr.IsNotFound {
+			return nil, "" // transient/odd resolver error — stay silent
+		}
+	}
+	f := &models.Finding{
+		ID:    fmt.Sprintf("takeover-dangling-%s-%d", strings.ReplaceAll(host, ".", "-"), time.Now().UnixNano()),
+		Title: fmt.Sprintf("Dangling CNAME record: %s → %s (target does not resolve)", host, cname),
+		Description: fmt.Sprintf(
+			"%s has a CNAME record pointing to %s, which does not resolve in public DNS (NXDOMAIN). "+
+				"Dangling records are the raw material of subdomain takeovers: if the target name can be re-registered on its platform, "+
+				"an attacker can serve arbitrary content under your domain. Verify whether %s is claimable.",
+			host, cname, cname,
+		),
+		Severity:        models.SeverityMedium,
+		Confidence:      models.ConfidenceMedium,
+		Category:        models.CategoryVulnerability,
+		CWE:             "CWE-350",
+		OWASP:           "A05:2021 - Security Misconfiguration",
+		Target:          target,
+		URL:             "https://" + host,
+		Source:          models.SourceTakeover,
+		DetectionMethod: fmt.Sprintf("CNAME → %s; target NXDOMAIN in public DNS", cname),
+		Evidence: models.Evidence{
+			Observed: fmt.Sprintf("CNAME: %s → %s\ntarget: NXDOMAIN (no A/AAAA records)", host, cname),
+			Location: host,
+		},
+		Impact:      "If the dead target name is re-registered by an attacker, they gain content hosting under your domain (phishing, cookie theft, reputation abuse).",
+		Remediation: fmt.Sprintf("Remove the DNS CNAME record for %s unless the target service is re-provisioned.", host),
 		References: []string{
 			"https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/10-Test_for_Subdomain_Takeover",
 			"https://github.com/EdOverflow/can-i-take-over-xyz",

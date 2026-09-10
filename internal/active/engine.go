@@ -62,11 +62,17 @@ type Registry struct {
 
 // DefaultRegistry returns all Phase 4 rules in priority order.
 // Rules are ordered by signal quality: highest-confidence first.
+// Adversarial grade adds stateful, time+OOB, header/body/WS, IDOR/mass-assign/JWT/race.
+// Master (GHOST + overpower) adds 11 injection families + 7 auth/session + rate-limit
+// — all new injection families are Benign/LowImpact (non-adversarial), auth/session
+// families are adversarial-gated via isAdversarialRule.
 func DefaultRegistry() *Registry {
 	return &Registry{
 		rules: []Rule{
 			&xssRule{},
 			&sqliRule{},
+			&sqliBooleanRule{},
+			&cachePoisonRule{},
 			&sstiRule{},
 			&pathTraversalRule{},
 			&openRedirectRule{},
@@ -76,7 +82,39 @@ func DefaultRegistry() *Registry {
 			&xxeRule{},
 			&hostHeaderRule{},
 			&nosqlRule{},
+			&bypass403Rule{},
+			&blindTimingRule{},
 			&log4shellRule{},
+			&jwtRule{},
+			&massAssignRule{},
+			&businessRule{},
+			&raceRule{},
+			&smugglingRule{},
+			&protoPolluteRule{},
+			// P1: Master injection families (Benign/LowImpact, RequestBudget 3)
+			&ldapRule{},
+			&xpathRule{},
+			&ssiRule{},
+			&hppRule{},
+			&rfiRule{},
+			&codeInjectRule{},
+			&bufferRule{},
+			&formulaRule{},
+			// P1: Auth/Session (adversarial-gated)
+			&sessionFixationRule{},
+			&exposedSessionRule{},
+			&logoutRule{},
+			&passwordPolicyRule{},
+			// P1: Rate-limit API4
+			&rateLimitRule{},
+			// P2: Cloud/Supply Modern — upload/deserial, adversarial-gated
+			&fileUploadRule{},
+			&deserialRule{},
+			// Schema-driven rules — typed probes for schema-declared
+			// params (vectors carry Schema/Required from ExtractAPIVectors).
+			&schemaTypeRule{},
+			&schemaRequiredRule{},
+			&schemaContentRule{},
 		},
 	}
 }

@@ -24,8 +24,21 @@ func (r *openRedirectRule) RequestBudget() int         { return 2 }
 
 // canaryDomain is a domain that cannot be confused with a real destination.
 // We check if the final URL (after redirect) lands on it or the Location
-// header points there.
+// header points there. Ghost mode uses RedirectCanaryDomain() (no `anpu`).
 const redirectCanaryDomain = `anpu-redirect-canary.invalid`
+
+func redirectPayloadsGhostAware() []string {
+	domain := redirectCanaryDomain
+	if GhostEnabled {
+		domain = RedirectCanaryDomain()
+	}
+	return []string{
+		`https://` + domain,
+		`//` + domain,
+		`/\` + domain,
+		`https:` + domain,
+	}
+}
 
 var redirectPayloads = []string{
 	`https://` + redirectCanaryDomain,
@@ -37,7 +50,13 @@ var redirectPayloads = []string{
 func (r *openRedirectRule) Test(ctx context.Context, client *anpuhttp.Client, v models.InputVector) (models.ActiveRuleResult, error) {
 	result := models.ActiveRuleResult{RuleID: r.ID(), Vector: v}
 
-	for _, payload := range redirectPayloads {
+	payloads := redirectPayloads
+	domain := redirectCanaryDomain
+	if GhostEnabled {
+		payloads = redirectPayloadsGhostAware()
+		domain = RedirectCanaryDomain()
+	}
+	for _, payload := range payloads {
 		if result.RequestsMade >= r.RequestBudget() {
 			break
 		}
@@ -58,7 +77,7 @@ func (r *openRedirectRule) Test(ctx context.Context, client *anpuhttp.Client, v 
 		// set to the last requested URL (including the injected payload URL
 		// itself), which would always contain the canary and cause false positives.
 		redirectedToCanary := resp.StatusCode >= 300 && resp.StatusCode < 400 &&
-			strings.Contains(location, redirectCanaryDomain)
+			strings.Contains(location, domain)
 
 		if redirectedToCanary {
 			result.Found = true

@@ -25,11 +25,44 @@ builds:
 archives:
   - id: anpu
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format: tar.gz
+    formats:
+      - tar.gz
+    format_overrides:
+      # Windows users expect zip (Explorer opens it natively).
+      - goos: windows
+        formats:
+          - zip
     files:
       - README.md
       - LICENSE
       - anpu.example.yaml
+
+# Native Linux packages (deb/rpm/apk/archlinux) via nFPM — no extra
+# toolchain needed. These make `apt/dnf/apk/pacman install ./anpu*.deb`
+# work and are the stepping stone to Kali/BlackArch/AUR submissions.
+nfpms:
+  - id: anpu
+    package_name: anpu
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - deb
+      - rpm
+      - apk
+      - archlinux
+    maintainer: ANPU Contributors <https://github.com/Marwanmorsy999/anpu>
+    description: Guard what you build. Authorized web security analysis and attack-surface intelligence CLI.
+    homepage: https://github.com/Marwanmorsy999/anpu
+    license: Apache-2.0
+    bindir: /usr/bin
+    section: net
+    priority: optional
+    contents:
+      - src: README.md
+        dst: /usr/share/doc/anpu/README.md
+      - src: LICENSE
+        dst: /usr/share/doc/anpu/LICENSE
+      - src: anpu.example.yaml
+        dst: /usr/share/doc/anpu/anpu.example.yaml
 
 checksum:
   name_template: "checksums.txt"

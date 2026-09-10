@@ -12,7 +12,7 @@ func newHistoryCmd() *cobra.Command {
 	var limit int
 	cmd := &cobra.Command{
 		Use:   "history",
-		Short: "List previous scans",
+		Short: "See your past scans",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			store, err := storage.Open(defaultDBPath())
 			if err != nil {

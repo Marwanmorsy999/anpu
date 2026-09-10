@@ -17,7 +17,7 @@ func newShowCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "show <scan-id>",
-		Short: "Show the results of a previous scan",
+		Short: "Open the results of a past scan",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			store, err := storage.Open(defaultDBPath())
@@ -40,8 +40,12 @@ func newShowCmd() *cobra.Command {
 					exportErr = reporting.WriteJSON(summary, exportPath)
 				case "sarif":
 					exportErr = reporting.WriteSARIF(summary, exportPath)
+				case "csv":
+					exportErr = reporting.WriteCSV(summary, exportPath)
+				case "md", "markdown":
+					exportErr = reporting.WriteMarkdown(summary, exportPath)
 				default:
-					return fmt.Errorf("unknown --format %q: must be html, json, or sarif", format)
+					return fmt.Errorf("unknown --format %q: must be html, json, sarif, csv, or md", format)
 				}
 				if exportErr == nil {
 					fmt.Fprintf(os.Stderr, "Wrote %s to %s\n", format, exportPath)
@@ -55,7 +59,7 @@ func newShowCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&exportPath, "export", "", "re-render this scan to a file instead of printing a summary")
-	cmd.Flags().StringVar(&format, "format", "html", "export format when --export is set: html, json, sarif")
+	cmd.Flags().StringVar(&format, "format", "html", "export format when --export is set: html, json, sarif, csv, md")
 
 	return cmd
 }

@@ -17,7 +17,7 @@ func newDiffCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "diff <older-scan-id> <newer-scan-id>",
-		Short: "Compare two previous scans",
+		Short: "See what changed between two scans",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			store, err := storage.Open(defaultDBPath())

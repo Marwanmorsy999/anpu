@@ -142,7 +142,7 @@ Update tests whenever detection conditions or severity logic change.
 
 Nuclei is deliberately optional. Tests should cover both the available and unavailable paths without requiring a live Nuclei installation.
 
-ZAP is currently a prepared interface rather than an implemented driver. Treat it as planned functionality until the integration has an actual driver and dedicated end-to-end coverage.
+ZAP is implemented via Docker (`zap-baseline.py` / `zap-full-scan.py`) or a local `zap.sh`/`zap.bat` binary, with an embedded passive fallback (clickjacking, robots, mixed content, error pages) when neither is present. See `internal/integrations/zap.go` and its end-to-end coverage in `zap_test.go`.
 
 ## Responsible development
 

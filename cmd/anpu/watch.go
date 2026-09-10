@@ -22,16 +22,21 @@ func newWatchCmd() *cobra.Command {
 		interval      time.Duration
 		cronExpr      string
 		webhookURL    string
+		discordURL    string
+		telegramCreds string
 		webhookOn     string
 		profileStr    string
 		failOn        string
 		minConfidence string
 		jsonOut       bool
+		scopeFile     string
+		autoInst      bool
+		yesFlag       bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "watch <target>",
-		Short: "Continuously scan a target and report only new or changed findings",
+		Short: "Keep watching a site, report only new problems",
 		Long: `watch runs repeated scans against a target on a fixed interval and
 emits only findings that are new or changed since the previous scan.
 
@@ -70,18 +75,23 @@ Examples:
 			if err != nil {
 				return err
 			}
-			return runWatch(cmd.Context(), args[0], profileStr, minConf, failThreshold, interval, sched, webhookURL, wOn, jsonOut)
+			return runWatch(cmd.Context(), args[0], profileStr, minConf, failThreshold, interval, sched, notify.Targets{Webhook: webhookURL, Discord: discordURL, Telegram: telegramCreds}, wOn, jsonOut, scopeFile, autoInst, yesFlag)
 		},
 	}
 
 	cmd.Flags().DurationVar(&interval, "interval", 0, "time between scans (e.g. 30m, 1h, 6h); 0 = run once then exit")
 	cmd.Flags().StringVar(&cronExpr, "cron", "", `cron schedule for scans, e.g. "0 * * * *" (hourly); overrides --interval`)
 	cmd.Flags().StringVar(&webhookURL, "webhook", "", "URL to POST diff results to after each scan (Slack or generic JSON)")
+	cmd.Flags().StringVar(&discordURL, "discord", "", "Discord webhook URL for fan-out diff notifications")
+	cmd.Flags().StringVar(&telegramCreds, "telegram", "", "Telegram botToken:chatID for fan-out diff notifications")
 	cmd.Flags().StringVar(&webhookOn, "webhook-on", "change", "when to send webhook notifications: always, change, finding")
 	cmd.Flags().StringVar(&profileStr, "profile", "standard", "scan profile: safe, standard, deep")
 	cmd.Flags().StringVar(&failOn, "fail-on", "none", "exit non-zero if a new finding at or above this severity is found")
 	cmd.Flags().StringVar(&minConfidence, "min-confidence", "none", "skip findings below this confidence level")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print diff results as JSON instead of the default text format")
+	cmd.Flags().StringVar(&scopeFile, "scope-file", "", "allowlist file; off-scope targets abort before any request")
+	cmd.Flags().BoolVar(&autoInst, "auto-install", false, "auto-install missing external tools mid-scan instead of skipping them")
+	cmd.Flags().BoolVar(&yesFlag, "yes", false, "assume yes for install confirmations")
 
 	return cmd
 }
@@ -93,9 +103,12 @@ func runWatch(
 	failThreshold models.Severity,
 	interval time.Duration,
 	sched *schedule.Schedule,
-	webhookURL string,
+	targets notify.Targets,
 	webhookOn notify.On,
 	jsonOut bool,
+	scopeFile string,
+	autoInst bool,
+	yesFlag bool,
 ) error {
 	store, err := storage.Open(defaultDBPath())
 	if err != nil {
@@ -119,7 +132,7 @@ func runWatch(
 			fmt.Fprintf(os.Stderr, "[watch] warning: could not load previous scan: %v\n", loadErr)
 		}
 
-		summary, scanErr := runWatchScan(ctx, target, profileStr, minConf)
+		summary, scanErr := runWatchScan(ctx, target, profileStr, minConf, scopeFile, autoInst, yesFlag)
 		if scanErr != nil {
 			// Graceful degradation: log and keep watching.
 			fmt.Fprintf(os.Stderr, "[watch] scan error: %v\n", scanErr)
@@ -142,13 +155,11 @@ func runWatch(
 			}
 		}
 
-		// Webhook notification (best-effort).
-		if webhookURL != "" && summary != nil && prev != nil {
+		// Fan-out notifications (best-effort, per-channel errors logged).
+		if summary != nil && prev != nil {
 			wResult := diff.Compare(prev, summary)
-			if notify.ShouldNotify(wResult, webhookOn) {
-				if wErr := notify.Send(ctx, webhookURL, wResult); wErr != nil {
-					fmt.Fprintf(os.Stderr, "[watch] webhook error: %v\n", wErr)
-				}
+			for _, wErr := range notify.Fanout(ctx, targets, wResult, webhookOn) {
+				fmt.Fprintf(os.Stderr, "[watch] notify error: %v\n", wErr)
 			}
 		}
 
@@ -177,11 +188,20 @@ func runWatch(
 // then loads the persisted result from storage. The scan subcommand saves its
 // result automatically; we just read the latest scan for the target after it
 // completes.
-func runWatchScan(ctx context.Context, target, profileStr string, minConf models.Confidence) (*models.ScanSummary, error) {
+func runWatchScan(ctx context.Context, target, profileStr string, minConf models.Confidence, scopeFile string, autoInst, yesFlag bool) (*models.ScanSummary, error) {
 	scanCmd := newScanCmd()
 	scanArgs := []string{target, "--profile", profileStr}
 	if minConf != "" {
 		scanArgs = append(scanArgs, "--min-confidence", string(minConf))
+	}
+	if scopeFile != "" {
+		scanArgs = append(scanArgs, "--scope-file", scopeFile)
+	}
+	if autoInst {
+		scanArgs = append(scanArgs, "--auto-install")
+	}
+	if yesFlag {
+		scanArgs = append(scanArgs, "--yes")
 	}
 	scanCmd.SetArgs(scanArgs)
 	scanCmd.SilenceUsage = true

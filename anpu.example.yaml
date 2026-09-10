@@ -8,7 +8,15 @@ target:
   url: https://example.com
 
 scan:
-  profile: safe   # safe | standard | deep
+  profile: safe   # safe | advanced | ultra (aliases: standard->advanced, deep->ultra)
+  # auto_install: false   # self-provision missing externals mid-scan (CLI --auto-install wins)
+  # unsafe: false         # operator master override: implies adversarial+confirmed, lifts safe-purity filters, fuller wrapper strength (CLI --unsafe wins; defaults/warnings/exclusions unchanged)
+  # adversarial: false          # enable hazardous probes (stateful, JWT/mass-assign/race/smuggling/proto-pollute, sqli boolean differential + bundle, alias flood) — requires --confirm-authorized on CLI
+  # confirm-authorized: false   # confirm you are authorized to run adversarial probes against this target
+  # ghost: false                # undetectable mode: Chrome 131 JA3, h2, GREASE, header-order overwrite, Pareto 800-3500ms jitter, no anpu canary, proxy rotation, adaptive rate
+  # ghost_canary_prefix: ""     # default "" when ghost, no anpu substring; set "anpu" to keep allowlist
+  # ghost_workers: 4            # parallel ghost workers (0 = sequential)
+  # proxy_pool: ""              # path to proxy list for RoundRobin rotation (one per line, http/https/socks5)
 
 modules:
   recon: true
@@ -18,13 +26,119 @@ modules:
   cookies: true
   endpoints: true
   subdomains: false
+  takeover: false  # subdomain takeover (advanced/ultra)
   portscan: false
   dirs: false
   secrets: false
   cors: false
   methods: false
+  csrf: false     # CSRF token detection (advanced/ultra)
+  deps: false     # JS library CVE (advanced/ultra)
+  sri: true       # SRI passive check (safe+)
+  backup: false   # backup file probing (advanced/ultra)
+  active: false   # safe active tests (advanced/ultra)
+  params: true    # query-param classification (passive, safe+)
+  idor: false     # BOLA id+1 replay (advanced/ultra default on; read-only GETs)
+  adversarial: false # hazardous probes (requires --confirm-authorized on CLI)
   nuclei: false   # optional; enable explicitly or use an active profile
-  zap: false      # planned; driver is not implemented yet
+  katana: false   # optional external crawler (advanced/ultra when installed)
+  httpx: false    # optional external probe (advanced/ultra when installed)
+  subfinder: false # optional passive subdomains (advanced/ultra when installed)
+  dalfox: false   # optional XSS confirmation (advanced/ultra when installed)
+  naabu: false    # optional fast port scan (ultra when installed)
+  dnsx: false     # optional DNS toolkit (advanced/ultra when installed)
+  dnsintel: true  # passive DNS enumeration + AXFR probe (safe+)
+  ipintel: true   # passive IP/ASN/cloud intel + IP RDAP (safe+)
+  rdap: true      # passive RDAP WHOIS (safe+)
+  leak: true      # passive private-IP/internal-host leak (safe+)
+  favicon: true   # passive favicon hash (safe+)
+  doh: true       # passive DoH exposure (safe+)
+  bucket: true    # passive cloud bucket probe (safe+)
+  bgp: true       # passive BGP prefix (safe+)
+  api: true       # API schema auto-discovery + testing (safe+)
+  authz: true     # authorization testing, incl. anonymous forced-browsing (safe+)
+  zap: false      # zap via docker (ultra when available)
+
+# Wave 2 wrappers (free binaries; absent tools warn-and-skip).
+# Keys match --only names (amass, ffuf, nmap, ...). Profile defaults
+# apply when unset (safe: searchsploit only; advanced: polite tools;
+# ultra: everything). Fuzzers additionally need ANPU_WORDLIST set;
+# code tools need ANPU_CODE_DIR; resolvers need ANPU_RESOLVERS.
+# Adversarial-gated tools (sqlmap, commix, ...) additionally need
+# --adversarial --confirm-authorized at runtime.
+# external:
+#   ffuf: false
+#   nmap: false
+#   amass: true
+  # Wave 1 batch 1 — passive recon engines (safe+, all default on safe)
+  archiveurls: true  # live-page URL + param corpus (3 reqs)
+  certsan: true      # TLS SAN subdomain signal (0 HTTP reqs)
+  emailharv: true    # homepage email harvest (1 req)
+  dnsaudit: true     # DNSSEC/CAA/DANE posture (DNS-only)
+  emailauth: true    # SPF/DMARC/DKIM/BIMI/TLS-RPT + MTA-STS
+  csprecon: true     # CSP host-source subdomains (1 req)
+  socialhijack: true # dangling social links (HEAD verify, max 5)
+  commentminer: true # interesting HTML comments (2 reqs)
+  brokenlink: true   # same-host broken links (max 10)
+  originip: true     # origin-IP signals (max 3 reqs)
+  # Wave 1 batch 2 — bounded exposure probes (advanced/ultra; safe stays passive)
+  exposedgit: true    # exposed .git detection-only (4 reqs)
+  exposedconfig: true # exposed SVN/HG/BZR/ENV/DS_Store (7 reqs)
+  actuator: true      # Spring Actuator, heapdump HEAD-only (12 reqs)
+  debugpages: true    # framework debug pages (9 reqs)
+  oauthanalyzer: true # OAuth/OIDC discovery (6 reqs)
+  samlmetadata: true  # SAML metadata (5 reqs)
+  cswsh: true         # WebSocket Origin handshake (4 dials, 0 frames)
+  postmessage: true   # postMessage/DOM-sink analysis (6 reqs)
+  jssecrets: true     # JS secret 40+ pack (9 reqs)
+  hiddenparams: true  # hidden-param miner (64 reqs)
+  # Wave 1 batch 3 — items 21-30 (clickjack/policyheaders/cookieprefix safe+; rest advanced/ultra)
+  verbtamper: true      # method-tampering bypass (21 reqs)
+  cachedeception: true  # cache-deception matrix (8 reqs)
+  forbiddenbypass: true # 403-bypass matrix (24 reqs)
+  takeoverplus: true    # 30 takeover sigs (20 hosts)
+  clickjack: true       # XFO + frame-ancestors (safe+)
+  policyheaders: true   # HSTS-preload/COOP/COEP/CORP (safe+)
+  cookieprefix: true    # cookie prefix rules (safe+)
+  apiversion: true      # API version fuzz (11 reqs)
+  apiconsole: true      # API console walk (11 reqs)
+  vhost: true           # vhost discovery (13 reqs)
+  # Wave 1 batches 4-5 — items 31-50 (jwtplus/h2fp/gfclassify/certhistory/subpermute safe+; h2smuggle needs --adversarial too; rest advanced/ultra)
+  graphqlfp: true     # GraphQL fingerprint (8 reqs)
+  graphqlschema: true # introspection test (3 reqs)
+  jwtplus: true       # observed-JWT analysis (safe+)
+  sstiexpand: true    # SSTI 10 engines (24 reqs)
+  nosqlexpand: true   # NoSQL differential (18 reqs)
+  h2smuggle: true     # H2 desync safe-subset (adversarial-gated)
+  h2fp: true          # H2/H3 fingerprint (safe+)
+  redirectpack: true  # open-redirect pack (22 reqs)
+  lfipack: true       # LFI pack (20 reqs)
+  cvepack: true       # CVE behavior probes (3 reqs)
+  corsplus: true      # CORS matrix (12 reqs)
+  certhistory: true   # CT history (safe+)
+  axfrplus: true      # AXFR sweep (DNS-only)
+  subpermute: true    # subdomain permutation (safe+)
+  backupplus: true    # backup expansion (61 reqs)
+  faviconplus: true   # icon sweep (9 reqs)
+  debugmethods: true  # dangerous methods (8 reqs)
+  encodepoly: true    # encoding canaries (13 reqs)
+  difforacle: true    # boolean oracle (8 reqs)
+  gfclassify: true    # GF classifier (safe+)
+  # Next-wave natives (advanced/ultra; safe stays passive)
+  soap: true          # SOAP/WSDL discovery (9 reqs)
+  nsecwalk: true      # NSEC chain walk (DNS-only)
+  wafdetect: true     # WAF fingerprint (5 reqs)
+  oauthpack: true    # OAuth redirect_uri pack (17 reqs)
+  ppollute: true     # proto-pollution static (6 reqs)
+  swscope: true      # service workers (6 reqs)
+  timeoracle: true   # timing oracle (11 reqs)
+  jwtconfirm: true   # alg:none differential (adversarial-gated)
+  jsluice: true      # JS URL joinery + secret harvest, native port (9 reqs)
+  codesecrets: true  # local code review (safe+, needs ANPU_CODE_DIR)
+
+# Scope guard — hard stop before any request when set (CLI: --scope-file).
+# One hostname per line, # comments allowed, *.example.com wildcards OK.
+# scope_file: ./scope.txt
 
 report:
   html: true

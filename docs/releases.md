@@ -4,6 +4,46 @@ This guide covers the supported ways to obtain ANPU, verify a release, build fro
 
 ## 1. Choose an installation method
 
+### Quick install (recommended)
+
+Linux / macOS:
+
+```sh
+curl -sSL https://raw.githubusercontent.com/Marwanmorsy999/anpu/main/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/Marwanmorsy999/anpu/main/install.ps1 | iex
+```
+
+Both scripts resolve the latest release, verify the SHA-256 checksum
+against `checksums.txt`, and install the binary. Useful overrides:
+
+```sh
+ANPU_VERSION=v0.3.1 install.sh            # pin a version
+ANPU_INSTALL_DIR=$HOME/.local/bin install.sh  # unprivileged install
+```
+
+```powershell
+$env:ANPU_VERSION = "v0.3.1"
+$env:ANPU_INSTALL_DIR = "C:\tools\anpu"
+```
+
+### Native Linux packages
+
+Each release also publishes `.deb`, `.rpm`, `.apk`, and Arch Linux
+(`.pkg.tar.zst`) packages for amd64 and arm64 (see
+`.goreleaser.yaml` → `nfpms` for the authoritative list):
+
+```sh
+sudo apt install ./anpu_<version>_linux_amd64.deb
+sudo dnf install ./anpu_<version>_linux_amd64.rpm
+sudo apk add ./anpu_<version>_linux_amd64.apk
+sudo pacman -U ./anpu_<version>_linux_amd64.pkg.tar.zst
+```
+
 ### Pre-built GitHub Release
 
 The preferred path for most users is the repository's **Releases** page. Release archives are produced by GoReleaser and are published when a `v*` tag is pushed. The release workflow also smoke-tests the published Linux amd64 artifact before the workflow completes. See `.github/workflows/release.yml` for the authoritative automation.

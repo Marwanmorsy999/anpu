@@ -46,6 +46,20 @@ jobs:
           # this is the version the tree is verified clean against.
           version: v1.64.8
 
+      # TEMPORARY diagnostic (remove once the 1-second exit-3 is
+      # understood): re-runs the same linter directly and surfaces its
+      # output as annotations, which are readable without log access.
+      - name: Diagnose lint (temporary)
+        if: always()
+        run: |
+          echo "::notice::DIAG $(go version) GOTOOLCHAIN=$(go env GOTOOLCHAIN)"
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 2>&1 | tail -1
+          set +e
+          golangci-lint run ./... > /tmp/lint-direct.log 2>&1
+          echo "::notice::DIAG direct exit: $?"
+          head -30 /tmp/lint-direct.log | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | while IFS= read -r line; do echo "::error::DIAG $line"; done
+          exit 0
+
       - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest

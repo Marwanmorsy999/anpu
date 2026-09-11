@@ -19,6 +19,8 @@ func newLevelCmd(use string, profile models.Profile, short string) *cobra.Comman
 		outputDir              string
 		jsonOut                bool
 		sarifOut               bool
+		csvOut                 bool
+		mdOut                  bool
 		jsonlOut               bool
 		proxyURL               string
 		stealth                bool
@@ -55,29 +57,26 @@ func newLevelCmd(use string, profile models.Profile, short string) *cobra.Comman
 			if len(args) > 0 {
 				targetArg = args[0]
 			}
-			oobInteractshEnabled = oobInteractshLevel
-			// Mirror the scan command's adversarial/ghost wiring so level
-			// shortcuts support the same authorized-undetectable workflows.
-			adversarialEnabled = adversarialLevel
-			adversarialConfirmed = confirmAuthorizedLevel
-			ghostEnabled = ghostLevel
-			ghostCanaryPrefix = ghostCanaryPrefixLevel
-			ghostWorkers = ghostWorkersLevel
-			proxyPoolPath = proxyPoolLevel
-			scopeFilePath = scopeFileLevel
-			autoInstallEnabled = autoInstallLevel
-			assumeYes = yesLevel
-			unsafeEnabled = unsafeLevel
 			integrations.UnsafeEnabled = unsafeLevel
 			integrations.ZapAjax = zapAjaxLevel
-			parallelN = parallelLevel
-			checkpointPath = checkpointLevel
-			resumePath = resumeLevel
-			riskAcceptPath = riskAcceptLevel
-			if unsafeLevel {
-				adversarialEnabled = true
-				adversarialConfirmed = true
+			rt := &ScanRuntime{
+				OOBInteractsh:        oobInteractshLevel,
+				Adversarial:          adversarialLevel,
+				AdversarialConfirmed: confirmAuthorizedLevel,
+				ScopeFile:            scopeFileLevel,
+				AutoInstall:          autoInstallLevel,
+				AssumeYes:            yesLevel,
+				Unsafe:               unsafeLevel,
+				Parallel:             parallelLevel,
+				Checkpoint:           checkpointLevel,
+				Resume:               resumeLevel,
+				RiskAccept:           riskAcceptLevel,
+				Ghost:                ghostLevel,
+				GhostCanaryPrefix:    ghostCanaryPrefixLevel,
+				GhostWorkers:         ghostWorkersLevel,
+				ProxyPool:            proxyPoolLevel,
 			}
+			rt.applyUnsafeOverride()
 			if adversarialLevel && !confirmAuthorizedLevel {
 				return fmt.Errorf("--adversarial requires --confirm-authorized (authorized ultra/adversarial only; no data destruction, Benign/LowImpact only)")
 			}
@@ -102,8 +101,8 @@ func newLevelCmd(use string, profile models.Profile, short string) *cobra.Comman
 			}
 			// Delegate to the full scan pipeline with level-appropriate profile.
 			// We reuse runScan with sensible defaults: html=true, silent/plain handling via reporting.
-			return runScan(cmd, targetArg, string(profile),
-				jsonOut, true, sarifOut, outputDir,
+			return runScan(cmd, rt, targetArg, string(profile),
+				jsonOut, true, sarifOut, csvOut, mdOut, outputDir,
 				false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, "", "none", false,
 				false, false, false, false, proxyURL, "none", rateLimit, time.Duration(0), stealth, false, "", disableModsLevel, enableModsLevel, onlyModsLevel,
 				false, "", jsonlOut,
@@ -116,6 +115,8 @@ func newLevelCmd(use string, profile models.Profile, short string) *cobra.Comman
 	cmd.Flags().StringVar(&outputDir, "output", "./reports", "directory for reports")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "also write JSON report")
 	cmd.Flags().BoolVar(&sarifOut, "sarif", false, "also write SARIF report")
+	cmd.Flags().BoolVar(&csvOut, "csv", false, "also write CSV finding export")
+	cmd.Flags().BoolVar(&mdOut, "md", false, "also write Markdown finding summary")
 	cmd.Flags().BoolVar(&jsonlOut, "jsonl", false, "stream findings as JSONL to stdout")
 	cmd.Flags().StringVar(&proxyURL, "proxy", "", "proxy URL (http/https/socks5) e.g. http://127.0.0.1:8080")
 	cmd.Flags().BoolVar(&stealth, "stealth", false, "random UA + jitter + TLS shuffle")

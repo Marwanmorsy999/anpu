@@ -522,23 +522,34 @@ func (p *Pipeline) runGhostSharded(ctx context.Context, stage Stage, sc *ScanCon
 
 // checkpointFile is the on-disk resume format: completed stage results
 // keyed by stage label, plus target/profile for mismatch warnings.
+// Version guards resume across renames: a stage renamed between the
+// checkpoint write and the resume would otherwise merge stale results
+// under a dead label while the renamed stage re-ran — silent double
+// counting. Bump CheckpointVersion whenever stage labels change
+// meaningfully; mismatched files restart fresh with a warning.
 type checkpointFile struct {
+	Version int                    `json:"version"`
 	Target  string                 `json:"target"`
 	Profile string                 `json:"profile"`
 	Stages  map[string]StageResult `json:"stages"`
 }
 
+// CheckpointVersion is the current checkpoint schema version.
+const CheckpointVersion = 1
+
 // saveCheckpoint persists completed stages so far (best-effort: write
 // errors are silently dropped so checkpointing never fails a scan).
 func saveCheckpoint(path, target, profile string, completed map[string]StageResult) {
-	data, err := json.Marshal(checkpointFile{Target: target, Profile: profile, Stages: completed})
+	data, err := json.Marshal(checkpointFile{Version: CheckpointVersion, Target: target, Profile: profile, Stages: completed})
 	if err != nil {
 		return
 	}
 	_ = os.WriteFile(path, data, 0o600)
 }
 
-// loadCheckpoint reads a checkpoint file for --resume.
+// loadCheckpoint reads a checkpoint file for --resume. Unknown or
+// legacy-unversioned files are rejected (not merged) so resume can
+// never silently mix incompatible stage results.
 func loadCheckpoint(path string) (checkpointFile, error) {
 	var cp checkpointFile
 	data, err := os.ReadFile(path) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).
@@ -547,6 +558,9 @@ func loadCheckpoint(path string) (checkpointFile, error) {
 	}
 	if err := json.Unmarshal(data, &cp); err != nil {
 		return cp, fmt.Errorf("parsing checkpoint %s: %w", path, err)
+	}
+	if cp.Version != CheckpointVersion {
+		return cp, fmt.Errorf("checkpoint %s is version %d (need %d): re-run with --checkpoint to regenerate", path, cp.Version, CheckpointVersion)
 	}
 	if cp.Stages == nil {
 		cp.Stages = map[string]StageResult{}

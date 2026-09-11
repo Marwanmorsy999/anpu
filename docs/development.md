@@ -118,7 +118,7 @@ Then run the controlled end-to-end security workflow in GitHub Actions before pu
 
 ## Adding a scanner
 
-A new scanner should implement the existing scanner/stage interfaces rather than coupling itself directly to the pipeline. The concrete wiring belongs in `cmd/anpu/scan.go`.
+A new scanner should implement the existing scanner/stage interfaces rather than coupling itself directly to the pipeline. The concrete wiring belongs in `cmd/anpu/pipeline_stages.go` (stage table + `nativeStage` registry); runtime knobs live in `cmd/anpu/runtime.go`.
 
 A typical workflow is:
 

@@ -162,7 +162,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			ct := strings.ToLower(resp.Header.Get("Content-Type"))
 			cl := resp.Header.Get("Content-Length")
 			if resp.StatusCode == 200 && (strings.Contains(ct, "octet-stream") || cl != "") &&
-				!(rootStatus != 0 && resp.StatusCode == rootStatus && ct == rootCT && cl == rootCL) {
+				(rootStatus == 0 || resp.StatusCode != rootStatus || ct != rootCT || cl != rootCL) {
 				findings = append(findings, models.Finding{
 					ID:              "actuator-heapdump-headers",
 					Title:           "Spring Actuator /heapdump endpoint present (headers only checked)",

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/anpu-project/anpu/internal/fpmatch"
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
 )
 
@@ -35,7 +36,10 @@ type soft404Detector struct {
 // newSoft404Detector fetches two random baselines and the root to build
 // a detector. Fail-open: on error it returns nil (no filtering).
 func newSoft404Detector(ctx context.Context, client *anpuhttp.Client, base string) *soft404Detector {
-	base = strings.TrimRight(base, "/")
+	// Strip query/fragment so baselines probe random paths — not random
+	// values of the target's own parameters (which would render the
+	// endpoint template and suppress it as its own baseline).
+	base = strings.TrimRight(stripQuery(base), "/")
 	// Baseline A.
 	respA, err := client.Get(ctx, base+"/"+randHexActive(16))
 	if err != nil || respA == nil {
@@ -46,13 +50,14 @@ func newSoft404Detector(ctx context.Context, client *anpuhttp.Client, base strin
 	wordsA := wordSetActive(respA.Body)
 
 	// Baseline B — check if catch-all serves same template.
+	// Baseline words are ALWAYS retained (not only for catch-all) so
+	// similarity gating works in every mode — see isSoft404.
 	catchAll := false
-	var wordsCatch map[string]struct{}
+	wordsBase := wordsA
 	if respB, err := client.Get(ctx, base+"/"+randHexActive(16)); err == nil && respB != nil && respB.StatusCode == respA.StatusCode {
 		wB := wordSetActive(respB.Body)
-		if similarityActive(wordsA, wB) >= 0.80 {
+		if similarityActive(wordsA, wB) >= fpmatch.CatchAllDetect {
 			catchAll = true
-			wordsCatch = wordsA
 		}
 	}
 
@@ -70,7 +75,7 @@ func newSoft404Detector(ctx context.Context, client *anpuhttp.Client, base strin
 		baselineStatus: respA.StatusCode,
 		baselineHash:   hashA,
 		baselineSize:   sizeA,
-		baselineWords:  wordsCatch,
+		baselineWords:  wordsBase,
 		catchAll:       catchAll,
 		rootHash:       rootHash,
 		rootWords:      rootWords,
@@ -78,7 +83,9 @@ func newSoft404Detector(ctx context.Context, client *anpuhttp.Client, base strin
 	}
 }
 
-// isSoft404 reports whether resp looks like the soft-404 baseline.
+// isSoft404 reports whether resp looks like the soft-404 baseline or
+// the application shell: exact normalized-hash match, or word-set
+// similarity at/above threshold against either template.
 func (d *soft404Detector) isSoft404(resp *anpuhttp.Response) bool {
 	if d == nil || resp == nil {
 		return false
@@ -90,29 +97,19 @@ func (d *soft404Detector) isSoft404(resp *anpuhttp.Response) bool {
 		return true
 	}
 	probeWords := wordSetActive(resp.Body)
-	if d.catchAll {
-		if similarityActive(probeWords, d.baselineWords) >= 0.85 {
-			return true
-		}
-	} else if len(resp.Body) == d.baselineSize && sha256.Sum256(normalizeBodyActive(resp.Body)) == d.baselineHash {
+	if d.baselineWords != nil && similarityActive(probeWords, d.baselineWords) >= fpmatch.ShellMatch {
 		return true
-	} else if similarityActive(probeWords, wordSetActive(resp.Body)) >= 0.85 {
-		// fallback: compare to baseline words directly (approx)
-		// Note: we already have baseline hash, but also check similarity
-		// against the original baseline words if catchAll false.
-		// Use baselineWords if available, else skip.
-		if d.baselineWords != nil && similarityActive(probeWords, d.baselineWords) >= 0.85 {
-			return true
-		}
 	}
-	if len(d.rootWords) > 0 && similarityActive(probeWords, d.rootWords) >= 0.85 {
+	if len(d.rootWords) > 0 && similarityActive(probeWords, d.rootWords) >= fpmatch.ShellMatch {
 		return true
 	}
 	return false
 }
 
-// soft404Score returns similarity to baseline (0-1) for gating.
-// Used for the >0.85 threshold in active/scanner.go:50-115.
+// soft404Score returns the best template similarity (0-1) for gating.
+// Exact hash matches score 1.0; otherwise the max Jaccard similarity
+// against baseline and root templates. Used for the >0.85 threshold in
+// active/scanner.go — works in every mode, not just catch-all.
 func (d *soft404Detector) soft404Score(resp *anpuhttp.Response) float64 {
 	if d == nil || resp == nil {
 		return 0
@@ -120,13 +117,22 @@ func (d *soft404Detector) soft404Score(resp *anpuhttp.Response) float64 {
 	if normHashActive(resp.Body) == d.baselineHash {
 		return 1.0
 	}
-	probeWords := wordSetActive(resp.Body)
-	if d.catchAll && d.baselineWords != nil {
-		return similarityActive(probeWords, d.baselineWords)
+	if d.rootHasBody && normHashActive(resp.Body) == d.rootHash {
+		return 1.0
 	}
-	// Otherwise compare to a fresh baseline word set from the first fetch?
-	// Approximate with empty baseline score.
-	return 0
+	probeWords := wordSetActive(resp.Body)
+	best := 0.0
+	if d.baselineWords != nil {
+		if s := similarityActive(probeWords, d.baselineWords); s > best {
+			best = s
+		}
+	}
+	if len(d.rootWords) > 0 {
+		if s := similarityActive(probeWords, d.rootWords); s > best {
+			best = s
+		}
+	}
+	return best
 }
 
 // Helpers mirrored from dirs.go (local copies to avoid import cycle).

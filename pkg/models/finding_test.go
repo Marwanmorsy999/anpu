@@ -35,10 +35,10 @@ func TestDedupKeyDistinguishesParamAndCWE(t *testing.T) {
 }
 
 func TestSeverityAndConfidenceRanks(t *testing.T) {
-	if !(SeverityCritical.Rank() > SeverityHigh.Rank() && SeverityHigh.Rank() > SeverityMedium.Rank()) {
+	if SeverityCritical.Rank() <= SeverityHigh.Rank() || SeverityHigh.Rank() <= SeverityMedium.Rank() {
 		t.Fatal("severity rank order broken")
 	}
-	if !(ConfidenceConfirmed.Rank() > ConfidenceHigh.Rank() && ConfidenceHigh.Rank() > ConfidenceMedium.Rank()) {
+	if ConfidenceConfirmed.Rank() <= ConfidenceHigh.Rank() || ConfidenceHigh.Rank() <= ConfidenceMedium.Rank() {
 		t.Fatal("confidence rank order broken")
 	}
 	if Severity("bogus").Rank() >= SeverityInfo.Rank() || !SeverityInfo.Valid() {

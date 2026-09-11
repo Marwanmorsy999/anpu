@@ -152,14 +152,12 @@ func runToolsStatus(cmd *cobra.Command) error {
 		}
 		state, detail := integrations.ToolStatus(ctx, name)
 		extCounts[state]++
-		sym := "~"
+		sym := "✗"
 		switch state {
 		case integrations.ToolExternal:
 			sym = "✓"
 		case integrations.ToolEmbedded:
 			sym = "~"
-		default:
-			sym = "✗"
 		}
 		timeout := ""
 		if spec != nil {

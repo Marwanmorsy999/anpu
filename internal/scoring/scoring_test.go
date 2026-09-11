@@ -20,12 +20,16 @@ func TestScoreFindingInfoIsZero(t *testing.T) {
 func TestScoreFindingHighHighBeatsLowConfCritical(t *testing.T) {
 	hi := ScoreFinding(models.Finding{Severity: models.SeverityHigh, Confidence: models.ConfidenceHigh, Category: models.CategoryHeaders})
 	lo := ScoreFinding(models.Finding{Severity: models.SeverityCritical, Confidence: models.ConfidenceLow, Category: models.CategoryHeaders})
-	if !(hi.RiskScore < lo.RiskScore || hi.RiskScore > 0) {
-		t.Fatalf("unexpected scores hi=%.1f lo=%.1f", hi.RiskScore, lo.RiskScore)
-	}
-	// Documented math: 7.0*0.90+0.1 = 6.4 for high/high headers.
+	// Documented math: high/high headers 7.0*0.90+0.1 = 6.4;
+	// critical/low headers round(9.0*0.55+0.1) = 5.1.
 	if hi.RiskScore != 6.4 {
 		t.Fatalf("high/high headers expected 6.4, got %.1f (%s)", hi.RiskScore, hi.ScoreExplanation)
+	}
+	if lo.RiskScore != 5.1 {
+		t.Fatalf("critical/low headers expected 5.1, got %.1f (%s)", lo.RiskScore, lo.ScoreExplanation)
+	}
+	if hi.RiskScore <= lo.RiskScore {
+		t.Fatalf("high/high (%.1f) must outrank low-confidence critical (%.1f)", hi.RiskScore, lo.RiskScore)
 	}
 	if !strings.Contains(hi.ScoreExplanation, "base=7.0") {
 		t.Fatalf("explanation must show base: %q", hi.ScoreExplanation)

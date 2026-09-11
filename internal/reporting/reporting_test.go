@@ -64,7 +64,7 @@ func TestWriteHTMLSeverityOrder(t *testing.T) {
 	if hi < 0 || lo < 0 || ii < 0 {
 		t.Fatal("all findings must render")
 	}
-	if !(hi < lo && lo < ii) {
+	if hi >= lo || lo >= ii {
 		t.Fatal("HTML findings must render worst-first")
 	}
 	// Caller slice order must be untouched (sorted copy, not in place).

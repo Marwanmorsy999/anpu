@@ -22,8 +22,8 @@ import (
 	"github.com/anpu-project/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic: 1 control + 1 lazy root + 10 GET + 1 HEAD.
-const maxRequests = 13
+// maxRequests bounds all HTTP traffic: 1 control + 1 lazy root + 10 GET + 1 root HEAD + 1 heapdump HEAD.
+const maxRequests = 14
 
 // Scanner implements scanner.Scanner.
 type Scanner struct {
@@ -137,13 +137,32 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		}
 	}
 	// Heapdump: HEADERS ONLY — never download the dump.
+	// A catch-all serves identical headers for every path, so compare
+	// against a root HEAD first: the same (status, content-type,
+	// content-length) triple means template, not a dump. Root fetch
+	// failure fails open (no suppression without a baseline).
+	var rootStatus int
+	var rootCT, rootCL string
+	if made < maxRequests {
+		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		rresp, rerr := s.client.DoWithHeaders(cctx, "HEAD", strings.TrimSuffix(sc.Target.Raw, "/")+"/", nil)
+		cancel()
+		made++
+		if rerr == nil && rresp != nil {
+			rootStatus = rresp.StatusCode
+			rootCT = strings.ToLower(rresp.Header.Get("Content-Type"))
+			rootCL = rresp.Header.Get("Content-Length")
+		}
+	}
 	if made < maxRequests {
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		made++
 		if resp, err := s.client.DoWithHeaders(cctx, "HEAD", strings.TrimSuffix(sc.Target.Raw, "/")+"/actuator/heapdump", nil); err == nil && resp != nil {
 			ct := strings.ToLower(resp.Header.Get("Content-Type"))
-			if resp.StatusCode == 200 && (strings.Contains(ct, "octet-stream") || resp.Header.Get("Content-Length") != "") {
+			cl := resp.Header.Get("Content-Length")
+			if resp.StatusCode == 200 && (strings.Contains(ct, "octet-stream") || cl != "") &&
+				!(rootStatus != 0 && resp.StatusCode == rootStatus && ct == rootCT && cl == rootCL) {
 				findings = append(findings, models.Finding{
 					ID:              "actuator-heapdump-headers",
 					Title:           "Spring Actuator /heapdump endpoint present (headers only checked)",

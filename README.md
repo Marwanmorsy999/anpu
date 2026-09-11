@@ -199,6 +199,19 @@ ANPU can write:
 
 Reports include observed evidence and score explanations. ANPU does not manufacture evidence when a check could not be verified.
 
+### Sample HTML report
+
+![ANPU HTML report: risk grade, severity summary, attack surface, and findings](docs/screenshots/report-hero.png)
+
+<details>
+<summary>Full report (long)</summary>
+
+![Full ANPU HTML report](docs/screenshots/report-full.png)
+
+</details>
+
+Screenshots show a demo scan against a local fixture (`safe` intel plus planted XSS / open-redirect / exposed-file signals), rendered with headless Chromium at 1440px.
+
 ## 9. Integrations
 
 ### Nuclei

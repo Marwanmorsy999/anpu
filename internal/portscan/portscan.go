@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anpu-project/anpu/internal/fpmatch"
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/pkg/models"
@@ -157,7 +158,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		findings = append(findings, models.Finding{
 			ID:          fmt.Sprintf("portscan-open-%d", op.port),
 			Title:       fmt.Sprintf("Port %d open (%s)", op.port, op.svc),
-			Description: fmt.Sprintf("A TCP %s service accepts connections on %s:%d. Open network services expand the attack surface and each should be intentionally exposed, patched, and firewalled where possible.", op.svc, host, op.port),
+			Description: fmt.Sprintf("A TCP %s service accepts connections on %s:%d. Open network services expand the attack surface and each should be intentionally exposed, patched, and firewalled where possible.%s", op.svc, host, op.port, cdnPortNote(sc)),
 			Severity:    sev,
 			Confidence:  models.ConfidenceConfirmed,
 			Category:    models.CategoryConfiguration,
@@ -200,12 +201,20 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 
 func cdnCaveat(sc *scanner.ScanContext) string {
 	for _, t := range sc.Technologies {
-		switch t.Name {
-		case "Cloudflare", "Amazon CloudFront", "Vercel", "Fastly":
+		if fpmatch.IsCDNName(t.Name) || fpmatch.IsCDNName(t.Category) {
 			return fmt.Sprintf(" Note: %s was fingerprinted for this host, so the scanned addresses are the CDN edge, not necessarily your origin. Verify these ports directly against the origin server (e.g. by hostname or allow-listed IP) before acting.", t.Name)
 		}
 	}
 	return ""
+}
+
+// cdnPortNote is the per-port form of the CDN caveat (Phase 2): each
+// open-port finding carries the edge warning, not just the summary.
+func cdnPortNote(sc *scanner.ScanContext) string {
+	if cdnCaveat(sc) == "" {
+		return ""
+	}
+	return " Note: a CDN edge was fingerprinted for this host — verify this port against the origin before acting."
 }
 
 func joinLines(lines []string) string {

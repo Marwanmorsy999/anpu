@@ -13,13 +13,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anpu-project/anpu/internal/fpmatch"
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic: 1 control + 10 probes.
-const maxRequests = 11
+// maxRequests bounds all HTTP traffic: 1 control + 1 lazy root + 10 probes.
+const maxRequests = 12
 
 // Scanner implements scanner.Scanner.
 type Scanner struct {
@@ -84,6 +85,20 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		controlWords = wordSet(control.Body)
 	}
 
+	// Lazy app-shell root (Phase 2): fetched only on the first marker
+	// match so the common no-finding path costs nothing extra.
+	var rootWords map[string]struct{}
+	rootFetched := false
+	ensureRoot := func() {
+		if rootFetched {
+			return
+		}
+		rootFetched = true
+		if root := get("/"); root != nil && len(root.Body) > 0 {
+			rootWords = wordSet(root.Body)
+		}
+	}
+
 	var findings []models.Finding
 	var endpoints []models.Endpoint
 	for _, p := range consoleProbes {
@@ -99,6 +114,13 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		}
 		if overlap(wordSet(resp.Body), controlWords) > 0.85 {
 			continue // baseline-subtract
+		}
+		if fpmatch.IsWAFBlockPage(resp.Body) {
+			continue // WAF block page served as 200, not a console
+		}
+		ensureRoot()
+		if len(rootWords) > 0 && overlap(wordSet(resp.Body), rootWords) > 0.85 {
+			continue // app-shell: same page as site root
 		}
 		sev := models.SeverityMedium
 		if p.schema {

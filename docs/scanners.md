@@ -184,11 +184,11 @@ Takeover checks every discovered subdomain against 21 provider fingerprints (CNA
 
 The port scanner uses TCP connect probes against a curated set of common service ports. ANPU includes sanity/false-positive safeguards so environments that accept unexpected connections do not blindly turn every port into a finding.
 
-Port scanning is enabled for `ultra` discovery and is not part of the default safe profile.
+Port scanning is enabled for `ultra` discovery and is not part of the default safe profile. When a CDN/edge provider is fingerprinted (broad name matching, not just four vendors), every open-port finding and the summary carry an edge caveat: verify against the origin before acting.
 
 ## Sensitive paths
 
-The directory/path engine probes a controlled set of sensitive paths and establishes a soft-404 baseline. This helps distinguish genuinely exposed resources from applications that return the same generic page for arbitrary paths.
+The directory/path engine probes a controlled set of sensitive paths and establishes a soft-404 baseline. This helps distinguish genuinely exposed resources from applications that return the same generic page for arbitrary paths. WAF/vendor block pages served as 200 are vetoed via shared block markers (`internal/fpmatch`), and 401/403/406 responses are classified as WAF noise vs present-but-protected candidates — the latter surface as warnings, never as exposure findings. Backup/exposed-config/actuator/debug/SOAP engines apply the same shared template matching (catch-all baseline + lazy site-root shell check) so SPA catch-alls produce no false exposures.
 
 ## Secret detection
 
@@ -246,7 +246,9 @@ Beyond introspection disclosure, the API stage runs four safe read-only checks o
 
 ## Active testing & OOB confirmation
 
-The Active engine probes query/path vectors with per-rule request budgets. Signal discipline: error-based SQLi is baseline-subtracted (High/Medium, never Critical on a string match), and a boolean-differential rule (`' AND '1'='1` vs `' AND '1'='2`, stability-gated) confirms blind SQLi at High/High. Single-technique differentials are capped at Medium and tagged needs-review — fully earned High/High requires a 200×3 same-content-type baseline, a random control, and an evidence bundle. Schema-declared API parameters flow into the engine as query and JSON-body vectors, lighting up the POST branches of the SQLi/NoSQL/SSRF rules. SSRF covers AWS/Alibaba/DigitalOcean metadata plus a single canary for non-URL-looking parameters.
+The Active engine probes query/path vectors with per-rule request budgets. Signal discipline: error-based SQLi is baseline-subtracted (High/Medium, never Critical on a string match), and a boolean-differential rule (`' AND '1'='1` vs `' AND '1'='2`, stability-gated) confirms blind SQLi at High/High. Single-technique differentials are capped at Medium and tagged needs-review — fully earned High/High requires a 200×3 same-content-type baseline, a random control, and an evidence bundle. The same contract now covers XSS (baseline + random control + reflection-context classification; comment/script context capped at Medium), command injection (baseline-subtracted canary marker earns High with echo-guard, bare error strings capped at Medium, never Critical), HTTP smuggling (length differentials capped at Medium), and blind timing (double-sleep capped at Medium as a same-family repeat). Nuclei/ZAP matches with no captured evidence (`evidence.unavailable`) are capped at Medium/Medium. Dedup keeps max severity but flags `disputed-sources` + needs-review when merged sources span 2+ severity ranks.
+
+Ultra-only confirmations (Phase 3, wired via `active.SetUltraConfirm` in `runScan` — advanced behavior is byte-identical): an XSS finding whose second benign tag family (`<u>` vs `<b>`) also reflects unescaped rises to High confidence; a command-injection error signal raised by two metacharacter families (pipe vs `;` vs backtick) clears the review flag at Medium/Medium; a blind-timing double-sleep whose 2s/5s delays scale with the sleep argument upgrades to High/High (`delay-scaling-confirmed`). Smuggling deliberately has no ultra upgrade — length differentials cannot confirm a desync at any budget. Schema-declared API parameters flow into the engine as query and JSON-body vectors, lighting up the POST branches of the SQLi/NoSQL/SSRF rules. SSRF covers AWS/Alibaba/DigitalOcean metadata plus a single canary for non-URL-looking parameters.
 
 `--oob-interactsh` (opt-in) registers one session on the public interactsh fleet and upgrades blind SSRF, XXE, and Log4Shell from "injected" to CONFIRMED when a callback carrying the probe nonce is observed (12s window per probe). Without the flag, behavior is byte-identical to in-band-only mode. Callback metadata goes to interactsh servers — only use against targets you own or are authorized to test. Your own listener stays supported via `--oob-host` (manual verification).
 

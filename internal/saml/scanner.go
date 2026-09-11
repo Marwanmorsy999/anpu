@@ -13,12 +13,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anpu-project/anpu/internal/fpmatch"
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/pkg/models"
 )
 
 // maxRequests bounds all HTTP traffic: 1 control + 4 probes.
+// (WAF veto below needs no extra requests; EntityDescriptor markers
+// cannot match SPA shells, so no root fetch is required here.)
 const maxRequests = 5
 
 // Scanner implements scanner.Scanner.
@@ -82,6 +85,9 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		m := entityRe.FindStringSubmatch(string(resp.Body))
 		if m == nil {
 			continue
+		}
+		if fpmatch.IsWAFBlockPage(resp.Body) {
+			continue // WAF block page served as 200, not metadata
 		}
 		if controlLen >= 0 && len(resp.Body)/256 == controlLen && !strings.Contains(strings.ToLower(string(resp.Body)), "entitydescriptor") {
 			continue // baseline-subtract (defensive; marker already required)

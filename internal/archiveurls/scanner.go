@@ -6,8 +6,10 @@
 //
 // Ghost-compatible and deterministic: same input → same corpus.
 // Echo-guard: javascript:/mailto:/tel:/data: URLs and pure-fragment
-// links are skipped. Baseline-subtract: links whose path matches the
-// soft-404 control signature are tagged, not probed further here.
+// links are skipped. The soft-404 control signature is recorded as
+// context on the corpus finding so operators see whether downstream
+// soft-404 gates face a catch-all template; mined URLs are filtered
+// by those downstream gates (crawler, Active), not probed here.
 package archiveurls
 
 import (
@@ -71,9 +73,11 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	}
 	// Baseline: soft-404 control signature (status + length bucket).
 	controlLen := -1
+	controlStatus := 0
 	control := get(strings.TrimSuffix(sc.Target.Raw, "/") + "/anpu-corpus-control-404")
 	if control != nil {
 		controlLen = len(control.Body) / 256 // coarse bucket, template-tolerant
+		controlStatus = control.StatusCode
 	}
 
 	seen := map[string]bool{}
@@ -142,10 +146,18 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 
 	var findings []models.Finding
 	if len(endpoints) > 0 {
-		soft404Tagged := 0
-		_ = soft404Tagged
-		_ = controlLen
+		// The soft-404 control is load-bearing here as context, not a
+		// filter: corpus URLs are mined, not probed (fetching each
+		// would blow the 3-request budget), so downstream soft-404
+		// gates (crawler, Active) do the filtering. Recording the
+		// control signature tells operators whether those gates are
+		// armed against a catch-all template or a clean 404.
 		observed := fmt.Sprintf("%d same-host URLs, %d distinct query params", len(endpoints), len(paramNames))
+		if controlLen >= 0 {
+			observed += fmt.Sprintf("; soft-404 control: HTTP %d, ~%dKB template", controlStatus, controlLen/4)
+		} else {
+			observed += "; soft-404 control: clean 404 (no catch-all template)"
+		}
 		if len(paramNames) > 0 {
 			shown := paramNames
 			if len(shown) > 12 {

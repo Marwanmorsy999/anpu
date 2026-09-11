@@ -27,10 +27,15 @@ function Check($Name, $Cond) {
 function ScanJson($ExtraArgs, $Target, $OutDir) {
     $p = Join-Path $Tmp "last.json"
     if (Test-Path $p) { Remove-Item $p -Force }
+    # Snapshot existing reports so a same-timestamp older file is never
+    # mistaken for this scan's output (NTFS/PS timestamp races).
+    $before = @{}
+    foreach ($f in (Get-ChildItem -LiteralPath $OutDir -Filter "*.json" -ErrorAction SilentlyContinue)) { $before[$f.Name] = $true }
     & ./anpu.exe scan @ExtraArgs --json --no-banner --silent --output $OutDir $Target > $null 2>&1
-    $f = Get-ChildItem -LiteralPath $OutDir -Filter "*.json" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if ($null -eq $f) { return $null }
-    return (Get-Content -LiteralPath $f.FullName -Raw) | ConvertFrom-Json
+    $fresh = Get-ChildItem -LiteralPath $OutDir -Filter "*.json" -ErrorAction SilentlyContinue | Where-Object { -not $before.ContainsKey($_.Name) } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($null -eq $fresh) { $fresh = Get-ChildItem -LiteralPath $OutDir -Filter "*.json" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1 }
+    if ($null -eq $fresh) { return $null }
+    return (Get-Content -LiteralPath $fresh.FullName -Raw) | ConvertFrom-Json
 }
 
 # --- fixtures (local only, no network) ---

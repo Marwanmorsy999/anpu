@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anpu-project/anpu/internal/fpmatch"
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/pkg/models"
@@ -62,7 +63,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	head := get("/.git/HEAD")
 	if head == nil || head.StatusCode != 200 {
 		// Fallback: some deployments strip the dotfile but leave /HEAD.
-		if h2 := get("/HEAD"); h2 == nil || h2.StatusCode != 200 || !isGitHead(string(h2.Body)) {
+		if h2 := get("/HEAD"); h2 == nil || h2.StatusCode != 200 || fpmatch.IsWAFBlockPage(h2.Body) || !isGitHead(string(h2.Body)) {
 			return scanner.StageResult{}, nil
 		} else if overlap(wordSet(h2.Body), controlWords) > 0.85 {
 			return scanner.StageResult{}, nil // baseline-subtract
@@ -71,12 +72,18 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		}
 	}
 	body := string(head.Body)
+	// Strict first-line markers (ref:/40-hex) cannot match SPA shells,
+	// so no root fetch is needed here — but a WAF block page served as
+	// 200 is still vetoed explicitly.
+	if fpmatch.IsWAFBlockPage(head.Body) {
+		return scanner.StageResult{}, nil
+	}
 	if !isGitHead(body) || overlap(wordSet(head.Body), controlWords) > 0.85 {
 		return scanner.StageResult{}, nil // baseline-subtract: fallback page
 	}
 	// Confirm with config (second independent marker).
 	conf := get("/.git/config")
-	if conf != nil && conf.StatusCode == 200 && strings.Contains(string(conf.Body), "[core]") {
+	if conf != nil && conf.StatusCode == 200 && !fpmatch.IsWAFBlockPage(conf.Body) && strings.Contains(string(conf.Body), "[core]") {
 		return scanner.StageResult{Findings: []models.Finding{{
 			ID:              "exposedgit-repository",
 			Title:           "Exposed .git repository (source code downloadable)",

@@ -49,6 +49,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anpu-project/anpu/internal/fpmatch"
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/pkg/models"
@@ -147,9 +148,16 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	var warnings []string
 	var mu sync.Mutex
 
-	// --- Soft-404 baseline ---
-	// Fetch a randomly-named path to detect catch-all routers.
+	// --- Soft-404 baseline + app-shell root template ---
+	// Fetch a randomly-named path to detect catch-all routers, plus the
+	// site root so SPA shells served for missing files are suppressed
+	// with the same template matching as dirs/active (fpmatch).
 	soft404Body := s.soft404Baseline(ctx, sc.Target.Raw)
+	baselineTmpl := fpmatch.NewTemplate([]byte(soft404Body))
+	var rootTmpl fpmatch.Template
+	if rr, err := s.client.Get(ctx, baseURL(sc.Target.Raw)+"/"); err == nil && rr != nil {
+		rootTmpl = fpmatch.NewTemplate(rr.Body)
+	}
 
 	// --- Build probe list ---
 	type probe struct {
@@ -205,7 +213,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			f := s.probe(ctx, p.url, p.note, soft404Body, sc.Target.Raw)
+			f := s.probe(ctx, p.url, p.note, baselineTmpl, rootTmpl, sc.Target.Raw)
 			results <- probeResult{url: p.url, finding: f}
 		}(p)
 	}
@@ -235,7 +243,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 
 // probe GETs a single candidate URL and returns a Finding if it looks like
 // an exposed backup file.  Returns nil for non-findings.
-func (s *Scanner) probe(ctx context.Context, url, note, soft404Body, target string) *models.Finding {
+func (s *Scanner) probe(ctx context.Context, url, note string, baseline, root fpmatch.Template, target string) *models.Finding {
 	resp, err := s.client.Get(ctx, url)
 	if err != nil {
 		return nil
@@ -253,8 +261,18 @@ func (s *Scanner) probe(ctx context.Context, url, note, soft404Body, target stri
 		return nil
 	}
 
-	// Soft-404 check: if the body is similar to our baseline, skip.
-	if soft404Body != "" && stringsAreSimilar(body, soft404Body) {
+	// WAF/vendor block pages served as 200 are not backup files.
+	if fpmatch.IsWAFBlockPage(resp.Body) {
+		return nil
+	}
+
+	// Soft-404 / app-shell check with the shared template matcher
+	// (exact normalized hash or ≥0.80 word similarity vs the catch-all
+	// baseline, ≥0.85 vs the site root shell).
+	if baseline.Has && fpmatch.MatchesTemplate(resp.Body, fpmatch.CatchAllDetect, baseline) {
+		return nil
+	}
+	if root.Has && fpmatch.MatchesTemplate(resp.Body, fpmatch.ShellMatch, root) {
 		return nil
 	}
 
@@ -336,30 +354,6 @@ func (s *Scanner) soft404Baseline(ctx context.Context, targetRaw string) string 
 		return ""
 	}
 	return string(resp.Body)
-}
-
-// stringsAreSimilar returns true when a and b share more than 80% of their
-// characters — a heuristic for catch-all soft-404 pages that return the same
-// template regardless of path.
-func stringsAreSimilar(a, b string) bool {
-	if len(a) == 0 || len(b) == 0 {
-		return false
-	}
-	// If lengths differ by more than 20%, they're not similar enough.
-	ratio := float64(len(a)) / float64(len(b))
-	if ratio < 0.8 || ratio > 1.2 {
-		return false
-	}
-	// Simple prefix comparison: if first 200 chars match, consider similar.
-	aPrefix := a
-	bPrefix := b
-	if len(aPrefix) > 200 {
-		aPrefix = aPrefix[:200]
-	}
-	if len(bPrefix) > 200 {
-		bPrefix = bPrefix[:200]
-	}
-	return aPrefix == bPrefix
 }
 
 // pathOf returns the path component of a URL string.

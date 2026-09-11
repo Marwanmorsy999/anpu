@@ -112,11 +112,14 @@ func mergeGroup(group []models.Finding) models.Finding {
 	merged := best
 	merged.MergedFrom = nil
 
-	maxSevRank, maxConfRank := -1, -1
+	maxSevRank, maxConfRank, minSevRank := -1, -1, -1
 	for _, f := range group {
 		if f.Severity.Rank() > maxSevRank {
 			maxSevRank = f.Severity.Rank()
 			merged.Severity = f.Severity
+		}
+		if minSevRank == -1 || f.Severity.Rank() < minSevRank {
+			minSevRank = f.Severity.Rank()
 		}
 		if f.Confidence.Rank() > maxConfRank {
 			maxConfRank = f.Confidence.Rank()
@@ -128,6 +131,24 @@ func mergeGroup(group []models.Finding) models.Finding {
 			OriginalName: f.Title,
 			Evidence:     f.Evidence,
 		})
+	}
+	// Disagreement path (Phase 1): when merged sources disagree
+	// meaningfully on severity (span of 2+ ranks, e.g. High vs Low),
+	// pure max-wins overstates certainty. Keep the max severity so a
+	// real issue is never silently downgraded, but flag the finding
+	// needs-review with the disputed-sources technique so reports and
+	// reviewers see the conflict.
+	if maxSevRank-minSevRank >= 2 {
+		if merged.EvidenceBundle == nil {
+			merged.EvidenceBundle = &models.EvidenceBundle{}
+		}
+		merged.EvidenceBundle.NeedsReview = true
+		switch {
+		case merged.EvidenceBundle.Technique == "":
+			merged.EvidenceBundle.Technique = "disputed-sources"
+		case !strings.Contains(merged.EvidenceBundle.Technique, "disputed-sources"):
+			merged.EvidenceBundle.Technique += "+disputed-sources"
+		}
 	}
 	merged.Source = models.SourceAggregation
 	merged.ID = stableID(merged)

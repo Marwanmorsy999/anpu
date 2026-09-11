@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anpu-project/anpu/internal/fpmatch"
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/pkg/models"
@@ -29,9 +30,10 @@ const maxRequests = 3
 // cdnMarkers match CNAME targets of common CDN/WAF providers.
 var cdnMarkers = []string{
 	"cloudflare", "akamai", "fastly", "cloudfront", "azureedge",
-	"googlehosted", "googlesyndication", "incapsula", "imperva",
-	"sucuri", "stackpath", "keycdn", "bunnycdn", "jsdelivr",
-	"edgecast", "limelight", "leaseweb", "ovh", "g-core", "cachefly",
+	"azurefd", "frontdoor", "cloudarmor", "googlehosted", "googlesyndication",
+	"incapsula", "imperva", "sucuri", "stackpath", "keycdn", "bunnycdn",
+	"bunny", "cdn77", "jsdelivr", "edgecast", "limelight", "leaseweb",
+	"ovh", "g-core", "gcore", "cachefly", "alicdn", "vercel", "netlify",
 }
 
 // Scanner implements scanner.Scanner.
@@ -107,10 +109,15 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 
 	var findings []models.Finding
 	if behindCDN && len(ips) > 0 {
-		// Baseline: homepage title; probe: direct-IP with Host override.
+		// Baseline: homepage title + body words; probe: direct-IP with
+		// Host override. Title equality alone is weak for SPA shells
+		// (same <title> on edge + origin), so confirmation also
+		// requires body word similarity (Phase 2).
 		var baseline string
+		var baselineWords map[string]struct{}
 		if root := get(sc.Target.Raw); root != nil {
 			baseline = normTitle(extractTitle(string(root.Body)))
+			baselineWords = fpmatch.WordSet(root.Body)
 		}
 		for _, ip := range ips {
 			if ip.To4() == nil || made >= maxRequests {
@@ -130,20 +137,24 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			}
 			ptitle := normTitle(extractTitle(string(presp.Body)))
 			// Baseline-subtract + echo-guard: empty titles and
-			// default-server pages never count.
-			if ptitle != "" && baseline != "" && strings.EqualFold(ptitle, baseline) && !defaultPageTitle(ptitle) {
+			// default-server pages never count. Beyond title equality,
+			// the direct-IP body must share vocabulary with the
+			// homepage (Jaccard ≥ OriginMatch) — a coincidental title
+			// on unrelated content is not an origin bypass.
+			bodySim := fpmatch.Similarity(baselineWords, fpmatch.WordSet(presp.Body))
+			if ptitle != "" && baseline != "" && strings.EqualFold(ptitle, baseline) && !defaultPageTitle(ptitle) && bodySim >= fpmatch.OriginMatch {
 				findings = append(findings, models.Finding{
 					ID:              "originip-direct-exposure",
 					Title:           fmt.Sprintf("Origin reachable directly at %s (bypasses CDN/WAF)", ip.String()),
-					Description:     fmt.Sprintf("Fetching http(s)://%s/ with the target Host header returns the same page title %q as the homepage, so the origin serves traffic past the CDN/WAF. Firewall the origin to the CDN ranges and rotate the address. Reproduce: curl -k --resolve %s:443:%s https://%s/ | grep -i <title>.", ip.String(), ptitle, host, ip.String(), host),
+					Description:     fmt.Sprintf("Fetching http(s)://%s/ with the target Host header returns the same page title %q as the homepage (body similarity %.2f), so the origin serves traffic past the CDN/WAF. Firewall the origin to the CDN ranges and rotate the address. Reproduce: curl -k --resolve %s:443:%s https://%s/ | grep -i <title>.", ip.String(), ptitle, bodySim, host, ip.String(), host),
 					Severity:        models.SeverityLow,
 					Confidence:      models.ConfidenceMedium,
 					Category:        models.CategoryExposure,
 					Target:          sc.Target.Raw,
 					URL:             direct,
-					Evidence:        models.Evidence{Observed: fmt.Sprintf("direct-IP title %q == homepage title; signals: %s", ptitle, strings.Join(signals, "; ")), Location: "direct-IP probe vs homepage baseline"},
+					Evidence:        models.Evidence{Observed: fmt.Sprintf("direct-IP title %q == homepage title (body similarity %.2f); signals: %s", ptitle, bodySim, strings.Join(signals, "; ")), Location: "direct-IP probe vs homepage baseline"},
 					Source:          models.SourceRecon,
-					DetectionMethod: "CNAME/CDN + direct-IP title comparison (originip, ≤3 requests)",
+					DetectionMethod: "CNAME/CDN + direct-IP title and body comparison (originip, ≤3 requests)",
 					Remediation:     "Restrict origin ingress to CDN/WAF egress ranges; rotate the origin IP.",
 				})
 				break // one confirmation is enough

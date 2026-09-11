@@ -93,11 +93,14 @@ func (r *smugglingRule) Test(ctx context.Context, client *anpuhttp.Client, v mod
 }
 
 func (r *smugglingRule) ToFinding(res models.ActiveRuleResult, target string) models.Finding {
+	// Length differentials alone cannot confirm a desync (no smuggled
+	// second request, no timing desync proof), so both signal paths are
+	// capped at Medium + single-technique review per the contract.
 	return models.Finding{
 		ID:              fmt.Sprintf("active-smuggling-%d", time.Now().UnixNano()),
-		Title:           fmt.Sprintf("HTTP request smuggling/desync at %s", res.Vector.URL),
+		Title:           fmt.Sprintf("Possible HTTP request smuggling/desync at %s (single-technique, needs review)", res.Vector.URL),
 		Description:     fmt.Sprintf("Endpoint at %s handled conflicting Content-Length and Transfer-Encoding headers inconsistently (%s). This may indicate HTTP desync / request smuggling where front-end and back-end disagree on request boundaries, allowing attackers to smuggle a second request.", res.Vector.URL, res.Evidence),
-		Severity:        models.SeverityHigh,
+		Severity:        models.SeverityMedium,
 		Confidence:      models.ConfidenceLow,
 		Category:        models.CategoryVulnerability,
 		CWE:             "CWE-444",
@@ -106,11 +109,16 @@ func (r *smugglingRule) ToFinding(res models.ActiveRuleResult, target string) mo
 		URL:             res.Vector.URL,
 		Parameter:       res.Vector.Name,
 		Source:          models.SourceActive,
-		DetectionMethod: "HTTP smuggling probe: CL.TE / TE.CL header conflict via anpuhttp (safe, no second request smuggled)",
+		DetectionMethod: "HTTP smuggling probe (single-technique): CL.TE / TE.CL header conflict length differential via anpuhttp — safe, no second request smuggled, needs review",
 		Evidence:        models.Evidence{Observed: res.Evidence, Location: res.Vector.URL, RequestSummary: fmt.Sprintf("GET/POST %s with CL.TE headers", res.Vector.URL)},
-		Impact:          "Attackers can smuggle requests past front-end controls, bypass auth, poison caches, or steal other users' requests.",
-		Remediation:     "Normalize requests at the front-end, reject requests with both Content-Length and Transfer-Encoding, use HTTP/2 end-to-end, and ensure front-end and back-end agree on message length.",
-		References:      []string{"https://portswigger.net/web-security/request-smuggling", "https://cwe.mitre.org/data/definitions/444.html"},
-		FirstSeen:       time.Now(),
+		EvidenceBundle: singleTechniqueBundle(
+			fmt.Sprintf("curl -s %q", res.Vector.URL),
+			"GET", res.Vector.URL, 200,
+			[]string{snippetForEvidence([]byte(res.Evidence))},
+		),
+		Impact:      "Attackers can smuggle requests past front-end controls, bypass auth, poison caches, or steal other users' requests.",
+		Remediation: "Normalize requests at the front-end, reject requests with both Content-Length and Transfer-Encoding, use HTTP/2 end-to-end, and ensure front-end and back-end agree on message length.",
+		References:  []string{"https://portswigger.net/web-security/request-smuggling", "https://cwe.mitre.org/data/definitions/444.html"},
+		FirstSeen:   time.Now(),
 	}
 }

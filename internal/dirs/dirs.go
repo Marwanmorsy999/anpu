@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anpu-project/anpu/internal/fpmatch"
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/pkg/models"
@@ -117,7 +118,7 @@ var wordlist = []probe{
 }
 
 func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
-	base := strings.TrimRight(sc.Target.Raw, "/")
+	base := stripQueryFragment(strings.TrimRight(sc.Target.Raw, "/"))
 
 	baseA, err := d.client.Get(ctx, base+"/"+randHex(16))
 	if err != nil {
@@ -157,6 +158,10 @@ func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		hits []hit
 		wg   sync.WaitGroup
 		sem  = make(chan struct{}, 8)
+		// Denial classes for non-2xx sensitive-path responses (Phase 2):
+		// WAF noise vs present-but-protected candidates. Reported as
+		// warnings, never as exposure findings.
+		deniedWAF, deniedApp int
 	)
 
 	for _, p := range wordlist {
@@ -181,6 +186,28 @@ func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			// must never be reported as "file exists" without independent
 			// corroboration.
 			if !recordableStatus(resp.StatusCode) {
+				// Classify denials so operators can tell WAF noise from
+				// present-but-protected candidates (surfaced as warnings
+				// after the scan, never as findings).
+				switch fpmatch.ClassifyDenial(resp.StatusCode, resp.Body) {
+				case fpmatch.DenialWAF:
+					mu.Lock()
+					deniedWAF++
+					mu.Unlock()
+				case fpmatch.DenialApp:
+					mu.Lock()
+					deniedApp++
+					mu.Unlock()
+				}
+				return
+			}
+
+			// WAF/vendor block pages served as 200 are not the requested
+			// file — veto before any template comparison.
+			if fpmatch.IsWAFBlockPage(resp.Body) {
+				mu.Lock()
+				deniedWAF++
+				mu.Unlock()
 				return
 			}
 
@@ -218,6 +245,19 @@ func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	wg.Wait()
 
 	var findings []models.Finding
+	var warnings []string
+	if deniedApp > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"dirs: %d path(s) returned 401/403/406 without WAF markers (present-but-protected candidates — not reported as exposures, review access controls manually)",
+			deniedApp,
+		))
+	}
+	if deniedWAF > 0 && sc.Verbose {
+		warnings = append(warnings, fmt.Sprintf(
+			"dirs: %d path(s) suppressed as WAF/vendor block pages",
+			deniedWAF,
+		))
+	}
 	for _, h := range hits {
 		sev, conf := classify(h.p.Class)
 		// A probed data file (*.txt, *.xml, *.json) served back as HTML
@@ -251,7 +291,21 @@ func (d *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		})
 	}
 
-	return scanner.StageResult{Findings: findings}, nil
+	return scanner.StageResult{Findings: findings, Warnings: warnings}, nil
+}
+
+// stripQueryFragment removes query strings and fragments so baselines
+// probe random paths — not random values of the target's own parameters
+// (which would render the endpoint template and suppress it as its own
+// baseline). Mirrors active.stripQuery.
+func stripQueryFragment(base string) string {
+	if i := strings.Index(base, "?"); i >= 0 {
+		base = base[:i]
+	}
+	if i := strings.Index(base, "#"); i >= 0 {
+		base = base[:i]
+	}
+	return base
 }
 
 // recordableStatus returns true only when the probe received a successful

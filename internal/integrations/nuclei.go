@@ -209,12 +209,25 @@ func convertNucleiFinding(nl nucleiJSONLine, target string) models.Finding {
 			"not actionable — no remediation required.]"
 	}
 
+	// Corroboration contract: a template match with no captured evidence
+	// (no extracted results, no matcher name) is a single-technique
+	// signal — never High, never High confidence. Cap at Medium/Medium
+	// and say so explicitly.
+	confidence := models.ConfidenceHigh
+	if evidence.Unavailable {
+		if sev.Rank() > models.SeverityMedium.Rank() {
+			sev = models.SeverityMedium
+		}
+		confidence = models.ConfidenceMedium
+		description += " [ANPU: template matched without captured evidence — capped at Medium pending review.]"
+	}
+
 	return models.Finding{
 		ID:              "nuclei-" + nl.TemplateID,
 		Title:           nl.Info.Name,
 		Description:     description,
 		Severity:        sev,
-		Confidence:      models.ConfidenceHigh,
+		Confidence:      confidence,
 		Category:        models.CategoryVulnerability,
 		CWE:             cwe,
 		Target:          target,

@@ -679,6 +679,19 @@ func convertZapAlert(a zapAlert, target string) (*models.Finding, string) {
 		desc = a.RiskDesc
 	}
 
+	// Corroboration contract: an alert with no per-instance evidence
+	// (no evidence string, no parameter) is a single-technique signal —
+	// never above Medium severity or confidence. Cap and say so.
+	if paramEvidence == "" {
+		if sev.Rank() > models.SeverityMedium.Rank() {
+			sev = models.SeverityMedium
+		}
+		if conf.Rank() > models.ConfidenceMedium.Rank() {
+			conf = models.ConfidenceMedium
+		}
+		desc += " [ANPU: no per-instance evidence captured — capped at Medium pending review.]"
+	}
+
 	cwe := ""
 	if a.CWEID != "" && a.CWEID != "-1" && a.CWEID != "0" {
 		cwe = "CWE-" + a.CWEID

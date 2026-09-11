@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<issues>
+  <issue>
+    <name>SQL injection</name>
+    <severity>High</severity>
+    <host>example.com</host>
+    <path>/search?q=1</path>
+    <issueDetail>SQL syntax error near &apos;foo&apos;.</issueDetail>
+    <remediationBackground>Use parameterized queries.</remediationBackground>
+  </issue>
+  <issue>
+    <name>Missing Secure flag</name>
+    <severity>Information</severity>
+    <host>example.com</host>
+    <path>/</path>
+    <issueDetail>Cookie without Secure flag.</issueDetail>
+    <remediationBackground>Set Secure on cookies.</remediationBackground>
+  </issue>
+</issues>

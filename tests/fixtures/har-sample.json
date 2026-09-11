@@ -1,0 +1,5 @@
+{"log": {"entries": [
+  {"request": {"url": "https://example.com/", "method": "GET"}, "response": {"status": 200}},
+  {"request": {"url": "https://example.com/search?q=1", "method": "GET"}, "response": {"status": 200}},
+  {"request": {"url": "https://example.com/broken", "method": "GET"}, "response": {"status": 500}}
+]}}

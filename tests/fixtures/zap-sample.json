@@ -1,0 +1,8 @@
+{"site": [{"alerts": [
+  {"alert": "X-Content-Type-Options missing", "riskdesc": "Low", "riskcode": "1",
+   "desc": "Header not set.", "solution": "Set header.", "uri": "https://example.com/",
+   "cweid": "693", "confidence": "Medium"},
+  {"alert": "SQL Injection", "riskdesc": "High", "riskcode": "3",
+   "desc": "Possible SQLi.", "solution": "Parameterize.", "uri": "https://example.com/search?q=1",
+   "cweid": "89", "confidence": "Low"}
+]}]}

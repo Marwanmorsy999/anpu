@@ -1,0 +1,2 @@
+{"template-id":"http-missing-security-headers","info":{"name":"Missing Headers","severity":"low"},"matched-at":"https://example.com/","matcher-name":"header"}
+{"template-id":"sqli-error","info":{"name":"SQL Injection","severity":"high"},"matched-at":"https://example.com/search?q=1","matcher-name":"body"}

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — engine quality series (Phases 0–6)
+
+- **Phase 0 safety net**: hermetic unit tests + fixtures (soft-404 shells, WAF block, Burp/ZAP/HAR/Nuclei samples) for DedupKey, scoring, diff/drift, import parsers, RiskGrade/CSV/MD, soft404 Jaccard, and wrapper host/parser helpers — `go test ./...` is no longer vacuous.
+- **Phases 1–2 finding credibility + FP hardening**: corroboration contract (High needs baseline + control + second signal; single-technique capped + needs-review); XSS baseline/control/context, cmdi baseline-subtract + echo-guard (never Critical), smuggling/timing caps, Nuclei/ZAP evidence-unavailable caps, dedup `disputed-sources` path; shared `fpmatch` package, fixed soft404 core, root-shell + WAF vetoes across exposure engines, expanded CDN matching, archiveurls/originip dead-logic fixes.
+- **Phase 3 ultra confirmations**: XSS second tag family → High confidence, cmdi second metachar family clears review, blind-timing delay scaling → High/High (smuggling deliberately uncapped); soft404 baselines probe random paths even for query-bearing targets.
+- **Phase 4 wrapper honesty**: `anpu tools` reports all 84 tools with real states/prereqs/costs/hints; public-suffix host handling; ANSI-tolerant parsers with loud JSON-drift warnings; fail-open yield/API gates; `ANPU_TOOL_BUDGET_SEC` cumulative cap.
+- **Phase 5 operator UX**: `scan --csv/--md`, `query --dir`, `history --target/--json`, `show --severity/--limit/--long` + phase timings, shared target normalization, documented diff/drift/watch identity models, dead terminal banner removed, worst-first HTML.
+- **Phase 6 decomposition**: `scan.go` 1818 → ~740 lines (`runtime.go`, `client.go`, `reports.go`, `pipeline_stages.go`, `modules.go`, `targets.go`); checkpoints versioned (legacy/future files restart fresh with a warning). Pre/post binaries verified byte-identical findings on advanced + ultra fixture scans.
+
 ## 0.3.1 (Unreleased)
 
 - **Wrapper vectors go live (verified against owned targets)**: `openredirex` runs stdin URLs at `-c 10` with a `[FOUND]`-chain parser (Medium, redirectpack bar); `dotdotpwn` runs the http-module read-only confirm (`-f /etc/hosts`, depth 4, adversarial-gated) with a `VULNERABLE!` parser (High, lfipack bar) — `-k localhost` per upstream EXAMPLES, since the verdict is pattern-gated and `/etc/hosts` never contains `root:`. Both stages show `[ok]` with zero warnings on clean targets.

@@ -156,15 +156,15 @@ pkg/models/             shared scanner-agnostic data model
 docs/                   CLI, configuration, scanner, development, release, scoring, and CI/CD documentation
 ```
 
-**Design principle:** `internal/scanner` defines the scanner boundary and pipeline orchestration. Concrete analyzer packages are wired together in `cmd/anpu/scan.go`; the orchestrator works with scanner interfaces rather than hard-coding analyzer internals.
+**Design principle:** `internal/scanner` defines the scanner boundary and pipeline orchestration. Concrete analyzer packages are wired together in `cmd/anpu/pipeline_stages.go`; the orchestrator works with scanner interfaces rather than hard-coding analyzer internals.
 
 ## 6. Scan profiles
 
 | Profile | Passive analysis | Active engines | Nuclei | Purpose |
 |---|:---:|:---:|:---:|---|
 | `safe` (default) | ✅ | Limited (API/AuthZ anonymous probing as designed) | ❌ by default | Low-impact baseline |
-| `advanced` (`standard` alias) | ✅ | ✅ | ✅ when available | Broader security assessment |
-| `ultra` (`deep` alias) | ✅ | ✅ | ✅ when available | Broader discovery and active analysis |
+| `advanced` (`standard` alias) | ✅ | ✅ corroborated differentials (High needs baseline + control + second signal) | ✅ when available | Broader security assessment |
+| `ultra` (`deep` alias) | ✅ | ✅ advanced + exclusive confirmations (XSS second tag family → High confidence; cmdi second metachar family clears review; blind-timing delay scaling → High/High) + wider discovery (ports/ZAP/extra wrappers) | ✅ when available | Deepest high-signal assessment |
 | `adversarial` (`--adversarial --confirm-authorized` on authorized ultra) | ✅ | ✅ hazardous stateful (header/body/WS, JWT/mass-assign/race/smuggling/proto-pollute, sqli boolean differential + bundle, alias flood) | ✅ when available | Max + volume → Grade F 9.0, Benign/LowImpact only, no data destruction |
 | `ghost` (`--ghost --proxy-pool pool.txt --oob-host <private> --rate-limit 2` with ultra + adversarial) | ✅ | ✅ undetectable (Chrome 131 JA3, Pareto jitter, no-anpu canary, proxy rotation, 40-UA pool) | ✅ when available | Max power + volume → Grade F 9.0, authorized targets only |
 
@@ -244,10 +244,11 @@ Install recipes for optional tools: `anpu tools install --help`.
 
 ## 14. Known limitations / Roadmap
 
+Recent engine-quality work (see CHANGELOG "Unreleased — engine quality series"): hermetic test safety net; corroboration contract for active findings; shared FP matching (soft-404/WAF/CDN/app-shell); ultra-only confirmations; honest `anpu tools` doctor + wrapper budgets; CSV/MD exports and history/show/query filtering; decomposed CLI with versioned checkpoints.
+
 - **Module import path:** `go.mod` declares `github.com/anpu-project/anpu` while the repository lives at `github.com/Marwanmorsy999/anpu`. The `anpu-project` path is currently canonical for imports; it will only change via a coordinated rename or org transfer.
 - **External tools:** many wrappers require manual setup or `--adversarial --confirm-authorized`. See `anpu tools` and `docs/scanners.md` for the minimal set per profile.
 - **Web frontend:** the companion site is demo-data only; the CLI remains fully local.
-- **Large orchestrator:** `cmd/anpu/scan.go` is intentionally monolithic pending a phased split.
 - **Wordlists/rules:** vendored subsets only; refresh policy is opt-in (see `docs/scanners.md`).
 
 ## License

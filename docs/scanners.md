@@ -254,6 +254,62 @@ Ultra-only confirmations (Phase 3, wired via `active.SetUltraConfirm` in `runSca
 
 A cache-poisoning oracle probes unkeyed headers (X-Forwarded-Host and friends) with an inert canary on cacheable pages only, then re-requests clean: persistence proves cache-key exclusion (High/High), reflection without persistence is a Medium candidate. Non-cacheable reflection stays silent (host-header territory).
 
+## Engine capability matrix (what each check can and cannot prove)
+
+Severity/confidence below are what the engine emits today, verified against the rule code. **Proven** means the claim is earned by execution proof or a corroborated differential; **capped** is what the same engine emits without that proof. Rows marked † exceed the corroboration contract today (single-signal evidence at High-or-worse) — treat them with extra review; they are scheduled hardening candidates, not falsehoods.
+
+### Active differentials and confirmations
+
+| Engine (rule ID) | Proves (best claim) | Without that proof (cap) |
+|---|---|---|
+| `sqli-boolean-differential` | TRUE≈baseline + FALSE diverges + 200×3 same CT + random control → **High/High** | **Medium/Medium** + `single-technique` review |
+| `xss-reflected` | Tag reflected unescaped, baseline + control clean, executable context → **High/Medium**; ultra second tag family → **High/High** | **Medium/Medium** + review (comment/script context, missing control) |
+| `cmd-injection-indicator` | Canary marker differential + echo-guard → **High/Low** | **Medium/Low** + review (bare error strings); ultra second family clears review at Medium/Medium; never Critical |
+| `blind-timing` | Double 5s sleep → **Medium/Medium** + `timing-differential` review | — ; ultra 2s/5s delay scaling → **High/High** |
+| `http-smuggling` | — (length differentials cannot confirm a desync) | **Medium/Low** + `single-technique` review; no ultra upgrade by design |
+| `log4shell-jndi` | OOB callback → **Critical/High** | Reflection → **High/Medium** (Critical needs the callback) |
+| `ssrf` | OOB callback → **Critical/High** | Metadata content reflected → **Critical/Low** † |
+| `rfi` | OOB callback → **Critical/High** | Inclusion signal reflected → **Critical/Medium** † |
+| `xxe` | OOB callback or entity expansion → **Critical/High** | Error disclosure → Medium; status change → Low (severity stays Critical †) |
+| `ssti-math-probe` | Benign math evaluated server-side + echo-guard → **Critical/High** | — (execution proof is the gate) |
+| `code-inject` | Arithmetic evaluated + baseline-subtracted → **Critical/Medium** † | Single reflected evaluation at Critical — review manually |
+| `path-traversal` | `/etc/passwd`/`win.ini` content marker → **High/High** | Marker required; no marker, no finding |
+| `open-redirect` | External `Location` observed, never followed → **Medium/High** | Same-site/subdomain echoes excluded (not CWE-601) |
+| `crlf` | Canary header appears in response → **Medium/High** | — |
+| `host-header` | Nonce reflected in body/`Location` → **High/High** | `Location` redirect = reset-poisoning path |
+| `cache-poison` | Clean re-request persists → **High/High** | **Medium/Medium** reflection-only candidate |
+| `sqli-error` | Error string, baseline-subtracted → **High/Medium** † | Single string match — second family wanted |
+| `ldap` / `xpath` / `ssi` | Error/marker string, baseline-subtracted → **High/Medium** † | Single string match — second family wanted |
+| `nosql` | Operator differential; status-change/auth-bypass → **High/High** | Baseline differential otherwise (Medium+) |
+| `deserial` (adversarial) | Error disclosure, baseline-subtracted → **Critical/Medium** † | Single error string at Critical — review manually |
+| `file-upload` (adversarial) | Polyglot accepted at upload endpoint → **Critical/Medium** † | Heuristic acceptance — confirm exploitability manually |
+| `jwt-weak-verification` (adversarial) | alg:none acceptance differential → **High/Medium** | Heuristic reflection — confirm with a forged session |
+| `mass-assignment` / `business-logic-tamper` / `prototype-pollution` (adversarial) | Reflection/status differential → **High/Medium** | Heuristic — confirm business impact manually |
+| `schematype` / `schemarequired` | Garbage-type/omission differential → **Medium/Medium** | — |
+| `schemacontent` | Garbage-type differential → **Low/Medium** | — |
+| `bypass-403` | Dissimilar bypass vs denied baseline + root control → **Medium/Medium** | Catch-all fallbacks rejected |
+| `race` / `session-fixation` / `password-policy` / `logout` / `exposed-session` / `rate-limit` | Status/length/timing heuristic → **Medium/Low–Medium** | Heuristic tier — confirm impact manually |
+| `formula` / `buffer` / `hpp` | Reflection/error differential → **Medium/Low–Medium** | Indicator tier, not proof |
+
+### Exposure and discovery natives
+
+| Engine | Proves (best claim) | Without that proof (cap) |
+|---|---|---|
+| `dirs` | 200 + differs from soft-404 baseline + root shell + no WAF markers → **High/High** (critical paths; Medium/Low/Info lower tiers) | Suppressed otherwise; 401/403/406 → warnings only, never findings |
+| `backup` / `backupplus` | Same gates; source/archive content → **High/Medium** | Suppressed otherwise; intentional binaries downgraded |
+| `exposedgit` | `ref:` + `[core]` dual markers → **High/High** | Single marker → Medium |
+| `exposedconfig` / `actuator` / `debugpages` / `soap` / `apiconsole` / `saml` | Content marker + control/root difference → **High/Medium or better** (confirmed markers reach High confidence) | WAF block pages vetoed; heapdump uses header-triple vs root |
+| `originip` | Title equality **plus** body similarity → **Low/Medium** | Title-only match insufficient |
+| `portscan` | TCP connect → **Info/Confirmed** | Sanity probe suppresses liars; CDN caveat on every finding |
+
+### Pipeline converters (not detectors)
+
+| Stage | Rule |
+|---|---|
+| Nuclei / ZAP converters | Template/alert severities kept **only with captured evidence**; `evidence.unavailable` caps at **Medium/Medium** |
+| `dedup` | Same DedupKey merges at max severity/confidence; ≥2-rank severity spans flag `disputed-sources` + needs-review |
+| `feeds` (KEV) | Catalog listing appends reference always, but upgrades to Confirmed **only if already High** — a listing corroborates, never manufactures certainty |
+
 ## Master Ghost Core (P0)
 
 Undetectable transport via `--ghost`:

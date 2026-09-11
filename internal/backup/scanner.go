@@ -78,6 +78,7 @@ var rootBackupPaths = []struct {
 }{
 	{"/backup.tar.bz2", "compressed backup archive"},
 	{"/backup.7z", "compressed backup archive"},
+	{"/backup.zip", "compressed backup archive"},
 	{"/site.tar.gz", "site archive"},
 	{"/www.zip", "site archive"},
 	{"/htdocs.zip", "site archive"},

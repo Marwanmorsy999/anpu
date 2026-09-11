@@ -75,6 +75,20 @@ func TestBackupWAFBlockSuppressed(t *testing.T) {
 	}
 }
 
+// Sanity-pass follow-up: /backup.zip is the most obvious archive name
+// and must be probed.
+func TestRootBackupPathsIncludeBackupZip(t *testing.T) {
+	found := false
+	for _, rb := range rootBackupPaths {
+		if rb.path == "/backup.zip" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("rootBackupPaths must include /backup.zip")
+	}
+}
+
 // A genuinely distinct backup file must still be found (no over-suppression).
 func TestBackupRealFileStillFound(t *testing.T) {
 	const dump = "-- MySQL dump 10.13\n-- Host: localhost\nCREATE TABLE users (id INT PRIMARY KEY, pw VARCHAR(255));\nINSERT INTO users VALUES (1,'hash');\n" +

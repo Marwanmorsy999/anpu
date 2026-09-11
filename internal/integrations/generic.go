@@ -21,12 +21,15 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"golang.org/x/net/publicsuffix"
 
 	"github.com/anpu-project/anpu/internal/scanner"
 	"github.com/anpu-project/anpu/pkg/models"
@@ -449,6 +452,11 @@ func (g *GenericScanner) execute(ctx context.Context, sc *scanner.ScanContext, b
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
+	// Cumulative tool budget (ANPU_TOOL_BUDGET_SEC): skip honestly when
+	// the cap cannot cover this tool's worst case.
+	if ok, reason := ToolBudgetAllow(timeout); !ok {
+		return nil, "", fmt.Sprintf("%s skipped: %s", spec.Name, reason)
+	}
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(runCtx, bin, expanded...) // #nosec G204 -- ANPU orchestrates operator-installed security tools by resolved path with bounded read-only flags.
@@ -466,6 +474,7 @@ func (g *GenericScanner) execute(ctx context.Context, sc *scanner.ScanContext, b
 	t0 := time.Now()
 	runErr := cmd.Run() // exit codes are informational; output is what matters
 	g.lastDur = time.Since(t0)
+	ToolBudgetAdd(g.lastDur)
 	out = stdout.Bytes()
 	if len(out) > maxToolOutput {
 		out = out[:maxToolOutput]
@@ -494,9 +503,14 @@ func (g *GenericScanner) execute(ctx context.Context, sc *scanner.ScanContext, b
 func (g *GenericScanner) normalize(ctx context.Context, sc *scanner.ScanContext, out []byte, repro string, dur time.Duration) scanner.StageResult {
 	spec := g.Spec
 	var res scanner.StageResult
+	// Strip terminal escapes once for every downstream parser/miner:
+	// colorized piped output otherwise breaks text regexes silently.
+	out = stripANSI(out)
 	if spec.JSON {
 		if fr := parseJSONFindings(spec, sc, out, repro); len(fr) > 0 {
 			res.Findings = append(res.Findings, fr...)
+		} else if w := jsonShapeWarning(spec, out); w != "" {
+			res.Warnings = append(res.Warnings, w)
 		}
 	}
 	if fr, techs := parseSpecial(spec, sc, out, repro); len(fr) > 0 || len(techs) > 0 {
@@ -650,6 +664,20 @@ func verifyHosts(ctx context.Context, hosts []string) []string {
 
 func registrableBase(host string) string {
 	h := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	if h == "" {
+		return h
+	}
+	// IPs have no registrable base — return verbatim (publicsuffix
+	// would happily slice 192.168.1.1 down to "1.1").
+	if net.ParseIP(strings.Trim(h, "[]")) != nil {
+		return h
+	}
+	// Proper public-suffix handling: example.co.uk → example.co.uk
+	// (the naive last-two-labels cut would wrongly return co.uk).
+	if base, err := publicsuffix.EffectiveTLDPlusOne(h); err == nil && base != "" {
+		return base
+	}
+	// Fallback for IPs, localhost, single labels, and unknown suffixes.
 	parts := strings.Split(h, ".")
 	if len(parts) < 2 {
 		return h
@@ -658,17 +686,15 @@ func registrableBase(host string) string {
 }
 
 func hostOf(raw string) string {
-	i := strings.Index(raw, "://")
-	if i < 0 {
+	if !strings.Contains(raw, "://") {
 		return ""
 	}
-	h := raw[i+3:]
-	for _, sep := range []string{"/", "?", "#", ":"} {
-		if j := strings.Index(h, sep); j >= 0 {
-			h = h[:j]
-		}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
 	}
-	return h
+	// Hostname strips port, brackets, and userinfo; lowercase it.
+	return strings.ToLower(u.Hostname())
 }
 
 func firstLines(out []byte, n int) string {

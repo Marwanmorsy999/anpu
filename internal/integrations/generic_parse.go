@@ -66,10 +66,10 @@ func toolFinding(spec *ToolSpec, sc *scanner.ScanContext, id, title, desc string
 }
 
 var (
-	ffufRe      = regexp.MustCompile(`(?m)^(\S+?)\s+\[Status:\s*(\d+),\s*Size:\s*(\d+)`)
-	gobusterRe  = regexp.MustCompile(`(?m)^(\S+)\s+\(Status:\s*(\d+)\)`)
-	wfuzzRe     = regexp.MustCompile(`(?m)^\d+:\s+C=(\d+)\s+\d+\s+L\s+\d+\s+W\s+\d+\s+Ch\s+"([^"]+)"`)
-	dirsearchRe = regexp.MustCompile(`(?m)^\[.*?\]\s+(\d+)\s+-\s+\S+\s+-\s+(\S+)`)
+	ffufRe      = regexp.MustCompile(`(?im)^(\S+?)\s+\[Status:\s*(\d+),\s*(?:Size|Length):\s*(\d+)`)
+	gobusterRe  = regexp.MustCompile(`(?im)^(\S+)\s+\(Status:\s*(\d+)\)`)
+	wfuzzRe     = regexp.MustCompile(`(?im)^\d+:\s+C=(\d+)\s+\d+\s+L\s+\d+\s+W\s+\d+\s+Ch\s+"([^"]+)"`)
+	dirsearchRe = regexp.MustCompile(`(?im)^\[.*?\]\s+(\d+)\s+-\s+\S+\s+-\s+(\S+)`)
 )
 
 // parseFuzzer turns dir-fuzzer hits into Info findings + endpoints are
@@ -453,9 +453,23 @@ func parseUnfurlKeys(spec *ToolSpec, sc *scanner.ScanContext, out []byte, repro 
 	return []models.Finding{f}, nil
 }
 
-// ansiRe strips terminal color codes (openredirex wraps [FOUND] lines
-// in green) before line matching.
-var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
+// ansiCSIRe strips all terminal CSI escape sequences (colors, cursor
+// moves, progress-bar rewrites) before line matching. Tools emit color
+// even without a TTY when piped (wfuzz -c, nikto, feroxbuster), which
+// otherwise breaks exact-spacing text regexes silently.
+var ansiCSIRe = regexp.MustCompile("\x1b\\[[0-9;?]*[ -/]*[@-~]")
+
+// stripANSI removes terminal escape sequences from tool output.
+func stripANSI(out []byte) []byte {
+	if !strings.Contains(string(out), "\x1b[") {
+		return out
+	}
+	return []byte(ansiCSIRe.ReplaceAllString(string(out), ""))
+}
+
+// ansiRe is kept for the openredirex/dotdotpwn call sites below; new
+// code should use stripANSI (full CSI coverage, not just SGR colors).
+var ansiRe = ansiCSIRe
 
 // parseOpenRedirex maps `[FOUND] <url> redirects to <chain>` lines to
 // Medium findings (confirmed open redirect, same bar as redirectpack).
@@ -525,17 +539,42 @@ func parseSecretsText(spec *ToolSpec, sc *scanner.ScanContext, out []byte, repro
 			"Local-only secret scan hit. Values are never printed; rotate the credential and purge history. Local code scope only.",
 			models.SeverityHigh, name, repro))
 	}
-	type secretHit struct {
-		Description  string `json:"Description"`
-		RuleID       string `json:"RuleID"`
-		File         string `json:"File"`
-		DetectorName string `json:"DetectorName"`
+	// secretName picks a printable label from known keys. Secret VALUES
+	// (Secret, Raw, Match, Fingerprint content) are never labels — only
+	// rule/file/detector/commit metadata is shown.
+	secretName := func(m map[string]any) (description, rule, file, detector string) {
+		str := func(keys ...string) string {
+			for _, k := range keys {
+				for mk, mv := range m {
+					if strings.EqualFold(mk, k) {
+						if s, ok := mv.(string); ok && strings.TrimSpace(s) != "" {
+							return strings.TrimSpace(s)
+						}
+					}
+				}
+			}
+			return ""
+		}
+		return str("Description", "description", "message", "rule", "RuleName"),
+			str("RuleID", "rule_id", "check_id", "DetectorType", "rule"),
+			str("File", "file", "path", "filename"),
+			str("DetectorName", "detector", "detectorName", "Commit", "commit", "Fingerprint", "fingerprint")
+	}
+	decodeHit := func(data []byte) (description, rule, file, detector string, ok bool) {
+		var m map[string]any
+		if err := json.Unmarshal(data, &m); err != nil {
+			return "", "", "", "", false
+		}
+		description, rule, file, detector = secretName(m)
+		return description, rule, file, detector, true
 	}
 	// Whole-document array first (gitleaks -f json pretty output).
-	var arr []secretHit
+	var arr []json.RawMessage
 	if err := json.Unmarshal(bytes.TrimSpace(out), &arr); err == nil {
-		for _, e := range arr {
-			add(e.Description, e.RuleID, e.File, e.DetectorName)
+		for _, raw := range arr {
+			if d, r, f, det, ok := decodeHit(raw); ok {
+				add(d, r, f, det)
+			}
 		}
 		return findings, nil
 	}
@@ -545,13 +584,37 @@ func parseSecretsText(spec *ToolSpec, sc *scanner.ScanContext, out []byte, repro
 		if !strings.HasPrefix(line, "{") {
 			continue
 		}
-		var e secretHit
-		if err := json.Unmarshal([]byte(line), &e); err != nil {
-			continue
+		if d, r, f, det, ok := decodeHit([]byte(line)); ok {
+			add(d, r, f, det)
 		}
-		add(e.Description, e.RuleID, e.File, e.DetectorName)
 	}
 	return findings, nil
+}
+
+// jsonShapeWarning fires when a JSON-expecting tool emitted something
+// that is not JSON at all (schema drift, version banner, table output
+// instead of --json). Valid JSON with zero items stays silent — a clean
+// tool is not an error. This turns silent-empty parses into a visible
+// warning naming the tool and its size.
+func jsonShapeWarning(spec *ToolSpec, out []byte) string {
+	if spec == nil || !spec.JSON {
+		return ""
+	}
+	trimmed := bytes.TrimSpace(out)
+	if len(trimmed) == 0 {
+		return ""
+	}
+	if bytes.HasPrefix(trimmed, []byte("{")) || bytes.HasPrefix(trimmed, []byte("[")) {
+		var v any
+		if err := json.Unmarshal(trimmed, &v); err == nil {
+			return ""
+		}
+	}
+	if len(trimmed) < 200 {
+		return ""
+	}
+	return fmt.Sprintf("%s produced %d bytes ANPU could not structure as JSON (output shape changed? check %s version/flags) — URL/host miners still ran",
+		spec.Name, len(trimmed), spec.Binary)
 }
 
 // parseJSONFindings is the best-effort generic walk for JSON-emitting

@@ -4,11 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/anpu-project/anpu/internal/integrations"
 	"github.com/spf13/cobra"
@@ -140,40 +137,59 @@ func runToolsStatus(cmd *cobra.Command) error {
 	}
 
 	fmt.Println()
-	fmt.Println("External accelerators (optional, embedded fallback always works):")
-	ext := []struct {
-		binary string
-		label  string
-		hint   string
-		check  func(context.Context) bool
-	}{
-		{"nuclei", "Nuclei", "go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest && nuclei -update-templates", nil},
-		{"katana", "Katana", "go install -v github.com/projectdiscovery/katana/cmd/katana@latest", nil},
-		{"httpx", "Httpx", "go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest", nil},
-		{"subfinder", "Subfinder", "go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest", nil},
-		{"dalfox", "Dalfox", "go install -v github.com/hahwul/dalfox/v2@latest", nil},
-		{"naabu", "Naabu", "go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest", nil},
-		{"dnsx", "DNSx", "go install -v github.com/projectdiscovery/dnsx/cmd/dnsx@latest", nil},
-		{"", "ZAP", "install Docker (deep profile runs zap-baseline.py), or install OWASP ZAP locally", func(ctx context.Context) bool {
-			return integrations.NewZapScanner().Available(ctx)
-		}},
+	fmt.Println("External tools (registry — binary when installed, embedded otherwise):")
+	ctx, cancel := context.WithTimeout(cmd.Context(), integrations.ProbeTimeout()*15)
+	defer cancel()
+	extCounts := map[string]int{}
+	for _, name := range integrations.SortedToolNames() {
+		spec, _ := integrations.SpecByName(name)
+		level := ""
+		if spec != nil {
+			level = spec.Level
+		}
+		if recipe, ok := integrations.Get(name); ok && level == "" {
+			level = recipe.Level
+		}
+		state, detail := integrations.ToolStatus(ctx, name)
+		extCounts[state]++
+		sym := "~"
+		switch state {
+		case integrations.ToolExternal:
+			sym = "✓"
+		case integrations.ToolEmbedded:
+			sym = "~"
+		default:
+			sym = "✗"
+		}
+		timeout := ""
+		if spec != nil {
+			timeout = fmt.Sprintf("max %ds", integrations.SpecTimeout(spec))
+		}
+		fmt.Printf("  [ext] %s %-14s %-8s %s %s\n", sym, name, level, detail, timeout)
 	}
-	for _, t := range ext {
-		installed := false
-		if t.check != nil {
-			installed = t.check(cmd.Context())
-		} else {
-			installed = externalToolAvailable(t.binary)
+	fmt.Printf("  external=%d embedded=%d missing-installable=%d missing-manual=%d\n",
+		extCounts[integrations.ToolExternal], extCounts[integrations.ToolEmbedded],
+		extCounts[integrations.ToolMissingInstallable], extCounts[integrations.ToolMissingManual])
+
+	fmt.Println()
+	fmt.Println("Environment (operator prerequisites):")
+	for _, e := range integrations.EnvStatus() {
+		sym := "✗"
+		val := "unset"
+		if e.OK {
+			sym = "✓"
+			val = e.Value
+		} else if e.Value != "" {
+			val = e.Value + " (not usable)"
 		}
-		sym, status := "✓", "embedded"
-		if installed {
-			status = "external available"
-		}
-		fmt.Printf("  [ext] %s %-12s %s\n", sym, t.label, status)
-		if !installed {
-			fmt.Printf("               install: %s\n", t.hint)
-		}
+		fmt.Printf("  %s %-20s %s — %s\n", sym, e.Name, val, e.Used)
 	}
+
+	fmt.Println()
+	worst := integrations.LevelWorstCase()
+	fmt.Printf("Worst-case staged external time (every binary present, full timeouts, sequential): advanced ≈ %s, ultra ≈ %s.\n",
+		integrations.FormatDuration(worst["advanced"]), integrations.FormatDuration(worst["ultra"]))
+	fmt.Println("Set ANPU_TOOL_BUDGET_SEC=N to cap cumulative external-tool seconds (0/unset = uncapped); exhausted tools skip with an explicit reason.")
 
 	fmt.Println()
 	fmt.Println("Levels:")
@@ -326,82 +342,52 @@ func firstLine(s string) string {
 }
 
 // builtinModules covers native engines (no installation ever needed).
+// This mirrors the canonical --only toggle vocabulary in scan.go
+// (applyModuleToggles): anything here is compiled in, full stop.
 func isBuiltinModule(name string) bool {
 	switch lower(name) {
-	case "recon", "technology", "tls", "headers", "cookies", "endpoints",
-		"api", "authz", "idor", "subdomains", "takeover", "portscan", "dirs",
-		"secrets", "params", "cors", "methods", "csrf", "sri", "backup",
-		"deps", "codesecrets", "active", "dnsintel", "ipintel", "rdap", "leak", "favicon",
-		"doh", "bucket", "bgp",
-		"archiveurls", "certsan", "emailharv", "dnsaudit", "emailauth",
-		"csprecon", "socialhijack", "commentminer", "brokenlink", "originip",
-		"exposedgit", "exposedconfig", "actuator", "debugpages",
-		"oauthanalyzer", "oauth", "samlmetadata", "saml", "cswsh",
-		"postmessage", "jssecrets", "hiddenparams",
-		"verbtamper", "cachedeception", "forbiddenbypass", "takeoverplus",
-		"clickjack", "policyheaders", "cookieprefix", "apiversion",
-		"apiconsole", "vhost",
-		"graphqlfp", "graphqlschema", "jwtplus", "sstiexpand", "nosqlexpand",
-		"h2smuggle", "h2fp", "redirectpack", "lfipack", "cvepack",
-		"corsplus", "certhistory", "axfrplus", "subpermute", "backupplus",
-		"faviconplus", "debugmethods", "encodepoly", "difforacle", "gfclassify",
-		"soap", "nsecwalk", "wafdetect",
-		"oauthpack", "ppollute", "swscope", "timeoracle", "jwtconfirm", "jsluice":
+	case "recon", "technology", "tech", "tls", "headers", "header",
+		"cookies", "cookie", "endpoints", "endpoint", "crawler",
+		"api", "authz", "idor", "bola", "adversarial",
+		"subdomains", "subdomain", "takeover", "takeoverplus",
+		"portscan", "port-scan", "ports", "dirs", "dir",
+		"secrets", "secret", "params", "param", "cors",
+		"methods", "method", "csrf", "sri", "backup",
+		"deps", "dep", "codesecrets", "code-secrets", "codesec",
+		"active", "nuclei", "zap", "katana", "httpx", "subfinder",
+		"dalfox", "dnsintel", "dns-intel", "ipintel", "ip-intel",
+		"naabu", "dnsx", "rdap", "leak", "favicon", "doh", "bucket", "bgp",
+		"archiveurls", "archive-urls", "certsan", "cert-san",
+		"emailharv", "email-harvest", "emailharvest",
+		"dnsaudit", "dns-audit", "emailauth", "email-auth",
+		"csprecon", "csp-recon", "socialhijack", "social-hijack",
+		"commentminer", "comment-miner", "brokenlink", "broken-link",
+		"originip", "origin-ip", "exposedgit", "exposed-git",
+		"exposedconfig", "exposed-config", "actuator",
+		"debugpages", "debug-pages", "oauthanalyzer", "oauth",
+		"samlmetadata", "saml", "cswsh", "postmessage", "post-message",
+		"jssecrets", "js-secrets", "hiddenparams", "hidden-params",
+		"verbtamper", "verb-tamper", "cachedeception", "cache-deception",
+		"forbiddenbypass", "forbidden-bypass", "clickjack",
+		"policyheaders", "policy-headers", "cookieprefix", "cookie-prefix",
+		"apiversion", "api-version", "apiconsole", "api-console",
+		"vhost", "v-host", "graphqlfp", "graphql-fp",
+		"graphqlschema", "graphql-schema", "jwtplus", "jwt-plus",
+		"sstiexpand", "ssti-expand", "nosqlexpand", "nosql-expand",
+		"h2smuggle", "h2-smuggle", "h2fp", "h2-fp",
+		"redirectpack", "redirect-pack", "lfipack", "lfi-pack",
+		"cvepack", "cve-pack", "corsplus", "cors-plus",
+		"certhistory", "cert-history", "axfrplus", "axfr-plus",
+		"subpermute", "sub-permute", "backupplus", "backup-plus",
+		"faviconplus", "favicon-plus", "debugmethods", "debug-methods",
+		"encodepoly", "encode-poly", "difforacle", "diff-oracle",
+		"gfclassify", "gf-classify", "soap", "nsecwalk", "nsec-walk",
+		"wafdetect", "waf-detect", "oauthpack", "oauth-pack",
+		"ppollute", "pp-pollute", "swscope", "sw-scope", "serviceworker",
+		"timeoracle", "time-oracle", "jwtconfirm", "jwt-confirm", "jsluice", "js-luice":
 		return true
 	}
 	return false
 }
 
 func lower(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
-
-// externalToolPath resolves a tool using PATH first, then common Go/bin
-// locations. This keeps Windows installations working even when the
-// Go bin directory is not on PATH.
-func externalToolPath(binary string) (string, error) {
-	if path, err := exec.LookPath(binary); err == nil {
-		return path, nil
-	}
-
-	names := []string{binary}
-	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(binary), ".exe") {
-		names = append(names, binary+".exe")
-	}
-
-	candidates := make([]string, 0, 6)
-	if home, herr := os.UserHomeDir(); herr == nil {
-		for _, name := range names {
-			candidates = append(candidates, filepath.Join(home, ".local", "bin", name))
-		}
-	}
-	if gobin := strings.TrimSpace(os.Getenv("GOBIN")); gobin != "" {
-		for _, name := range names {
-			candidates = append(candidates, filepath.Join(gobin, name))
-		}
-	}
-	if gopath := strings.TrimSpace(os.Getenv("GOPATH")); gopath != "" {
-		first := strings.FieldsFunc(gopath, func(r rune) bool { return r == os.PathListSeparator })
-		for _, gp := range first {
-			for _, name := range names {
-				candidates = append(candidates, filepath.Join(gp, "bin", name))
-			}
-		}
-	}
-
-	for _, candidate := range candidates {
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() { // #nosec G703 -- flagged path derives from the operator's own CLI input; escaping the intended tree is operator-inflicted.
-			return candidate, nil
-		}
-	}
-
-	return "", fmt.Errorf("%s not found on PATH or Go bin directories", binary)
-}
-
-func externalToolAvailable(binary string) bool {
-	path, err := externalToolPath(binary)
-	if err != nil {
-		return false
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	return exec.CommandContext(ctx, path, "-version").Run() == nil // #nosec G204 -- ANPU orchestrates operator-installed security tools by resolved path with bounded read-only flags.
-}

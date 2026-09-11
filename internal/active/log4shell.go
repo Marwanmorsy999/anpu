@@ -250,7 +250,10 @@ func (r *log4shellRule) ToFinding(res models.ActiveRuleResult, target string) mo
 		confidence = models.ConfidenceHigh
 		title = "Log4Shell JNDI lookup confirmed via out-of-band callback (CVE-2021-44228)"
 	} else if strings.Contains(res.Evidence, "reflected in response body") {
-		severity = models.SeverityCritical
+		// Reflection-only is capped at High (Phase 1 contract): the
+		// input reached a logging context, but nothing proves log4j
+		// evaluated it. Critical requires an OOB-confirmed callback.
+		severity = models.SeverityHigh
 		confidence = models.ConfidenceMedium
 		title = "Log4Shell JNDI string reflected — potential CVE-2021-44228 indicator"
 	}

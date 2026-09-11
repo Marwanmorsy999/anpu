@@ -194,9 +194,12 @@ func epssScore(ctx context.Context, cve string) float64 {
 }
 
 // Enrich annotates findings with KEV/EPSS signals: KEV-listed CVEs get
-// Confidence Confirmed + the CISA reference; EPSS ≥ 0.5 adds the FIRST
-// reference. Network lookups are bounded (20 CVEs max) and fail-silent;
-// pass nil kev to skip KEV, and set lookupEPSS false for offline runs.
+// the CISA reference (and Confirmed confidence only when the finding
+// is already High — a catalog listing corroborates a strong signal but
+// never manufactures certainty for a weak one). EPSS ≥ 0.5 adds the
+// FIRST reference. Network lookups are bounded (20 CVEs max) and
+// fail-silent; pass nil kev to skip KEV, and set lookupEPSS false for
+// offline runs.
 func Enrich(findings []models.Finding, kev map[string]bool, lookupEPSS bool) []models.Finding {
 	ctx := context.Background()
 	epssCache := map[string]float64{}
@@ -205,7 +208,9 @@ func Enrich(findings []models.Finding, kev map[string]bool, lookupEPSS bool) []m
 		for _, m := range cveRe.FindAllString(blob, -1) {
 			id := strings.ToUpper(m)
 			if kev != nil && kev[id] {
-				findings[i].Confidence = models.ConfidenceConfirmed
+				if findings[i].Confidence.Rank() >= models.ConfidenceHigh.Rank() {
+					findings[i].Confidence = models.ConfidenceConfirmed
+				}
 				findings[i].References = appendRef(findings[i].References,
 					"https://www.cisa.gov/known-exploited-vulnerabilities-catalog?search_api_fulltext="+id)
 				findings[i].Description += " [ANPU: " + id + " is in the CISA Known Exploited Vulnerabilities catalog — exploited in the wild.]"

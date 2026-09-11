@@ -176,12 +176,12 @@ type EnvInfo struct {
 }
 
 func fileExists(path string) bool {
-	info, err := os.Stat(strings.TrimSpace(path))
+	info, err := os.Stat(strings.TrimSpace(path)) // #nosec G703 -- flagged path derives from the operator's own env (ANPU_*); escaping the intended tree is operator-inflicted.
 	return err == nil && !info.IsDir()
 }
 
 func dirExists(path string) bool {
-	info, err := os.Stat(strings.TrimSpace(path))
+	info, err := os.Stat(strings.TrimSpace(path)) // #nosec G703 -- flagged path derives from the operator's own env (ANPU_*); escaping the intended tree is operator-inflicted.
 	return err == nil && info.IsDir()
 }
 

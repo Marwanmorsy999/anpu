@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/anpu-project/anpu/pkg/models"
@@ -299,6 +300,8 @@ func RiskGrade(score float64) string {
 }
 
 // WriteHTML renders the polished HTML security report to path.
+// Findings render severity-first (critical → info, stable by ID) so
+// the report reads worst-first regardless of pipeline stage order.
 func WriteHTML(summary *models.ScanSummary, path string) error {
 	tmpl, err := template.New("report").Funcs(reportFuncs).Parse(htmlReportTemplate)
 	if err != nil {
@@ -309,8 +312,17 @@ func WriteHTML(summary *models.ScanSummary, path string) error {
 		summary.RecomputeSeverityCounts()
 	}
 
+	ordered := *summary
+	ordered.Findings = append([]models.Finding(nil), summary.Findings...)
+	sort.Slice(ordered.Findings, func(i, j int) bool {
+		if ordered.Findings[i].Severity.Rank() != ordered.Findings[j].Severity.Rank() {
+			return ordered.Findings[i].Severity.Rank() > ordered.Findings[j].Severity.Rank()
+		}
+		return ordered.Findings[i].ID < ordered.Findings[j].ID
+	})
+
 	data := htmlReportData{
-		Summary:            summary,
+		Summary:            &ordered,
 		StartedAtFormatted: summary.StartedAt.Format(time.RFC1123),
 		Version:            version.Version,
 		RiskGrade:          RiskGrade(summary.RiskScore),

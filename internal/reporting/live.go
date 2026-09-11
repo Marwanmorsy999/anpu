@@ -26,8 +26,6 @@ type Live struct {
 	wg       sync.WaitGroup
 	hits     int
 	interval time.Duration
-	// track skipped optional tools for next-steps
-	skippedTools []string
 	// tracker prints each pipeline phase header once
 	tracker PhaseTracker
 }
@@ -195,9 +193,6 @@ func (l *Live) StageDone(s LiveStage) {
 		_, _ = fmt.Fprintln(l.out, h)
 	}
 	if s.Skipped {
-		if isOptionalTool(s.Label) {
-			l.skippedTools = append(l.skippedTools, s.Label)
-		}
 		_, _ = fmt.Fprintln(l.out, l.finishLineLocked(s))
 		l.pos++
 		l.startNextLocked()
@@ -220,14 +215,6 @@ func (l *Live) StageDone(s LiveStage) {
 		}
 		_, _ = fmt.Fprintf(l.out, "%s %s[!]%s +%d %s\n", prefix, am, rs, s.NewFindings, mu+"finding(s)"+rs)
 	}
-}
-
-func isOptionalTool(label string) bool {
-	// Now that all external tools have embedded fallbacks, none are
-	// truly optional in the old sense. Keep helper for backwards compat
-	// but return false so Next banner only shows truly missing optionals
-	// (none after embedding). Profile-gated skips are not “not installed”.
-	return false
 }
 
 func (l *Live) Close() {
@@ -334,34 +321,9 @@ func (l *Live) Panel(summary *models.ScanSummary, reportPath string, quiet bool,
 			}
 		}
 	}
-	// Next-Steps Banner
-	if len(l.skippedTools) > 0 {
-		_, _ = fmt.Fprintln(l.out, "")
-		_, _ = fmt.Fprintf(l.out, "  %sNext:%s ", mu, rs)
-		for i, t := range l.skippedTools {
-			if i > 0 {
-				_, _ = fmt.Fprint(l.out, ", ")
-			}
-			_, _ = fmt.Fprintf(l.out, "%s%s%s", ph, t, rs)
-		}
-		_, _ = fmt.Fprintln(l.out, " — not installed (optional)")
-		_, _ = fmt.Fprintf(l.out, "  %sRun:%s anpu tools  ·  install: ", mu, rs)
-		switch l.skippedTools[0] {
-		case "Httpx":
-			_, _ = fmt.Fprint(l.out, "go install github.com/projectdiscovery/httpx/cmd/httpx@latest")
-		case "Katana":
-			_, _ = fmt.Fprint(l.out, "go install github.com/projectdiscovery/katana/cmd/katana@latest")
-		case "Naabu":
-			_, _ = fmt.Fprint(l.out, "go install github.com/projectdiscovery/naabu/v2/cmd/naabu@latest")
-		case "DNSx":
-			_, _ = fmt.Fprint(l.out, "go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest")
-		case "Dalfox":
-			_, _ = fmt.Fprint(l.out, "go install github.com/hahwul/dalfox/v2@latest")
-		default:
-			_, _ = fmt.Fprint(l.out, "see anpu tools")
-		}
-		_, _ = fmt.Fprintln(l.out, "")
-	}
+	// Missing-tool guidance lives in `anpu tools` (per-tool status +
+	// install hints), not here: every skipped stage already prints its
+	// own reason on its stage line.
 	_, _ = fmt.Fprintln(l.out, "")
 }
 

@@ -26,10 +26,17 @@ func newDriftCmd() *cobra.Command {
 		Short: "Diff a scan against an authorized baseline with parser pins",
 		Long: `Compare a current report against an authorized baseline.
 
-Parser pins guard against silent detection changes: generate them with
+Identity model: findings match by stable finding ID (not DedupKey —
+use ` + "`anpu diff`" + ` for content-identity comparison). Parser pins
+guard against silent detection changes: generate them with
 ` + "`anpu drift --write-pins --pins pins.json`" + ` and pass --pins on nightly runs.
 A pin mismatch marks the comparison UNRELIABLE (exit 1) instead of
-silently passing.
+silently passing. Any added finding ID also exits 1.
+
+` + "`--from-history`" + ` compares the two most recent stored scans for
+a target (matched after target normalization); plain file mode reads
+two JSON reports. For live monitoring with added-severity gating, see
+` + "`anpu watch`" + ` (diff identity, alerts on added findings only).
 
 Examples:
   anpu drift --write-pins --pins pins.json
@@ -120,8 +127,9 @@ func historyPair(target string) (base, current *models.ScanSummary, err error) {
 		return nil, nil, err
 	}
 	var ids []string
+	want := normalizeCompareTarget(target)
 	for _, it := range items {
-		if it.Target == target {
+		if normalizeCompareTarget(it.Target) == want {
 			ids = append(ids, it.ID)
 			if len(ids) == 2 {
 				break

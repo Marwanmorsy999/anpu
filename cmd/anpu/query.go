@@ -18,6 +18,7 @@ import (
 func newQueryCmd() *cobra.Command {
 	var (
 		inputs     []string
+		reportsDir string
 		severity   string
 		confidence string
 		category   string
@@ -28,16 +29,18 @@ func newQueryCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "query",
 		Short: "Filter findings across saved scan reports",
-		Long: `Filter findings from saved JSON scan reports.
+		Long: `Filter findings from saved JSON scan reports (files, not the
+SQLite history database — use ` + "`anpu show`" + ` for stored scans).
 
 Examples:
   anpu query --severity high
+  anpu query --dir ./my-reports --text xss
   anpu query --input ./reports/scan.json --text xss --json
   anpu query --category vulnerability --confidence confirmed --limit 20`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			files := inputs
 			if len(files) == 0 {
-				auto, err := newestReports("./reports", 5)
+				auto, err := newestReports(reportsDir, 5)
 				if err != nil {
 					return err
 				}
@@ -82,7 +85,8 @@ Examples:
 			return nil
 		},
 	}
-	cmd.Flags().StringArrayVar(&inputs, "input", nil, "report JSON to query (repeatable; default: newest in ./reports)")
+	cmd.Flags().StringArrayVar(&inputs, "input", nil, "report JSON to query (repeatable; default: newest in --dir)")
+	cmd.Flags().StringVar(&reportsDir, "dir", "./reports", "directory to auto-pick newest reports from (matches scan --output)")
 	cmd.Flags().StringVar(&severity, "severity", "", "minimum severity floor: low, medium, high, critical")
 	cmd.Flags().StringVar(&confidence, "confidence", "", "minimum confidence: low, medium, high, confirmed")
 	cmd.Flags().StringVar(&category, "category", "", "finding category substring match")

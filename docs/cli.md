@@ -112,31 +112,41 @@ The exact filename is generated at runtime, so CI workflows should discover `*.s
 
 ## `anpu history`
 
-List previous local scans.
+List previous local scans (SQLite history database — the same source
+`show` and `diff` read).
 
 ```sh
 anpu history
 anpu history --limit 50
+anpu history --target example.com
+anpu history --json
 ```
 
 | Flag | Default | Purpose |
 |---|---|---|
 | `--limit <n>` | `20` | Maximum number of scans to list. |
+| `--target <substr>` | empty | Only list scans whose target contains this substring (case-insensitive). |
+| `--json` | `false` | Print rows as JSON with full IDs and targets (no truncation). |
 
 The table includes scan ID, target, profile, status, risk score, and finding count.
 
 ## `anpu show`
 
-Display a previous scan from local history.
+Display a previous scan from local history (same record `diff` compares),
+including pipeline phase timings.
 
 ```sh
 anpu show scan-1234567890-1
+anpu show scan-1234567890-1 --severity high --limit 20 --long
 ```
 
 | Flag | Default | Purpose |
 |---|---|---|
 | `--export <path>` | empty | Re-render the stored scan to a file instead of printing the summary. |
-| `--format <format>` | `html` | Export format: `html`, `json`, or `sarif`. |
+| `--format <format>` | `html` | Export format: `html`, `json`, `sarif`, `csv`, or `md`. |
+| `--severity <floor>` | empty | Only print findings at/above `low`, `medium`, `high`, or `critical`. |
+| `--limit <n>` | `50` | Max findings to print (`0` = all). |
+| `--long` | `false` | Print full finding IDs (for `--risk-accept` files), URLs, and evidence excerpts. |
 
 Examples:
 
@@ -148,13 +158,21 @@ anpu show scan-1234567890-1 --export ./reports/scan.sarif --format sarif
 
 ## `anpu diff`
 
-Compare two scans of the same target.
+Compare two scans of the same target (from history).
 
 ```sh
 anpu diff <older-scan-id> <newer-scan-id>
 ```
 
-The command reports changes in risk score, findings, endpoints, and technologies. Comparing different targets is rejected.
+Identity model: findings match by DedupKey (category + normalized URL +
+title + parameter + CWE); severity/confidence/score/evidence/remediation
+changes report as "changed". Endpoints match by normalized URL,
+technologies by name + category (version bumps report as "changed").
+Targets must be equivalent after normalization (scheme/host case,
+default ports, trailing slashes ignored) — otherwise the comparison is
+rejected. For pin-guarded baseline checks see `drift` (stable-ID
+identity); for live monitoring see `watch` (diff identity, added-only
+alerts).
 
 | Flag | Default | Purpose |
 |---|---|---|
@@ -177,7 +195,9 @@ Show which built-in engines are available and whether optional external integrat
 anpu tools
 ```
 
-Built-in engines require no installation. Free external binaries (amass, ffuf, nmap, …) run as pipeline stages when installed and warn-and-skip otherwise; state-touching ones additionally need `--adversarial --confirm-authorized`. Fuzzers need `ANPU_WORDLIST`, code tools need `ANPU_CODE_DIR`, mass-DNS tools need `ANPU_RESOLVERS`.
+Built-in engines require no installation. Free external binaries (amass, ffuf, nmap, …) run as pipeline stages when installed and warn-and-skip otherwise; state-touching ones additionally need `--adversarial --confirm-authorized`. Fuzzers need `ANPU_WORDLIST`, code tools need `ANPU_CODE_DIR`, mass-DNS tools need `ANPU_RESOLVERS`. `anpu tools` shows every registry tool with its real status (external/embedded/missing + install hint), the operator environment, and worst-case staged time per profile.
+
+`ANPU_TOOL_BUDGET_SEC=N` caps cumulative external-tool seconds per scan (0/unset = uncapped); exhausted tools skip with an explicit reason instead of burning time silently.
 
 ### `anpu tools install`
 
@@ -194,9 +214,16 @@ Single installs print the recipe and ask for confirmation first (default No; `--
 
 Fuzzers additionally need `ANPU_WORDLIST`, code tools `ANPU_CODE_DIR`, mass-DNS tools `ANPU_RESOLVERS` before their stages will run.
 
+`--csv` / `--md` write finding exports alongside the scan (same filename stem as the other reports); `show <id> --export --format csv|md` re-renders them later from history.
+
 ## `anpu query`
 
 Filter findings across saved JSON reports (`--json` scans).
+
+```sh
+anpu query --severity high
+anpu query --dir ./my-reports --text xss
+```
 
 ```sh
 anpu query --severity high

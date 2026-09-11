@@ -40,6 +40,12 @@ func newWatchCmd() *cobra.Command {
 		Long: `watch runs repeated scans against a target on a fixed interval and
 emits only findings that are new or changed since the previous scan.
 
+Identity model: each iteration compares with ` + "`diff.Compare`" + `
+(DedupKey identity, like ` + "`anpu diff`" + `), but only *added*
+findings at/above the severity gate notify — changed/removed findings
+are shown, not alerted. For pin-guarded baseline checks in CI, use
+` + "`anpu drift`" + ` (stable-ID identity + parser pins) instead.
+
 The first run establishes a baseline. Every subsequent run diffs against
 that baseline, so output stays quiet until something actually changes.
 

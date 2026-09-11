@@ -18,7 +18,17 @@ func newDiffCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "diff <older-scan-id> <newer-scan-id>",
 		Short: "See what changed between two scans",
-		Args:  cobra.ExactArgs(2),
+		Long: `Compare two stored scans from the local history database.
+
+Identity model: findings match by DedupKey
+(category + normalized URL + title + parameter + CWE); a finding whose
+severity, confidence, score, evidence, or remediation changed reports
+as "changed". Endpoints match by normalized URL, technologies by
+name + category (version bumps report as "changed").
+
+Targets must be equivalent after normalization (scheme/host case,
+default ports, and trailing slashes are ignored).`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			store, err := storage.Open(defaultDBPath())
 			if err != nil {
@@ -34,7 +44,7 @@ func newDiffCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if before.Target != after.Target {
+			if normalizeCompareTarget(before.Target) != normalizeCompareTarget(after.Target) {
 				return fmt.Errorf("cannot compare scans for different targets: %q vs %q", before.Target, after.Target)
 			}
 

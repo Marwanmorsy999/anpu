@@ -479,7 +479,7 @@ func runScan(cmd *cobra.Command, rt *ScanRuntime, targetArg, profileStr string, 
 	if err != nil {
 		return err
 	}
-	pipeline := buildPipeline(client, modules, authzCtx, apiCfg, profile, rt.Unsafe)
+	pipeline := buildPipeline(client, modules, authzCtx, apiCfg, profile, rt.Unsafe, onlyMods)
 	pipeline.MaxParallel = rt.Parallel
 	pipeline.CheckpointFile = rt.Checkpoint
 	pipeline.ResumeFile = rt.Resume

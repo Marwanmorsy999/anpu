@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/anpu-project/anpu/internal/api"
+	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/storage"
 	"github.com/anpu-project/anpu/pkg/models"
 )
@@ -96,5 +98,42 @@ func TestTruncateHelpers(t *testing.T) {
 	}
 	if !strings.Contains(oneLineFinding("a\nb  c", 100), "a b c") {
 		t.Fatal("oneLineFinding must collapse whitespace")
+	}
+}
+
+// Stages disabled by --only must say so: the static profile-gated
+// SkipReason would otherwise blame the wrong cause (and, before the
+// Phase 6 cleanup, named retired profile aliases).
+func TestOnlyModsOverrideSkipReasons(t *testing.T) {
+	client := anpuhttp.NewClientWithLocalNetworkAllowed(true)
+	// Mirror runScan: --only disables everything, then enables selection.
+	mc := models.DefaultModuleConfig(models.ProfileAdvanced)
+	disableAllModules(&mc)
+	applyModuleToggles(&mc, nil, []string{"headers"})
+	pipe := buildPipeline(client, mc,
+		models.AuthContext{}, api.Config{}, models.ProfileAdvanced, false, []string{"headers"})
+	foundRecon, foundHeaders := "", ""
+	reconEnabled, headersEnabled := false, false
+	for _, st := range pipe.Stages {
+		switch st.Label {
+		case "Recon":
+			foundRecon, reconEnabled = st.SkipReason, st.Enabled
+		case "Headers":
+			foundHeaders, headersEnabled = st.SkipReason, st.Enabled
+		}
+		if strings.Contains(st.SkipReason, "standard") ||
+			strings.Contains(st.SkipReason, "deep profile") ||
+			strings.Contains(st.SkipReason, "(--profile deep)") {
+			t.Fatalf("stage %q carries a retired profile reference: %q", st.Label, st.SkipReason)
+		}
+	}
+	if reconEnabled {
+		t.Fatal("Recon must be off under --only headers")
+	}
+	if foundRecon != "not selected (--only headers)" {
+		t.Fatalf("Recon skip reason must name --only, got %q", foundRecon)
+	}
+	if !headersEnabled {
+		t.Fatalf("Headers must be on under --only headers (reason: %q)", foundHeaders)
 	}
 }

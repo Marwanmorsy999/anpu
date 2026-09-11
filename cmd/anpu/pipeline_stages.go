@@ -2,6 +2,7 @@ package main
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/anpu-project/anpu/internal/active"
 	"github.com/anpu-project/anpu/internal/actuator"
@@ -107,7 +108,7 @@ import (
 // orchestrator (internal/scanner) and every analyzer package only know
 // about the Scanner interface, so adding a new stage means adding one
 // entry here.
-func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCtx models.AuthContext, apiCfg api.Config, profile models.Profile, unsafe bool) *scanner.Pipeline {
+func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCtx models.AuthContext, apiCfg api.Config, profile models.Profile, unsafe bool, onlyMods []string) *scanner.Pipeline {
 	nuclei := integrations.NewNucleiScanner()
 	zap := integrations.NewZapScanner()
 	mobsfScanner := integrations.NewMobSFScanner()
@@ -149,7 +150,7 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCt
 			{Label: "OriginIP", Enabled: modules.OriginIP, Scanner: originip.New(client)},
 			{Label: "Technology", Enabled: modules.Technology, Scanner: technology.New(client)},
 			// Httpx corroborates built-in fingerprinting when installed.
-			{Label: "Httpx", Enabled: modules.Httpx, Scanner: httpx, SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "Httpx", Enabled: modules.Httpx, Scanner: httpx, SkipReason: "safe profile is passive — use --profile advanced"},
 			{Label: "Codesecrets", Enabled: modules.Codesecrets, Scanner: codesecrets.New()},
 			{Label: "TLS", Enabled: modules.TLS, Scanner: tls.New(client)},
 			{Label: "Headers", Enabled: modules.Headers, Scanner: headers.New(client)},
@@ -159,10 +160,10 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCt
 			// already populated and crawler-discovered manifests are visible
 			// for harvest (previously it ran before Endpoints and the
 			// manifest path could never trigger).
-			{Label: "Deps", Enabled: modules.Deps, Scanner: deps.NewWithClient(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "Deps", Enabled: modules.Deps, Scanner: deps.NewWithClient(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			// Katana crawls what the built-in crawler misses (JS-heavy
 			// routes); its endpoints feed every later stage.
-			{Label: "Katana", Enabled: modules.Katana, Scanner: katana, SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "Katana", Enabled: modules.Katana, Scanner: katana, SkipReason: "safe profile is passive — use --profile advanced"},
 			// API scanner (Phase 5) runs immediately after endpoint discovery
 			// so that schema-derived endpoints are in ScanContext.Endpoints
 			// before the AuthZ and Active stages consume them. With no
@@ -170,94 +171,94 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCt
 			// schema locations (GET-only). --only stays absolute: explicit
 			// flags never force the stage on (they warn instead, above).
 			{Label: "API", Enabled: modules.API, Scanner: api.New(apiCfg)},
-			{Label: "Subdomains", Enabled: modules.Subdomains, Scanner: subdomains.New(), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "Subdomains", Enabled: modules.Subdomains, Scanner: subdomains.New(), SkipReason: "safe profile is passive — use --profile advanced"},
 			// Subfinder merges passive subdomains into sc.Subdomains for Takeover.
-			{Label: "Subfinder", Enabled: modules.Subfinder, Scanner: subfinder, SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "DNSx", Enabled: modules.DNSx, Scanner: dnsx, SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "Subfinder", Enabled: modules.Subfinder, Scanner: subfinder, SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "DNSx", Enabled: modules.DNSx, Scanner: dnsx, SkipReason: "safe profile is passive — use --profile advanced"},
 			// Takeover runs after Subdomains so sc.Subdomains is populated.
-			{Label: "Takeover", Enabled: modules.Takeover, Scanner: takeover.New(), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "PortScan", Enabled: modules.PortScan, Scanner: portscan.New(), SkipReason: "deep profile only (--profile deep)"},
-			{Label: "Naabu", Enabled: modules.Naabu, Scanner: naabu, SkipReason: "deep profile only (--profile deep)"},
-			{Label: "Dirs", Enabled: modules.Dirs, Scanner: dirs.New(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "Takeover", Enabled: modules.Takeover, Scanner: takeover.New(), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "PortScan", Enabled: modules.PortScan, Scanner: portscan.New(), SkipReason: "ultra profile only (--profile ultra)"},
+			{Label: "Naabu", Enabled: modules.Naabu, Scanner: naabu, SkipReason: "ultra profile only (--profile ultra)"},
+			{Label: "Dirs", Enabled: modules.Dirs, Scanner: dirs.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			// Secrets consumes the endpoints discovered above, so it must
 			// stay after the Endpoints stage.
-			{Label: "Secrets", Enabled: modules.Secrets, Scanner: secrets.New(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "Secrets", Enabled: modules.Secrets, Scanner: secrets.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			// Params classifies query params on all discovered endpoints
 			// (including JS routes from Secrets). Passive — independently
 			// toggleable via --disable/--enable params (default on).
 			{Label: "Params", Enabled: modules.Params, Scanner: params.New(), SkipReason: "disabled via --disable params"},
-			{Label: "CORS", Enabled: modules.CORS, Scanner: cors.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "Methods", Enabled: modules.Methods, Scanner: methods.New(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "CORS", Enabled: modules.CORS, Scanner: cors.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "Methods", Enabled: modules.Methods, Scanner: methods.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			// CSRF runs after Endpoints so form action URLs are known.
-			{Label: "CSRF", Enabled: modules.CSRF, Scanner: csrf.New(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "CSRF", Enabled: modules.CSRF, Scanner: csrf.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			// SRI runs after Endpoints/Crawler so page URLs are populated.
 			{Label: "SRI", Enabled: modules.SRI, Scanner: sri.New(client)},
 			// Backup probes per-endpoint backup suffixes + root archives.
 			// Enabled on Standard and Deep; skipped on Safe profile.
-			{Label: "Backup", Enabled: modules.Backup, Scanner: backup.New(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "Backup", Enabled: modules.Backup, Scanner: backup.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			// Wave 1 batch 2 — bounded exposure probes (advanced/ultra; safe
 			// stays passive). Self-sufficient (homepage + well-known paths);
 			// CSWSH/HiddenParams also consume discovered endpoints, and
 			// HiddenParams/OAuth/SAML endpoints feed AuthZ/IDOR/Active below.
-			{Label: "ExposedGit", Enabled: modules.ExposedGit, Scanner: exposedgit.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "ExposedConfig", Enabled: modules.ExposedConfig, Scanner: exposedconfig.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "Actuator", Enabled: modules.Actuator, Scanner: actuator.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "DebugPages", Enabled: modules.DebugPages, Scanner: debugpages.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "OAuthAnalyzer", Enabled: modules.OAuthAnalyzer, Scanner: oauth.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "SAMLMetadata", Enabled: modules.SAMLMetadata, Scanner: saml.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "CSWSH", Enabled: modules.CSWSH, Scanner: cswsh.New(), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "PostMessage", Enabled: modules.PostMessage, Scanner: postmessage.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "JSSecrets", Enabled: modules.JSSecrets, Scanner: jssecrets.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "Jsluice", Enabled: modules.Jsluice, Scanner: jsluice.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "HiddenParams", Enabled: modules.HiddenParams, Scanner: hiddenparams.New(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "ExposedGit", Enabled: modules.ExposedGit, Scanner: exposedgit.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "ExposedConfig", Enabled: modules.ExposedConfig, Scanner: exposedconfig.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "Actuator", Enabled: modules.Actuator, Scanner: actuator.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "DebugPages", Enabled: modules.DebugPages, Scanner: debugpages.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "OAuthAnalyzer", Enabled: modules.OAuthAnalyzer, Scanner: oauth.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "SAMLMetadata", Enabled: modules.SAMLMetadata, Scanner: saml.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "CSWSH", Enabled: modules.CSWSH, Scanner: cswsh.New(), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "PostMessage", Enabled: modules.PostMessage, Scanner: postmessage.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "JSSecrets", Enabled: modules.JSSecrets, Scanner: jssecrets.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "Jsluice", Enabled: modules.Jsluice, Scanner: jsluice.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "HiddenParams", Enabled: modules.HiddenParams, Scanner: hiddenparams.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			// Wave 1 batch 3 — items 21-30. Clickjack/PolicyHeaders/CookiePrefix
 			// are passive header analysis (safe for all, no SkipReason);
 			// TakeoverPlus runs after Takeover while subdomains are hot; the
 			// rest are bounded active probes whose endpoints feed AuthZ/Active.
-			{Label: "VerbTamper", Enabled: modules.VerbTamper, Scanner: verbtamper.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "CacheDeception", Enabled: modules.CacheDeception, Scanner: cachedeception.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "ForbiddenBypass", Enabled: modules.ForbiddenBypass, Scanner: forbiddenbypass.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "TakeoverPlus", Enabled: modules.TakeoverPlus, Scanner: takeoverplus.New(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "VerbTamper", Enabled: modules.VerbTamper, Scanner: verbtamper.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "CacheDeception", Enabled: modules.CacheDeception, Scanner: cachedeception.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "ForbiddenBypass", Enabled: modules.ForbiddenBypass, Scanner: forbiddenbypass.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "TakeoverPlus", Enabled: modules.TakeoverPlus, Scanner: takeoverplus.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			{Label: "Clickjack", Enabled: modules.Clickjack, Scanner: clickjack.New(client)},
 			{Label: "PolicyHeaders", Enabled: modules.PolicyHeaders, Scanner: policyheaders.New(client)},
 			{Label: "CookiePrefix", Enabled: modules.CookiePrefix, Scanner: cookieprefix.New(client)},
-			{Label: "APIVersion", Enabled: modules.APIVersion, Scanner: apiversion.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "APIConsole", Enabled: modules.APIConsole, Scanner: apiconsole.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "VHost", Enabled: modules.VHost, Scanner: vhost.New(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "APIVersion", Enabled: modules.APIVersion, Scanner: apiversion.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "APIConsole", Enabled: modules.APIConsole, Scanner: apiconsole.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "VHost", Enabled: modules.VHost, Scanner: vhost.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			// Wave 1 batches 4-5 — items 31-50. JWTPlus/H2FP/GFClassify/
 			// CertHistory/SubPermute are passive/archive analysis (safe for
 			// all, no SkipReason); H2Smuggle additionally requires
 			// --adversarial --confirm-authorized at runtime; the rest are
 			// bounded active probes whose endpoints feed AuthZ/Active.
-			{Label: "GraphQLFP", Enabled: modules.GraphQLFP, Scanner: graphqlfp.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "GraphQLSchema", Enabled: modules.GraphQLSchema, Scanner: graphqlschema.New(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "GraphQLFP", Enabled: modules.GraphQLFP, Scanner: graphqlfp.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "GraphQLSchema", Enabled: modules.GraphQLSchema, Scanner: graphqlschema.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			{Label: "JWTPlus", Enabled: modules.JWTPlus, Scanner: jwtplus.New(client)},
-			{Label: "SSTIExpand", Enabled: modules.SSTIExpand, Scanner: sstiexpand.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "NoSQLExpand", Enabled: modules.NoSQLExpand, Scanner: nosqlexpand.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "H2Smuggle", Enabled: modules.H2Smuggle, Scanner: h2smuggle.New(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "SSTIExpand", Enabled: modules.SSTIExpand, Scanner: sstiexpand.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "NoSQLExpand", Enabled: modules.NoSQLExpand, Scanner: nosqlexpand.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "H2Smuggle", Enabled: modules.H2Smuggle, Scanner: h2smuggle.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			{Label: "H2FP", Enabled: modules.H2FP, Scanner: h2fp.New(client)},
-			{Label: "RedirectPack", Enabled: modules.RedirectPack, Scanner: redirectpack.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "LFIPack", Enabled: modules.LFIPack, Scanner: lfipack.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "CVEPack", Enabled: modules.CVEPack, Scanner: cvepack.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "CORSPlus", Enabled: modules.CORSPlus, Scanner: corsplus.New(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "RedirectPack", Enabled: modules.RedirectPack, Scanner: redirectpack.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "LFIPack", Enabled: modules.LFIPack, Scanner: lfipack.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "CVEPack", Enabled: modules.CVEPack, Scanner: cvepack.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "CORSPlus", Enabled: modules.CORSPlus, Scanner: corsplus.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			{Label: "CertHistory", Enabled: modules.CertHistory, Scanner: certhistory.New(client)},
-			{Label: "AXFRPlus", Enabled: modules.AXFRPlus, Scanner: axfrplus.New(), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "AXFRPlus", Enabled: modules.AXFRPlus, Scanner: axfrplus.New(), SkipReason: "safe profile is passive — use --profile advanced"},
 			{Label: "SubPermute", Enabled: modules.SubPermute, Scanner: subpermute.New()},
-			{Label: "BackupPlus", Enabled: modules.BackupPlus, Scanner: backupplus.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "FaviconPlus", Enabled: modules.FaviconPlus, Scanner: faviconplus.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "DebugMethods", Enabled: modules.DebugMethods, Scanner: debugmethods.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "EncodePoly", Enabled: modules.EncodePoly, Scanner: encodepoly.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "DiffOracle", Enabled: modules.DiffOracle, Scanner: difforacle.New(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "BackupPlus", Enabled: modules.BackupPlus, Scanner: backupplus.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "FaviconPlus", Enabled: modules.FaviconPlus, Scanner: faviconplus.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "DebugMethods", Enabled: modules.DebugMethods, Scanner: debugmethods.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "EncodePoly", Enabled: modules.EncodePoly, Scanner: encodepoly.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "DiffOracle", Enabled: modules.DiffOracle, Scanner: difforacle.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			{Label: "GFClassify", Enabled: modules.GFClassify, Scanner: gfclassify.New()},
 			// Next-wave natives — bounded active probes (advanced/ultra).
-			{Label: "Soap", Enabled: modules.Soap, Scanner: soap.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "Nsecwalk", Enabled: modules.Nsecwalk, Scanner: nsecwalk.New(), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "Wafdetect", Enabled: modules.Wafdetect, Scanner: wafdetect.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "Oauthpack", Enabled: modules.Oauthpack, Scanner: oauthpack.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "Ppollute", Enabled: modules.Ppollute, Scanner: ppollute.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "Swscope", Enabled: modules.Swscope, Scanner: swscope.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "Timeoracle", Enabled: modules.Timeoracle, Scanner: timeoracle.New(client), SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "Jwtconfirm", Enabled: modules.Jwtconfirm, Scanner: jwtconfirm.New(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "Soap", Enabled: modules.Soap, Scanner: soap.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "Nsecwalk", Enabled: modules.Nsecwalk, Scanner: nsecwalk.New(), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "Wafdetect", Enabled: modules.Wafdetect, Scanner: wafdetect.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "Oauthpack", Enabled: modules.Oauthpack, Scanner: oauthpack.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "Ppollute", Enabled: modules.Ppollute, Scanner: ppollute.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "Swscope", Enabled: modules.Swscope, Scanner: swscope.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "Timeoracle", Enabled: modules.Timeoracle, Scanner: timeoracle.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "Jwtconfirm", Enabled: modules.Jwtconfirm, Scanner: jwtconfirm.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			// AuthZ runs after Endpoints/Dirs so both contexts probe the
 			// full discovered attack surface.
 			{Label: "AuthZ", Enabled: modules.AuthZ, Scanner: authzScanner},
@@ -267,14 +268,14 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCt
 			// Runs immediately after AuthZ while endpoints are still hot.
 			// Enabled on advanced/ultra by default (read-only GETs, like Active);
 			// off on safe to keep safe passive. Toggle via --enable/--disable idor.
-			{Label: "IDOR", Enabled: modules.IDOR, Scanner: authz.NewIDOR(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "IDOR", Enabled: modules.IDOR, Scanner: authz.NewIDOR(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			// Active runs last among ANPU built-ins so it benefits from
 			// the complete endpoint list and technology fingerprints.
-			{Label: "Active", Enabled: modules.Active, Scanner: active.New(client), SkipReason: "safe profile is passive — use --profile standard"},
+			{Label: "Active", Enabled: modules.Active, Scanner: active.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			// Dalfox confirms XSS on discovered parameterized URLs.
-			{Label: "Dalfox", Enabled: modules.Dalfox, Scanner: dalfox, SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "Nuclei", Enabled: modules.Nuclei, Scanner: nuclei, SkipReason: "safe profile is passive — use --profile standard"},
-			{Label: "ZAP", Enabled: modules.ZAP, Scanner: zap, SkipReason: "deep profile only (--profile deep)"},
+			{Label: "Dalfox", Enabled: modules.Dalfox, Scanner: dalfox, SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "Nuclei", Enabled: modules.Nuclei, Scanner: nuclei, SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "ZAP", Enabled: modules.ZAP, Scanner: zap, SkipReason: "ultra profile only (--profile ultra)"},
 			// MobSF static analysis (mobile scope): runs only with ANPU_APK
 			// + operator server configured; dynamic analysis never runs.
 			{Label: "Mobsf", Enabled: modules.Mobsf, Scanner: mobsfScanner, SkipReason: "ultra only + ANPU_APK (static only, dynamic never)"},
@@ -306,6 +307,16 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCt
 		st := wrapperStageFor(spec, modules, client, skip, profile, unsafe)
 		st.Phase = wrapperPhase(spec)
 		pipe.Stages = append(pipe.Stages, st)
+	}
+	// --only is absolute: anything left disabled was deselected, not
+	// profile-gated — say so instead of the static SkipReason.
+	if len(onlyMods) > 0 {
+		sel := strings.Join(onlyMods, ",")
+		for i := range pipe.Stages {
+			if !pipe.Stages[i].Enabled {
+				pipe.Stages[i].SkipReason = "not selected (--only " + sel + ")"
+			}
+		}
 	}
 	return pipe
 }

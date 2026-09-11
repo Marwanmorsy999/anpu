@@ -24,31 +24,35 @@
 - [Changelog](CHANGELOG.md)
 
 ```text
-$ anpu scan https://example.com
+$ anpu scan https://example.com --profile advanced --only headers,archiveurls,dirs,active
 
-        ▄▀█ █▄░█ █▀█ █░█
-        █▀█ █░▀█ █▀▀ █▄█
-   Web Security Intelligence
+                        #####+ ###+   ##+######+ ##+   ##+
+                       ##+--##+####+  ##|##+--##+##|   ##|
+                       #######|##+##+ ##|######++##|   ##|
+                       ##+--##|##|+##+##|##+---+ ##|   ##|
+                       ##|  ##|##| +####|##|     +######++
+                       +-+  +-++-+  +---++-+      +-----+
+              G U A R D I A N  │  Web Security Intelligence Engine
 
-Target: https://example.com
+                        Target: https://example.com/
 
-Recon              ✓
-Technology         ✓
-TLS                ✓
-Headers            ✓
-Cookies            ✓
-Endpoints          ✓
+── Phase 1 · Foundation — passive intel
+[!!] ArchiveURLs      +1
+[!!] Headers          +7
+[--] Recon            not selected (--only headers,archiveurls,dirs,active)
+   ···
+── Phase 4 · Active — differentials and confirmations
+[!!] Active           +8
+   ···
 
-Results
-CRITICAL     0
-HIGH         0
-MEDIUM       2
-LOW          5
-INFO         11
-
-Risk Score: 3.4/10
-Report: ./reports/example.com-2026-01-01-120000.html
+  GRADE D  (7.9/10)  CRITICAL 0  HIGH 5  MEDIUM 4  LOW 3  Info 5
+  Top: /.env returned HTTP 200 [HIGH 6.5]
+  Report: ./reports/example.com-2026-09-11-103208.html
+  Phases: foundation 0s/2  ·  discovery 0s/1  ·  active 33s/1
+  Slowest: Active 33.4s  ·  Dirs 0.0s  ·  ArchiveURLs 0.0s  ·  Headers 0.0s
 ```
+
+Trimmed (`···`) from a real run: skipped stages print their reason, findings bump stage counters (`+N`), and the panel shows grade, top finding, report path, and phase timing.
 
 ## 1. What ANPU is
 

@@ -199,6 +199,7 @@ func runToolsStatus(cmd *cobra.Command) error {
 	fmt.Println("Simple flags: --disable <a,b>  --enable <a,b>   (see --help for module names)")
 	fmt.Printf("Wave 2 registry: %d tools — binary when installed, native embedded coverage otherwise (anpu tools install --list | anpu tools install <name>)\n", len(integrations.Registry))
 	fmt.Println("Scope guard: --scope-file allowlist.txt (hard stop before any request)")
+	fmt.Println(integrations.ManifestSummary())
 	return nil
 }
 
@@ -270,6 +271,11 @@ Examples:
 				return err
 			}
 			fmt.Printf("Installed %s via %s — verified on PATH/Go-bin\n", r.Name, method)
+			if path, ok := integrations.LookupBinary(r.Binary); ok {
+				if hash, size, verr := integrations.VerifyBinary(path); verr == nil {
+					fmt.Printf("Verified %s: sha256:%s (%d bytes) at %s\n", r.Binary, hash, size, path)
+				}
+			}
 			return nil
 		},
 	}
@@ -316,7 +322,13 @@ func runInstallAll(cmd *cobra.Command, level string, yes bool) error {
 			failed++
 			continue
 		}
-		results = append(results, result{s.Name, "installed via " + method})
+		outcome := "installed via " + method
+		if path, ok := integrations.LookupBinary(r.Binary); ok {
+			if hash, _, verr := integrations.VerifyBinary(path); verr == nil {
+				outcome += fmt.Sprintf(" (sha256:%s)", hash)
+			}
+		}
+		results = append(results, result{s.Name, outcome})
 	}
 	fmt.Println("\nInstall summary:")
 	for _, res := range results {

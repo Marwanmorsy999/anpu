@@ -531,6 +531,11 @@ func runScan(cmd *cobra.Command, rt *ScanRuntime, targetArg, profileStr string, 
 			fmt.Println("  auto-install : enabled (missing tools self-provision: go/pipx/docker, apt/choco best-effort)")
 		}
 	}
+	// Tool provisioning manifest: one tamper-evident ID for the exact
+	// tool set this scan may execute (stat-only, millisecond cheap).
+	if !silent {
+		fmt.Printf("  %s\n", integrations.ManifestSummary())
+	}
 	// Scope hard stop: resolved once, enforced before any packet.
 	allowlist, err := scope.LoadFile(rt.ScopeFile)
 	if err != nil {

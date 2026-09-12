@@ -1,0 +1,84 @@
+# Honesty benchmark: detection measurement with freshness gate.
+#
+# Starts the planted-signal fixture, runs `anpu bench`, and verifies
+# docs/benchmark.md is fresh (--check fails on verdict drift so a human
+# must review and refresh deliberately). Intended for weekly schedule,
+# manual dispatch, and PRs touching detection/reporting/harness code —
+# NOT every PR (an advanced run takes ~5 minutes).
+name: Benchmark
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly (Mondays 05:00 UTC): off-peak vs CI/scan workloads.
+    - cron: '0 5 * * 1'
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "internal/active/**"
+      - "internal/backup/**"
+      - "internal/exposedconfig/**"
+      - "internal/headers/**"
+      - "internal/crawler/**"
+      - "internal/endpoints/**"
+      - "internal/findings/**"
+      - "internal/scoring/**"
+      - "internal/reporting/**"
+      - "internal/bench/**"
+      - "internal/integrations/**"
+      - "pkg/models/**"
+      - "cmd/anpu/**"
+      - "tests/bench/**"
+      - "docs/benchmark.md"
+      - "go.mod"
+      - "go.sum"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Start benchmark fixture
+        # The fixture itself runs in Docker (python:3.13-slim); no local
+        # Python needed on the runner.
+        run: |
+          set -euo pipefail
+          docker compose -f tests/bench/docker-compose.yml up -d
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8901/ >/dev/null 2>&1; then
+              echo "bench fixture is up (attempt $i)"
+              exit 0
+            fi
+            echo "waiting for bench fixture ($i/30)..."
+            sleep 2
+          done
+          echo "::error::bench fixture did not become ready in 60s"
+          docker ps -a || true
+          exit 1
+
+      - name: Build ANPU
+        run: go build -o anpu ./cmd/anpu
+
+      - name: Run benchmark freshness gate
+        # The harness auto-allows local-network scans for loopback
+        # targets; no ANPU_ALLOW_LOCAL_NETWORK export needed here.
+        run: ./anpu bench --target http://127.0.0.1:8901 --format markdown --check docs/benchmark.md
+
+      - name: Stop benchmark fixture
+        if: always()
+        run: docker compose -f tests/bench/docker-compose.yml down

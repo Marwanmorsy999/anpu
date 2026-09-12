@@ -38,7 +38,7 @@ signals:
   - id: weak-headers
     description: No security headers served on / (expect headers-posture).
     match:
-      title_contains: headers-posture
+      title_contains: Security headers posture
       category: security-headers
     profiles:
       safe: hit

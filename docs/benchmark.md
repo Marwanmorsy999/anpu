@@ -58,6 +58,11 @@ project exists to oppose.
 - Environment: no Nuclei binary installed, so the Nuclei stage contributed
   only its embedded fallback. Timings are excluded from the gated table
   (safe ≈ 3s, advanced ≈ 5min on the calibration machine).
+- One bench at a time: never overlap runs against the same fixture.
+  Contended runs have shown dropped findings (including one stale-gate
+  trip that resolved on a clean re-run with identical verdicts). If CI
+  fails on a single-signal flip, re-run before treating it as a
+  regression; persistent flips across clean runs are real.
 - Refresh: `anpu bench --format markdown --refresh-docs docs/benchmark.md`;
   CI enforces with `--check`.
 

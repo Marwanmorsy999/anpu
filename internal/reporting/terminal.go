@@ -254,6 +254,7 @@ func PrintWelcomeMenu(opts BannerOptions) {
 	item("3", "Deepest check — finds the most, takes the longest", "ultra")
 	item("4", "See your past scans", "history")
 	item("5", "Show every command", "help")
+	item("6", "Set up extra tools — see what's installed", "tools")
 	item("0", "Exit", "exit")
 	pick := "Pick a number:"
 	if colorOK {
@@ -264,7 +265,7 @@ func PrintWelcomeMenu(opts BannerOptions) {
 
 // PrintMenuPrompt reprints a short retry prompt after invalid input.
 func PrintMenuPrompt(opts BannerOptions) {
-	pick := "Pick 1-5 (or 0 to exit):"
+	pick := "Pick 1-6 (or 0 to exit):"
 	if !opts.Plain && SupportsColor() {
 		pick = phosphor + pick + reset
 	}

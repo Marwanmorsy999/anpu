@@ -1,0 +1,22 @@
+# Codecov policy: the project baseline must never silently drop, and
+# new/changed lines must be covered. Tune here instead of weakening tests.
+#
+# - project target `auto` compares each PR against its base commit and
+#   fails the status check on ANY coverage decrease (threshold 0%).
+# - patch requires 80% coverage on the diff itself, so new scanner logic
+#   arrives tested. If a PR legitimately cannot hit 80% (generated code,
+#   platform-specific branches), add a scoped `ignore` below — never lower
+#   the targets to make a PR green.
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 0%
+    patch:
+      default:
+        target: 80%
+
+comment:
+  layout: header, diff, flags, files
+  behavior: default

@@ -5,5 +5,7 @@
 /test_report/
 *.db
 anpu.yaml
+# Go coverage profiles (CI uploads coverage.out as an artifact).
+*.out
 .DS_Store
 /dist/

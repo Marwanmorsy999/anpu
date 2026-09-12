@@ -58,11 +58,18 @@ The normal test suite is:
 go test ./...
 ```
 
-The repository CI runs the stronger race-enabled form:
+The repository CI runs the stronger race-enabled form with coverage:
 
 ```sh
-go test -v -race ./...
+go test -race -coverprofile=coverage.out -covermode=atomic ./...
+go tool cover -func=coverage.out | tail -5
 ```
+
+Coverage is uploaded to Codecov on every CI run (badge in README). Two
+gates protect it: `codecov.yml` fails PRs that drop the project baseline
+or land under-covered diffs (patch target 80%), and CI enforces a total
+statement-coverage floor (currently 10% against an ~11% baseline — raise
+it as coverage grows, never lower it).
 
 The suite covers command behavior, target validation, SSRF protections, analyzers, integrations, reporting, storage, scoring, and the scanner pipeline.
 
@@ -110,7 +117,7 @@ Run the same core checks used by CI:
 gofmt -l $(find . -name '*.go')
 go build ./...
 go vet ./...
-go test -v -race ./...
+go test -race -coverprofile=coverage.out -covermode=atomic ./...
 docker build -t anpu .
 ```
 

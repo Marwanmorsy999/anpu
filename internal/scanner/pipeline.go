@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Marwanmorsy999/anpu/internal/findings"
 	anpuhttp "github.com/Marwanmorsy999/anpu/internal/http"
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
@@ -406,6 +407,7 @@ func (p *Pipeline) Run(
 	}
 
 	summary.Findings = dedup(summary.Findings)
+	summary.NucleiCorrelation = findings.ComputeNucleiCorrelation(summary.Findings)
 	summary.Findings = score(summary.Findings)
 	if confidenceFilter != nil {
 		kept, suppressed := confidenceFilter(summary.Findings)

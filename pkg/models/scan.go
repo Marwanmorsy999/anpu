@@ -569,6 +569,27 @@ type ScanSummary struct {
 	SuppressedByConfidence int `json:"suppressed_by_confidence,omitempty"`
 	// SuppressedByRiskAccept counts findings removed by --risk-accept.
 	SuppressedByRiskAccept int `json:"suppressed_by_risk_accept,omitempty"`
+
+	// NucleiCorrelation records dedup overlap between ANPU-native engines
+	// and Nuclei: which findings each side saw without the other. Nil when
+	// no real Nuclei data exists for the scan (Nuclei off, or only its
+	// embedded fallback ran) — no data, no correlation, no empty section.
+	NucleiCorrelation *NucleiCorrelation `json:"nuclei_correlation,omitempty"`
+}
+
+// NucleiCorrelation is the overlap analysis between native detections and
+// Nuclei template matches, derived from post-dedup MergedFrom sources.
+// Lists hold stable finding IDs.
+type NucleiCorrelation struct {
+	// NucleiAvailable is true when at least one non-embedded Nuclei
+	// finding participated in the scan.
+	NucleiAvailable bool `json:"nuclei_available"`
+	// Agreed holds findings seen by both Nuclei and native engines.
+	Agreed []string `json:"agreed,omitempty"`
+	// AnpuOnly holds findings Nuclei ran but did not report.
+	AnpuOnly []string `json:"anpu_only,omitempty"`
+	// NucleiOnly holds findings no native engine reported.
+	NucleiOnly []string `json:"nuclei_only,omitempty"`
 }
 
 // PhaseTiming is one pipeline phase's wall-time ledger entry.

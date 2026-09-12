@@ -60,6 +60,7 @@ authorized to test.`,
 	root.AddCommand(newHistoryCmd())
 	root.AddCommand(newShowCmd())
 	root.AddCommand(newDiffCmd())
+	root.AddCommand(newVerifyCmd())
 	root.AddCommand(newWatchCmd())
 	root.AddCommand(newToolsCmd())
 	root.AddCommand(newQueryCmd())
@@ -83,7 +84,8 @@ authorized to test.`,
 		"safe": "check", "advanced": "check", "ultra": "check",
 		"scan": "check", "watch": "check",
 		"show": "results", "history": "results", "diff": "results",
-		"query": "results", "import": "results", "drift": "results",
+		"verify": "results",
+		"query":  "results", "import": "results", "drift": "results",
 		"tools": "setup", "search": "setup", "feeds": "setup",
 		"wordlists": "setup", "completion": "setup", "help": "setup",
 	}

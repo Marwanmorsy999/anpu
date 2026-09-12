@@ -1,6 +1,6 @@
 # CLI Reference
 
-ANPU exposes 12 commands: `scan`, `safe`, `advanced`, `ultra`, `history`, `show`, `diff`, `watch`, `tools`, `search`, `completion`, and `help`.
+ANPU exposes 13 commands: `scan`, `safe`, `advanced`, `ultra`, `history`, `show`, `diff`, `verify`, `watch`, `tools`, `search`, `completion`, and `help`.
 
 Shorthand: `anpu <target> [flags]` rewrites to `anpu scan <target> [flags]`,
 so the most common invocation needs no subcommand. Canonical profiles are
@@ -187,6 +187,21 @@ anpu diff scan-old scan-new
 anpu diff scan-old scan-new --json
 anpu diff scan-old scan-new --output ./reports/diff.json
 ```
+
+## `anpu verify`
+
+Re-check one stored finding with fresh probes: `CONFIRMED`, `REJECTED`,
+or `INCONCLUSIVE` (no verifier for that detector — manual review).
+
+```sh
+anpu verify --finding backup-file-exposed-123
+anpu verify --finding headers-posture --scan scan-1700000000-1 --json
+```
+
+Supported today: backup-file exposure (re-fetch the exact URL),
+headers posture (re-evaluate the checklist), NoSQL differentials
+(re-run the probe set). `--finding` accepts a full ID or unique prefix
+(`anpu show <scan-id> --long` prints full IDs).
 
 ## `anpu tools`
 

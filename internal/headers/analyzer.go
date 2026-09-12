@@ -250,12 +250,11 @@ type postureRow struct {
 	why    string // one-line reason the header matters
 }
 
-// checkPosture collapses all absent-header presence checks into a single
-// finding with a per-header checklist, instead of one row per header.
-// Present-but-weak headers still get their own quality findings above.
-func checkPosture(resp *anpuhttp.Response, target string) *models.Finding {
-	h := resp.Header
-	rows := []postureRow{
+// postureRows evaluates the eight presence checks against response
+// headers. Shared by the posture finding and the verify path so both
+// agree on what "absent" means.
+func postureRows(h http.Header) []postureRow {
+	return []postureRow{
 		{"Content-Security-Policy", h.Get("Content-Security-Policy") == "", models.SeverityLow, "no CSP — XSS blast radius is larger"},
 		{"Cross-Origin-Opener-Policy", strings.TrimSpace(h.Get("Cross-Origin-Opener-Policy")) == "", models.SeverityLow, "no COOP — cross-origin window references allowed"},
 		{"Cross-Origin-Embedder-Policy", strings.TrimSpace(h.Get("Cross-Origin-Embedder-Policy")) == "", models.SeverityInfo, "no COEP — weaker Spectre-class isolation"},
@@ -265,6 +264,13 @@ func checkPosture(resp *anpuhttp.Response, target string) *models.Finding {
 		{"Referrer-Policy", h.Get("Referrer-Policy") == "", models.SeverityInfo, "referrer defaults may leak URLs to third parties"},
 		{"Framing (X-Frame-Options / frame-ancestors)", !framingProtected(h.Get("X-Frame-Options"), h.Get("Content-Security-Policy")), models.SeverityLow, "page can be framed — clickjacking"},
 	}
+}
+
+// checkPosture collapses all absent-header presence checks into a single
+// finding with a per-header checklist, instead of one row per header.
+// Present-but-weak headers still get their own quality findings above.
+func checkPosture(resp *anpuhttp.Response, target string) *models.Finding {
+	rows := postureRows(resp.Header)
 	absent := 0
 	sev := models.SeverityInfo
 	var lines, observed []string

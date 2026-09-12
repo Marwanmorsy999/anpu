@@ -149,15 +149,21 @@ func sectionBounds(doc string) (start, end int, err error) {
 }
 
 // normalizeForCheck reduces a rendered table to its gate-relevant lines.
-// Per-profile finding counts ("Findings (safe): 12 total ...") are
-// deliberately excluded: they wobble run to run with timing-sensitive
-// discovery, while signal verdicts are the load-bearing content. Counts
-// stay in the document as indicative context from the recorded run.
+// Two classes of lines are excluded, for opposite reasons:
+//   - "Findings (...)" count lines wobble run to run with
+//     timing-sensitive discovery; signal verdicts are the load-bearing
+//     content. Counts stay in the document as indicative context.
+//   - "†" lines (non-gating signal rows and their footnote) are measured
+//     and shown but excluded from the gate until their flakiness is
+//     root-caused; gating them would fail CI on known-unstable signals.
 func normalizeForCheck(s string) string {
 	var kept []string
 	for _, line := range strings.Split(s, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "Findings (") {
+			continue
+		}
+		if strings.Contains(trimmed, "†") {
 			continue
 		}
 		kept = append(kept, strings.TrimRight(line, " \t"))

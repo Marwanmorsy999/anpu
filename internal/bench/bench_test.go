@@ -213,6 +213,26 @@ func TestCheckIgnoresFindingCounts(t *testing.T) {
 	}
 }
 
+func TestCheckSkipsNonGatingRows(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "doc.md")
+	inner := "| Signal | safe |\n| --- | --- |\n| `a` | ✓ HIT |\n| `b` † | ✗ MISS |\n" +
+		"Findings (safe): 1 total.\n† non-gating footnote.\n"
+	base := MarkerStart + "\n" + inner + "\n" + MarkerEnd + "\n"
+	if err := os.WriteFile(p, []byte(base), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Non-gating row flips HIT<->MISS: must still pass.
+	flipped := strings.Replace(inner, "✗ MISS", "✓ HIT", 1)
+	if err := CheckSection(p, flipped); err != nil {
+		t.Fatalf("non-gating drift must pass: %v", err)
+	}
+	// Gating row flips: must fail.
+	flippedGate := strings.Replace(inner, "| `a` | ✓ HIT |", "| `a` | ✗ MISS |", 1)
+	if err := CheckSection(p, flippedGate); err == nil {
+		t.Fatal("gating verdict drift must fail")
+	}
+}
+
 func TestRenderJSON(t *testing.T) {
 	out, err := RenderJSON(Report{Target: "http://x", Runs: 1, Records: []RunRecord{{
 		Profile: "safe", DurationSeconds: 1.5, Result: ProfileResult{Profile: "safe"},

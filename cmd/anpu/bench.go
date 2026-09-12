@@ -248,6 +248,15 @@ func runBench(cmd *cobra.Command, target, profilesFlag, format, out, gtPath, ref
 		}
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "bench: refreshed %s\n", refreshDocs)
 	}
+	// Print before --check on purpose: a stale gate must show the
+	// measured table that disagreed, not just the disagreement.
+	if out != "" {
+		if err := os.WriteFile(out, []byte(output), 0o600); err != nil {
+			return err
+		}
+	} else {
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), output)
+	}
 	if checkFile != "" {
 		if format != "markdown" {
 			return fmt.Errorf("--check requires --format markdown")
@@ -256,14 +265,8 @@ func runBench(cmd *cobra.Command, target, profilesFlag, format, out, gtPath, ref
 			return err
 		}
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "bench: %s is fresh\n", checkFile)
-	}
-	if out != "" {
-		if err := os.WriteFile(out, []byte(output), 0o600); err != nil {
-			return err
-		}
 		return nil
 	}
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), output)
 
 	misses := 0
 	for _, r := range firstResults {

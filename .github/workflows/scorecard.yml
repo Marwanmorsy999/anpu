@@ -1,0 +1,56 @@
+# OpenSSF Scorecard: continuous supply-chain health checks.
+#
+# Runs the official Scorecard analysis weekly, on pushes to main, and when
+# branch protection changes. Results are published (badge + REST API) and
+# uploaded to code scanning so regressions surface in the Security tab.
+#
+# Score history and per-check remediation live in docs/trust.md.
+name: Scorecard analysis
+
+on:
+  branch_protection_rule:
+  schedule:
+    # Weekly (Mondays at 09:20 UTC): frequent enough to catch drift,
+    # sparse enough to respect the shared scorecard.dev infrastructure.
+    - cron: '20 9 * * 1'
+  push:
+    branches: ["main"]
+
+# Least privilege at workflow level (Scorecard forbids workflow-level
+# writes and top-level env/defaults); the analysis job escalates only
+# what publishing + SARIF upload require.
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write # upload SARIF to code scanning
+      id-token: write # OIDC for publish_results
+      contents: read
+      actions: read # read workflow run context
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard analysis
+        uses: ossf/scorecard-action@v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload SARIF artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: scorecard-results-${{ github.run_id }}
+          path: results.sarif
+          retention-days: 30
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif

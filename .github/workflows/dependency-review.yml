@@ -1,0 +1,30 @@
+# Dependency review: blocks PRs that introduce dependencies with known
+# vulnerabilities at moderate severity or above. Complements (does not
+# replace) govulncheck/gosec in CI, which scan the whole tree, and
+# Dependabot, which keeps existing pins fresh. Scope is deliberately
+# limited to newly introduced issues so old advisories never block
+# unrelated PRs — existing advisories are tracked via govulncheck.
+name: Dependency Review
+
+on:
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Review dependencies
+        uses: actions/dependency-review-action@v5
+        with:
+          # Fail on moderate and above. Lower to `low` once the tree is
+          # clean enough that it stays green; raise to `high` only with
+          # a recorded reason — never silently.
+          fail-on-severity: moderate

@@ -81,17 +81,21 @@ type Endpoint struct {
 
 // ScanConfig captures the resolved options for a single scan run.
 type ScanConfig struct {
-	Target       string
-	Profile      Profile
-	OutputDir    string
-	JSON         bool
-	HTML         bool
-	SARIF        bool
-	NoZAP        bool
-	Verbose      bool
-	Quiet        bool // suppress info-severity findings from terminal output
-	SkipPreCheck bool
-	Modules      ModuleConfig
+	Target string
+	// TargetAliases are extra same-site hostnames admitted to in-scan
+	// host matching (scope auto-expansion for same-registrable-domain
+	// redirects, e.g. apex → www). Empty means target-only.
+	TargetAliases []string
+	Profile       Profile
+	OutputDir     string
+	JSON          bool
+	HTML          bool
+	SARIF         bool
+	NoZAP         bool
+	Verbose       bool
+	Quiet         bool // suppress info-severity findings from terminal output
+	SkipPreCheck  bool
+	Modules       ModuleConfig
 
 	// MinConfidence is the lowest confidence level that passes the filter.
 	// Findings below this level are excluded from reports and CI gates.

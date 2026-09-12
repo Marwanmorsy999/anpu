@@ -129,6 +129,7 @@ func (p *Pipeline) Run(
 		Session:      sess,
 		ArtifactPool: pool,
 		Ledger:       ledger,
+		ScopeHosts:   cfg.TargetAliases,
 	}
 
 	summary := &models.ScanSummary{

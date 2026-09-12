@@ -34,10 +34,13 @@ func LimitsForProfile(profile models.Profile) Limits {
 	}
 }
 
-// Crawler performs bounded same-host discovery.
+// Crawler performs bounded same-host discovery. ExtraHosts admits
+// scope-expanded aliases (same-registrable-domain redirect targets such
+// as www) alongside the start-URL host; anything else stays out.
 type Crawler struct {
-	client *anpuhttp.Client
-	limits Limits
+	client     *anpuhttp.Client
+	limits     Limits
+	ExtraHosts []string
 }
 
 func New(client *anpuhttp.Client, limits Limits) *Crawler {
@@ -104,7 +107,7 @@ func (c *Crawler) Discover(ctx context.Context, startURL string) ([]models.Endpo
 			continue
 		}
 
-		finalURL, finalOK := normalizeURL(base, resp.FinalURL)
+		finalURL, finalOK := normalizeURLScoped(base, resp.FinalURL, c.ExtraHosts)
 		if finalOK {
 			if _, exists := collected[finalURL]; !exists {
 				collected[finalURL] = &models.Endpoint{
@@ -121,7 +124,7 @@ func (c *Crawler) Discover(ctx context.Context, startURL string) ([]models.Endpo
 
 		links := extractLinks(resp.Body)
 		for _, link := range links {
-			resolved, ok := normalizeURL(base, resolve(base, link.raw, current.url))
+			resolved, ok := normalizeURLScoped(base, resolve(base, link.raw, current.url), c.ExtraHosts)
 			if !ok {
 				continue
 			}
@@ -204,6 +207,10 @@ func resolve(base *url.URL, raw, current string) string {
 }
 
 func normalizeURL(base *url.URL, raw string) (string, bool) {
+	return normalizeURLScoped(base, raw, nil)
+}
+
+func normalizeURLScoped(base *url.URL, raw string, extraHosts []string) (string, bool) {
 	if strings.TrimSpace(raw) == "" {
 		return "", false
 	}
@@ -215,7 +222,16 @@ func normalizeURL(base *url.URL, raw string) (string, bool) {
 		return "", false
 	}
 	if !strings.EqualFold(u.Hostname(), base.Hostname()) {
-		return "", false
+		matched := false
+		for _, h := range extraHosts {
+			if strings.EqualFold(u.Hostname(), strings.TrimSpace(h)) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return "", false
+		}
 	}
 	u.Fragment = ""
 	return strings.TrimSuffix(u.String(), "/"), true

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
@@ -229,6 +230,28 @@ type ScanContext struct {
 	// charge each request here and stop at their cap. Nil-safe: a nil
 	// ledger means uncapped (tests, custom pipelines).
 	Ledger *anpuhttp.Ledger
+
+	// ScopeHosts are extra same-site hostnames admitted to in-scan host
+	// matching (scope auto-expansion: a same-registrable-domain redirect
+	// observed on the target, e.g. apex → www). Nil means target-only.
+	ScopeHosts []string
+}
+
+// InScopeHost reports whether host is the target host or an expanded
+// scope alias (case-insensitive). Nil-safe for zero-value contexts.
+func (sc *ScanContext) InScopeHost(host string) bool {
+	if sc == nil || sc.Target == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(host), sc.Target.Host) {
+		return true
+	}
+	for _, h := range sc.ScopeHosts {
+		if strings.EqualFold(strings.TrimSpace(host), h) {
+			return true
+		}
+	}
+	return false
 }
 
 // Scanner is implemented by every pipeline stage: built-in analyzers

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -550,11 +551,23 @@ func runScan(cmd *cobra.Command, rt *ScanRuntime, targetArg, profileStr string, 
 			scanErrors++
 			continue
 		}
+		// Scope auto-expansion: a same-registrable-domain redirect hop
+		// (apex → www) joins the in-memory scan scope so discovery does
+		// not starve on empty crawls. Cross-domain hops never expand.
+		// Fail-silent: an unreachable target simply scans alias-free.
+		var targetAliases []string
+		if alias, ok := probeScopeExpansion(cmd.Context(), client, target.Raw); ok {
+			targetAliases = []string{alias}
+			if !silent {
+				fmt.Printf("  scope expanded: %s → +%s (same-site redirect)\n", target.Host, alias)
+			}
+		}
 		if batch && !silent {
 			fmt.Printf("\n=== [%d/%d] %s ===\n", i+1, len(targets), target.Raw)
 		}
 		cfg := models.ScanConfig{
 			Target:        target.Raw,
+			TargetAliases: targetAliases,
 			Profile:       profile,
 			OutputDir:     outputDir,
 			JSON:          jsonOut,
@@ -713,6 +726,22 @@ func runScan(cmd *cobra.Command, rt *ScanRuntime, targetArg, profileStr string, 
 		return fmt.Errorf("%d of %d target(s) failed to scan", scanErrors, len(targets))
 	}
 	return nil
+}
+
+// probeScopeExpansion fetches the target once and reports a
+// same-registrable-domain redirect alias (apex → www). One bounded
+// request; any failure means alias-free (fail-open).
+func probeScopeExpansion(ctx context.Context, client *anpuhttp.Client, targetRaw string) (string, bool) {
+	if client == nil {
+		return "", false
+	}
+	pctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	resp, err := client.Get(pctx, targetRaw)
+	if err != nil || resp == nil || resp.FinalURL == "" {
+		return "", false
+	}
+	return scope.RedirectAlias(targetRaw, resp.FinalURL)
 }
 
 func parseFailOn(raw string) (models.Severity, error) {

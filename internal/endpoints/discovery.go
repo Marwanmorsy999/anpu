@@ -28,6 +28,7 @@ func (d *Discovery) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.S
 
 	// --- Anonymous pass (always) ---
 	anonCrawler := crawler.New(d.client, limits)
+	anonCrawler.ExtraHosts = sc.ScopeHosts
 	anonEndpoints, warnings, err := anonCrawler.Discover(ctx, sc.Target.Raw)
 	if err != nil {
 		return scanner.StageResult{}, fmt.Errorf("crawl target for endpoint discovery: %w", err)
@@ -40,6 +41,7 @@ func (d *Discovery) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.S
 	if sc.Auth.IsAuthenticated() {
 		authClient := d.client.WithAuth(sc.Auth.RequestHeaders())
 		authCrawler := crawler.New(authClient, limits)
+		authCrawler.ExtraHosts = sc.ScopeHosts
 		authEndpoints, authWarns, authErr := authCrawler.Discover(ctx, sc.Target.Raw)
 		warnings = append(warnings, authWarns...)
 		if authErr != nil {

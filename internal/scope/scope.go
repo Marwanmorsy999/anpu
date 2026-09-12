@@ -12,8 +12,12 @@ package scope
 import (
 	"bufio"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strings"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 // Allowlist is a parsed scope file.
@@ -105,4 +109,49 @@ func Enforce(a *Allowlist, scopePath, host, port string) error {
 		disp = host + ":" + port
 	}
 	return fmt.Errorf("target %s is not in scope file %s — refusing to scan (hard stop)", disp, scopePath)
+}
+
+// RedirectAlias reports the redirect-observed host when finalRaw sits on
+// a different hostname under the SAME registrable domain as targetRaw
+// (the classic apex → www hop). The alias joins the in-memory scan scope
+// so crawlers and stage host-gates treat it as the same site instead of
+// starving on empty discovery. Cross-domain hops never expand scope.
+func RedirectAlias(targetRaw, finalRaw string) (string, bool) {
+	tu, err := url.Parse(strings.TrimSpace(targetRaw))
+	if err != nil || tu.Hostname() == "" {
+		return "", false
+	}
+	fu, err := url.Parse(strings.TrimSpace(finalRaw))
+	if err != nil || fu.Hostname() == "" {
+		return "", false
+	}
+	th := strings.ToLower(strings.TrimSuffix(tu.Hostname(), "."))
+	fh := strings.ToLower(strings.TrimSuffix(fu.Hostname(), "."))
+	if th == "" || fh == "" || strings.EqualFold(th, fh) {
+		return "", false
+	}
+	if registrableBase(th) == "" || registrableBase(th) != registrableBase(fh) {
+		return "", false
+	}
+	return fh, true
+}
+
+// registrableBase returns the effective-TLD-plus-one for hostnames so
+// apex and www compare equal; IPs and single labels return verbatim.
+func registrableBase(host string) string {
+	h := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	if h == "" {
+		return h
+	}
+	if net.ParseIP(strings.Trim(h, "[]")) != nil {
+		return h
+	}
+	if base, err := publicsuffix.EffectiveTLDPlusOne(h); err == nil && base != "" {
+		return base
+	}
+	parts := strings.Split(h, ".")
+	if len(parts) < 2 {
+		return h
+	}
+	return strings.Join(parts[len(parts)-2:], ".")
 }

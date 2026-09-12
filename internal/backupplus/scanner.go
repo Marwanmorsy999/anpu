@@ -56,7 +56,7 @@ func bases(sc *scanner.ScanContext) []string {
 			break
 		}
 		u, err := url.Parse(ep.URL)
-		if err != nil || !strings.EqualFold(u.Hostname(), sc.Target.Host) {
+		if err != nil || !sc.InScopeHost(u.Hostname()) {
 			continue
 		}
 		if u.Path == "" || u.Path == "/" || strings.HasSuffix(u.Path, "/") {

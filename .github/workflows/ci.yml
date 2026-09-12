@@ -76,7 +76,7 @@ jobs:
           verbose: true
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           # v2 line (v1 binaries refuse go1.25+ targets at load).
           # Pinned exact; tree verified clean against this version.

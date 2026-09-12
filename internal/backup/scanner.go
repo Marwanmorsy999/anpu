@@ -105,6 +105,16 @@ var rootBackupPaths = []struct {
 // Responses shorter than this are likely empty 200s from misconfigured servers.
 const minBodyBytes = 200
 
+// maxEndpointBases caps per-endpoint probe generation and maxProbes caps
+// total HTTP traffic (mirrors backupplus: ≤60 probes keeps ultra wall
+// time bounded on endpoint-rich targets). maxFindings early-exits once
+// exposure is proven — further probes add volume, not signal.
+const (
+	maxEndpointBases = 4
+	maxProbes        = 60
+	maxFindings      = 3
+)
+
 // sourceCodeSignatures are patterns that suggest the response body is source
 // code (rather than an intentional resource with a backup-like extension).
 var sourceCodeSignatures = []string{
@@ -168,8 +178,13 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	var probes []probe
 	seen := map[string]bool{}
 
-	// Per-endpoint backup suffix probes.
+	// Per-endpoint backup suffix probes (first few file-like endpoints
+	// only — unbounded generation is the ultra wall-time sink).
+	endpointBases := 0
 	for _, ep := range sc.Endpoints {
+		if endpointBases >= maxEndpointBases || len(probes) >= maxProbes {
+			break
+		}
 		// Only generate backup probes for page and asset endpoints with file-like paths.
 		if ep.Category == models.EndpointAPI {
 			continue
@@ -178,7 +193,11 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		if path == "" || path == "/" || !hasFileExtension(path) {
 			continue
 		}
+		endpointBases++
 		for _, suffix := range backupSuffixes {
+			if len(probes) >= maxProbes {
+				break
+			}
 			candidate := baseURL(ep.URL) + path + suffix
 			if seen[candidate] {
 				continue
@@ -191,6 +210,9 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	// Root-level backup probes.
 	base := baseURL(sc.Target.Raw)
 	for _, rb := range rootBackupPaths {
+		if len(probes) >= maxProbes {
+			break
+		}
 		u := base + rb.path
 		if seen[u] {
 			continue
@@ -227,7 +249,11 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	for pr := range results {
 		if pr.finding != nil {
 			mu.Lock()
-			findings = append(findings, *pr.finding)
+			// Cap stored findings: exposure proven — extra hits add
+			// volume, not signal (request budget is capped above).
+			if len(findings) < maxFindings {
+				findings = append(findings, *pr.finding)
+			}
 			mu.Unlock()
 		}
 	}

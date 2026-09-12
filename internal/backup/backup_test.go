@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/scanner"
+	"github.com/anpu-project/anpu/pkg/models"
 )
 
 func backupClient() *anpuhttp.Client {
@@ -86,6 +88,43 @@ func TestRootBackupPathsIncludeBackupZip(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("rootBackupPaths must include /backup.zip")
+	}
+}
+
+// Budget: endpoint-rich targets must not fan out unbounded — probes are
+// capped and stored findings stop at maxFindings once exposure is proven.
+func TestBackupProbeBudgetCapped(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			_, _ = w.Write([]byte("<html><head><title>Home</title></head><body>welcome</body></html>"))
+			return
+		}
+		// Every backup candidate looks exposed: distinct body per path so
+		// the soft-404 baseline never matches.
+		w.Header().Set("Content-Type", "text/plain")
+		body := fmt.Sprintf("<?php // backup of %s\n$secret = 'x';\n", r.URL.Path) + strings.Repeat("x", 300)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	ctx := backupContext(srv.URL)
+	for i := 0; i < 20; i++ {
+		ctx.Endpoints = append(ctx.Endpoints, models.Endpoint{URL: fmt.Sprintf("%s/page%d.php", srv.URL, i)})
+	}
+	ctx.Verbose = true
+	res, err := New(backupClient()).Run(context.Background(), ctx)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(res.Findings) > maxFindings {
+		t.Fatalf("findings must cap at %d, got %d", maxFindings, len(res.Findings))
+	}
+	for _, wmsg := range res.Warnings {
+		var probed, found int
+		if _, err := fmt.Sscanf(wmsg, "backup-scanner: probed %d candidate backup paths, found %d exposed files", &probed, &found); err == nil {
+			if probed > maxProbes {
+				t.Fatalf("probes must cap at %d, got %d", maxProbes, probed)
+			}
+		}
 	}
 }
 

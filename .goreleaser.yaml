@@ -67,6 +67,15 @@ nfpms:
 checksum:
   name_template: "checksums.txt"
 
+# CycloneDX SBOM per release archive (syft). SBOM files are regular
+# release artifacts: they land in checksums.txt and are therefore
+# covered by the cosign bundle and SLSA attestations automatically.
+sboms:
+  - artifacts: archive
+    documents:
+      - "{{ .ArtifactName }}.sbom.cyclonedx.json"
+    args: ["$artifact", "--output", "cyclonedx-json=$document"]
+
 changelog:
   use: github
   sort: asc

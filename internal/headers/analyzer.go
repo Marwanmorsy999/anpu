@@ -40,13 +40,16 @@ func (a *Analyzer) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.St
 	isHTTPS := strings.HasPrefix(strings.ToLower(resp.FinalURL), "https://")
 
 	var findings []models.Finding
+	if posture := checkPosture(resp, sc.Target.Raw); posture != nil {
+		findings = append(findings, *posture)
+	}
+	// Quality checks below only fire on present-but-weak headers; absence
+	// is owned by the single posture finding above.
 	findings = append(findings, checkCSP(resp, sc.Target.Raw)...)
 	findings = append(findings, checkCSPReportOnly(resp, sc.Target.Raw)...)
 	findings = append(findings, checkCOOP(resp, sc.Target.Raw)...)
 	findings = append(findings, checkHSTS(resp, sc.Target.Raw, isHTTPS)...)
 	findings = append(findings, checkXCTO(resp, sc.Target.Raw)...)
-	findings = append(findings, checkReferrerPolicy(resp, sc.Target.Raw)...)
-	findings = append(findings, checkPermissionsPolicy(resp, sc.Target.Raw)...)
 	findings = append(findings, checkServerDisclosure(resp, sc.Target.Raw)...)
 
 	return scanner.StageResult{Findings: findings}, nil
@@ -93,19 +96,8 @@ func checkCSP(resp *anpuhttp.Response, target string) []models.Finding {
 		// Header is present — analyze quality.
 		return checkCSPQuality(v, target, resp.FinalURL, resp.Header)
 	}
-	return []models.Finding{finding(
-		"headers-missing-csp",
-		"Content-Security-Policy header not set",
-		"The response does not include a Content-Security-Policy header. CSP is a defense-in-depth control that restricts which sources of scripts, styles, and other resources a browser is allowed to load, mitigating the impact of cross-site scripting (XSS).",
-		models.SeverityLow,
-		models.ConfidenceMedium,
-		target, resp.FinalURL,
-		headerEvidence(resp.Header, "Content-Security-Policy"),
-		"Without CSP, a successful injection vulnerability elsewhere on the site (e.g. reflected/stored XSS) has a larger blast radius, since the browser has no additional restriction on injected script execution.",
-		"Define a Content-Security-Policy appropriate to the application (start with a report-only policy to avoid breaking functionality, then enforce). At minimum restrict script-src and object-src.",
-		"CWE-693",
-		[]string{"https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP"},
-	)}
+	// Absent: owned by the posture finding.
+	return nil
 }
 
 func checkHSTS(resp *anpuhttp.Response, target string, isHTTPS bool) []models.Finding {
@@ -144,19 +136,16 @@ func checkHSTS(resp *anpuhttp.Response, target string, isHTTPS bool) []models.Fi
 
 func checkXCTO(resp *anpuhttp.Response, target string) []models.Finding {
 	v := strings.ToLower(strings.TrimSpace(resp.Header.Get("X-Content-Type-Options")))
-	if v == "nosniff" {
+	if v == "nosniff" || v == "" {
+		// Present-and-good, or absent (owned by the posture finding).
 		return nil
 	}
-	sev := models.SeverityLow
-	desc := "The response does not include X-Content-Type-Options: nosniff. Without it, some browsers may try to guess (\"sniff\") the content type of a response rather than trusting the declared Content-Type, which has historically enabled certain content-type confusion attacks."
-	if v != "" {
-		desc = fmt.Sprintf("The response includes X-Content-Type-Options but with an unexpected value (%q) rather than \"nosniff\".", v)
-	}
+	desc := fmt.Sprintf("The response includes X-Content-Type-Options but with an unexpected value (%q) rather than \"nosniff\".", v)
 	return []models.Finding{finding(
 		"headers-missing-xcto",
 		"X-Content-Type-Options not set to nosniff",
 		desc,
-		sev,
+		models.SeverityLow,
 		models.ConfidenceMedium,
 		target, resp.FinalURL,
 		headerEvidence(resp.Header, "X-Content-Type-Options"),
@@ -164,46 +153,6 @@ func checkXCTO(resp *anpuhttp.Response, target string) []models.Finding {
 		"Set the header `X-Content-Type-Options: nosniff` on all responses.",
 		"CWE-116",
 		[]string{"https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options"},
-	)}
-}
-
-func checkReferrerPolicy(resp *anpuhttp.Response, target string) []models.Finding {
-	v := resp.Header.Get("Referrer-Policy")
-	if v != "" {
-		return nil
-	}
-	return []models.Finding{finding(
-		"headers-missing-referrer-policy",
-		"Referrer-Policy header not set",
-		"The response does not set Referrer-Policy. Without it, browsers fall back to default behavior that may leak the full referring URL (including any sensitive query parameters) to third-party destinations when users click outbound links.",
-		models.SeverityInfo,
-		models.ConfidenceMedium,
-		target, resp.FinalURL,
-		headerEvidence(resp.Header, "Referrer-Policy"),
-		"Potential leakage of sensitive URL parameters (tokens, IDs) to third parties via the Referer header on outbound navigation.",
-		"Set Referrer-Policy to a conservative value such as strict-origin-when-cross-origin or no-referrer, particularly on pages that may include sensitive data in the URL.",
-		"CWE-200",
-		[]string{"https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Referrer-Policy"},
-	)}
-}
-
-func checkPermissionsPolicy(resp *anpuhttp.Response, target string) []models.Finding {
-	v := resp.Header.Get("Permissions-Policy")
-	if v != "" {
-		return nil
-	}
-	return []models.Finding{finding(
-		"headers-missing-permissions-policy",
-		"Permissions-Policy header not set",
-		"The response does not set Permissions-Policy. This header lets a site explicitly disable browser features/APIs (camera, microphone, geolocation, etc.) it doesn't use, reducing the impact of any injected script that might try to abuse them.",
-		models.SeverityInfo,
-		models.ConfidenceLow,
-		target, resp.FinalURL,
-		headerEvidence(resp.Header, "Permissions-Policy"),
-		"Low direct impact on its own; mainly relevant as defense-in-depth alongside CSP.",
-		"Set Permissions-Policy to disable browser features the application does not use.",
-		"",
-		[]string{"https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Permissions-Policy"},
 	)}
 }
 
@@ -293,10 +242,85 @@ func checkCSPReportOnly(resp *anpuhttp.Response, target string) []models.Finding
 	)}
 }
 
-// checkCOOP detects a missing or weak Cross-Origin-Opener-Policy header (issue #3).
-// COOP isolates a browsing context group so cross-origin documents cannot get a
-// reference to the window object, mitigating XS-Leaks and Spectre-class attacks
-// that require cross-origin window access.
+// postureRow is one line of the security-headers posture checklist.
+type postureRow struct {
+	header string // display name
+	absent bool
+	sev    models.Severity
+	why    string // one-line reason the header matters
+}
+
+// checkPosture collapses all absent-header presence checks into a single
+// finding with a per-header checklist, instead of one row per header.
+// Present-but-weak headers still get their own quality findings above.
+func checkPosture(resp *anpuhttp.Response, target string) *models.Finding {
+	h := resp.Header
+	rows := []postureRow{
+		{"Content-Security-Policy", h.Get("Content-Security-Policy") == "", models.SeverityLow, "no CSP — XSS blast radius is larger"},
+		{"Cross-Origin-Opener-Policy", strings.TrimSpace(h.Get("Cross-Origin-Opener-Policy")) == "", models.SeverityLow, "no COOP — cross-origin window references allowed"},
+		{"Cross-Origin-Embedder-Policy", strings.TrimSpace(h.Get("Cross-Origin-Embedder-Policy")) == "", models.SeverityInfo, "no COEP — weaker Spectre-class isolation"},
+		{"Cross-Origin-Resource-Policy", strings.TrimSpace(h.Get("Cross-Origin-Resource-Policy")) == "", models.SeverityInfo, "no CORP — resources embeddable cross-origin"},
+		{"X-Content-Type-Options", strings.ToLower(strings.TrimSpace(h.Get("X-Content-Type-Options"))) != "nosniff", models.SeverityLow, "no nosniff — MIME-sniffing confusion possible"},
+		{"Permissions-Policy", h.Get("Permissions-Policy") == "", models.SeverityInfo, "unused browser features left enabled"},
+		{"Referrer-Policy", h.Get("Referrer-Policy") == "", models.SeverityInfo, "referrer defaults may leak URLs to third parties"},
+		{"Framing (X-Frame-Options / frame-ancestors)", !framingProtected(h.Get("X-Frame-Options"), h.Get("Content-Security-Policy")), models.SeverityLow, "page can be framed — clickjacking"},
+	}
+	absent := 0
+	sev := models.SeverityInfo
+	var lines, observed []string
+	for _, r := range rows {
+		mark := "present"
+		if r.absent {
+			absent++
+			mark = "absent"
+			if r.sev.Rank() > sev.Rank() {
+				sev = r.sev
+			}
+		}
+		lines = append(lines, fmt.Sprintf("  [%s] %s (%s) — %s", mark, r.header, r.sev, r.why))
+		observed = append(observed, fmt.Sprintf("%s: %s", r.header, mark))
+	}
+	if absent == 0 {
+		return nil
+	}
+	desc := fmt.Sprintf("Security headers posture: %d of %d recommended headers absent on %s.\n\n%s\n\nTighten headers incrementally: CSP (report-only first, then enforce), framing (frame-ancestors 'self'), nosniff, then the isolation trio (COOP/COEP/CORP).",
+		absent, len(rows), resp.FinalURL, strings.Join(lines, "\n"))
+	f := finding(
+		"headers-posture",
+		fmt.Sprintf("Security headers posture — %d of %d recommended headers absent", absent, len(rows)),
+		desc,
+		sev,
+		models.ConfidenceMedium,
+		target, resp.FinalURL,
+		models.Evidence{Observed: strings.Join(observed, "; "), Location: "HTTP response headers"},
+		"Each absent header removes one layer of browser-enforced defense; a single injection flaw elsewhere has a larger blast radius.",
+		"Work through the checklist above in order; every row names its header and fix.",
+		"CWE-693",
+		[]string{"https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP"},
+	)
+	return &f
+}
+
+// framingProtected reports whether X-Frame-Options or CSP frame-ancestors
+// blocks arbitrary framing (mirrors the clickjack stage verdict for the
+// target page so the posture checklist stays consistent with it).
+func framingProtected(xfo, csp string) bool {
+	for _, dir := range strings.Split(strings.ToLower(csp), ";") {
+		if strings.HasPrefix(strings.TrimSpace(dir), "frame-ancestors") {
+			return true
+		}
+	}
+	switch strings.ToUpper(strings.TrimSpace(xfo)) {
+	case "DENY", "SAMEORIGIN":
+		return true
+	}
+	return false
+}
+
+// checkCOOP detects a weak Cross-Origin-Opener-Policy header (issue #3).
+// Absence is owned by the posture finding; only explicit unsafe-none
+// earns its own row. COOP isolates a browsing context group so
+// cross-origin documents cannot get a reference to the window object.
 func checkCOOP(resp *anpuhttp.Response, target string) []models.Finding {
 	v := strings.TrimSpace(resp.Header.Get("Cross-Origin-Opener-Policy"))
 	lower := strings.ToLower(v)
@@ -307,26 +331,8 @@ func checkCOOP(resp *anpuhttp.Response, target string) []models.Finding {
 	}
 
 	if v == "" {
-		// Header is absent — browsers default to unsafe-none.
-		return []models.Finding{finding(
-			"headers-missing-coop",
-			"Cross-Origin-Opener-Policy header not set",
-			"The response does not include a Cross-Origin-Opener-Policy (COOP) header. "+
-				"Without COOP, cross-origin pages opened by this page can obtain a reference to its window object, "+
-				"enabling XS-Leak attacks and weakening process isolation that protects against Spectre-class side-channel attacks.",
-			models.SeverityLow,
-			models.ConfidenceMedium,
-			target, resp.FinalURL,
-			headerEvidence(resp.Header, "Cross-Origin-Opener-Policy"),
-			"Cross-origin pages may be able to probe timing or state information from this origin's window object, leaking sensitive data.",
-			"Add 'Cross-Origin-Opener-Policy: same-origin' to responses. "+
-				"If your application opens cross-origin popups that need a window reference, use 'same-origin-allow-popups' instead.",
-			"CWE-346",
-			[]string{
-				"https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cross-Origin-Opener-Policy",
-				"https://web.dev/why-coop-coep/",
-			},
-		)}
+		// Header is absent — owned by the posture finding.
+		return nil
 	}
 
 	// Header is present but set to "unsafe-none" — explicitly disabled.

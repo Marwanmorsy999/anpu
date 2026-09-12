@@ -1,9 +1,10 @@
-// Package policyheaders audits transport/isolation policy headers
-// (Wave 1 item 26): a single GET, evaluating HSTS (incl. preload
-// readiness: max-age ≥ 31536000 + includeSubDomains + preload),
-// COOP/COEP/CORP, and Expect-CT. Each gap is a Low/Info finding with
-// the exact deficit named. Passive header analysis — complements the
-// Headers stage's presence checks with readiness semantics.
+// Package policyheaders audits HSTS preload readiness (Wave 1 item 26):
+// a single GET, evaluating max-age ≥ 31536000 + includeSubDomains +
+// preload when Strict-Transport-Security is present. Bare presence gaps
+// (missing HSTS/COOP/COEP/CORP) are owned by the Headers stage posture
+// finding, which keeps the per-header checklist in one row — this stage
+// only adds readiness semantics the checklist cannot express. Passive
+// header analysis.
 package policyheaders
 
 import (
@@ -95,31 +96,13 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 
 	if isHTTPS {
 		rd := parseHSTS(h.Get("Strict-Transport-Security"))
-		switch {
-		case !rd.present:
-			add("policyheaders-hsts-missing", "HSTS missing on HTTPS site",
-				"HTTPS without Strict-Transport-Security stays downgradeable (SSL-stripping) on first visit. Emit max-age=31536000; includeSubDomains and submit for preload. Reproduce: curl -sI TARGET | grep -i strict.",
-				models.SeverityLow, "Strict-Transport-Security: <absent>")
-		case !rd.preloadReady:
+		// Absent HSTS is owned by the Headers posture finding (Medium);
+		// only present-but-not-ready earns a readiness row here.
+		if rd.present && !rd.preloadReady {
 			add("policyheaders-hsts-preload", "HSTS not preload-ready",
 				"First visits stay strippable until the domain is preloaded; current gaps: "+strings.Join(rd.preloadDeficits, "; ")+". Fix all three and submit at hstspreload.org.",
 				models.SeverityInfo, "HSTS gaps: "+strings.Join(rd.preloadDeficits, "; "))
 		}
-	}
-	if v := strings.TrimSpace(h.Get("Cross-Origin-Opener-Policy")); v == "" {
-		add("policyheaders-coop-missing", "COOP missing (cross-origin window isolation)",
-			"Without Cross-Origin-Opener-Policy the page shares a browsing context group with cross-origin popups (XS-Leaks, credential-less attacks). Send COOP: same-origin (plus COEP for full isolation).",
-			models.SeverityInfo, "Cross-Origin-Opener-Policy: <absent>")
-	}
-	if v := strings.TrimSpace(h.Get("Cross-Origin-Embedder-Policy")); v == "" {
-		add("policyheaders-coep-missing", "COEP missing (cross-origin embed isolation)",
-			"Without Cross-Origin-Embedder-Policy, cross-origin resources load without CORP/COEP opt-in, weakening Spectre-class isolation. Send COEP: require-corp alongside COOP.",
-			models.SeverityInfo, "Cross-Origin-Embedder-Policy: <absent>")
-	}
-	if v := strings.TrimSpace(h.Get("Cross-Origin-Resource-Policy")); v == "" {
-		add("policyheaders-corp-missing", "CORP missing (resource isolation)",
-			"Without Cross-Origin-Resource-Policy, sensitive resources (images, scripts) are embeddable cross-origin. Send CORP: same-origin on non-public resources.",
-			models.SeverityInfo, "Cross-Origin-Resource-Policy: <absent>")
 	}
 	return scanner.StageResult{Findings: findings}, nil
 }

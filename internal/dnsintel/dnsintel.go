@@ -344,10 +344,13 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 					Remediation:     "Publish _dmarc.<domain> TXT such as 'v=DMARC1; p=quarantine; rua=mailto:dmarc@" + domain + "' and align SPF/DKIM.",
 				})
 			} else {
+				// Same canonical title as the with-MX variant (and the
+				// emailauth finding) so all three merge into one row; the
+				// no-mail-infra nuance stays in the description.
 				findings = append(findings, models.Finding{
 					ID:              "dns-dmarc-absent",
-					Title:           fmt.Sprintf("No DMARC record at _dmarc.%s", domain),
-					Description:     fmt.Sprintf("No DMARC TXT found at _dmarc.%s. DMARC is recommended for any domain that sends mail or may be spoofed.", domain),
+					Title:           fmt.Sprintf("No DMARC record for %s", domain),
+					Description:     fmt.Sprintf("No DMARC TXT found at _dmarc.%s (and no MX records — this host may not send mail, but the domain is still spoofable). DMARC is recommended for any domain that sends mail or may be spoofed.", domain),
 					Severity:        models.SeverityInfo,
 					Confidence:      models.ConfidenceHigh,
 					Category:        models.CategoryConfiguration,

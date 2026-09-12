@@ -61,15 +61,21 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		warnings = append(warnings, fmt.Sprintf("emailauth: apex TXT lookup failed: %v", shortErr(err)))
 	} else {
 		if !hasPrefixRecord(txt, "v=spf1") {
-			findings = append(findings, mkFinding(sc.Target.Raw, "emailauth-missing-spf",
-				"No SPF record published",
+			// Canonical title + CWE-345 match the dnsintel SPF finding
+			// so the pipeline merges both into one row (max wins).
+			f := mkFinding(sc.Target.Raw, "emailauth-missing-spf",
+				fmt.Sprintf("No SPF record for %s", host),
 				"The domain publishes no SPF record, so receivers cannot reject forged envelope senders. Publish a restrictive TXT record (e.g. \"v=spf1 -all\" for non-sending domains).",
-				models.SeverityLow, "DNS TXT SPF query"))
+				models.SeverityLow, "DNS TXT SPF query")
+			f.CWE = "CWE-345"
+			findings = append(findings, f)
 		} else if spf := spfRecord(txt); spfAllPass(spf) {
-			findings = append(findings, mkFinding(sc.Target.Raw, "emailauth-spf-all-pass",
-				"SPF policy ends in +all (permissive)",
+			f := mkFinding(sc.Target.Raw, "emailauth-spf-all-pass",
+				fmt.Sprintf("Permissive SPF policy for %s", host),
 				fmt.Sprintf("The SPF record %q authorizes every sender. Replace +all with -all or ~all.", spf),
-				models.SeverityLow, "DNS TXT SPF query"))
+				models.SeverityLow, "DNS TXT SPF query")
+			f.CWE = "CWE-345"
+			findings = append(findings, f)
 		}
 	}
 
@@ -77,15 +83,19 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	if derr != nil {
 		warnings = append(warnings, fmt.Sprintf("emailauth: DMARC lookup failed: %v", shortErr(derr)))
 	} else if !hasPrefixRecord(dmarc, "v=DMARC1") {
-		findings = append(findings, mkFinding(sc.Target.Raw, "emailauth-missing-dmarc",
-			"No DMARC record published",
+		f := mkFinding(sc.Target.Raw, "emailauth-missing-dmarc",
+			fmt.Sprintf("No DMARC record for %s", host),
 			"Without DMARC, SPF/DKIM failures carry no domain-owner policy and spoofed mail is more likely to be delivered. Publish _dmarc TXT starting at p=none with rua reporting, then enforce p=reject.",
-			models.SeverityLow, "DNS TXT DMARC query"))
+			models.SeverityLow, "DNS TXT DMARC query")
+		f.CWE = "CWE-345"
+		findings = append(findings, f)
 	} else if pol := dmarcPolicy(dmarc); pol == "none" {
-		findings = append(findings, mkFinding(sc.Target.Raw, "emailauth-dmarc-monitor-only",
-			"DMARC policy is p=none (monitor only)",
+		f := mkFinding(sc.Target.Raw, "emailauth-dmarc-monitor-only",
+			fmt.Sprintf("DMARC policy is p=none for %s (monitoring only)", host),
 			"DMARC is published but takes no enforcement action on spoofed mail. Move to p=quarantine, then p=reject, once legitimate flows are aligned.",
-			models.SeverityInfo, "DNS TXT DMARC query"))
+			models.SeverityInfo, "DNS TXT DMARC query")
+		f.CWE = "CWE-345"
+		findings = append(findings, f)
 	}
 
 	foundDKIM := false

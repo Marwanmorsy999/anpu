@@ -77,6 +77,12 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	}
 
 	var findings []models.Finding
+	// When the Headers stage runs, its posture finding already reports
+	// framing absence on the target page — re-reporting it here would be
+	// a duplicate row. In that case only sub-pages with a WORSE verdict
+	// than the target (protected default, exposed sub-page) earn a row.
+	// With --only clickjack (Headers off) the legacy behavior stays.
+	headersOn := sc.Config.Modules.Headers
 	for _, target := range targets {
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		resp, err := s.client.Get(cctx, target)
@@ -87,6 +93,9 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		protected, reason := verdict(resp.Header.Get("X-Frame-Options"), resp.Header.Get("Content-Security-Policy"))
 		if protected {
 			continue
+		}
+		if headersOn && target == sc.Target.Raw {
+			continue // posture checklist owns the target-page row
 		}
 		findings = append(findings, models.Finding{
 			ID:              "clickjack-missing-framing",

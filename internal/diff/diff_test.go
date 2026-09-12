@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 func sumry(id, target string, risk float64, findings []models.Finding, endpoints []models.Endpoint, tech []models.Technology) *models.ScanSummary {

@@ -23,9 +23,9 @@ import (
 	"sync"
 	"time"
 
-	httpx "github.com/anpu-project/anpu/internal/http"
-	"github.com/anpu-project/anpu/internal/scanner"
-	"github.com/anpu-project/anpu/pkg/models"
+	httpx "github.com/Marwanmorsy999/anpu/internal/http"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 type Scanner struct {

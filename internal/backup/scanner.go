@@ -49,11 +49,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anpu-project/anpu/internal/adaptive"
-	"github.com/anpu-project/anpu/internal/fpmatch"
-	anpuhttp "github.com/anpu-project/anpu/internal/http"
-	"github.com/anpu-project/anpu/internal/scanner"
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/internal/adaptive"
+	"github.com/Marwanmorsy999/anpu/internal/fpmatch"
+	anpuhttp "github.com/Marwanmorsy999/anpu/internal/http"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // backupSuffixes are appended to each discovered endpoint path to produce

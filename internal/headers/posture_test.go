@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	anpuhttp "github.com/anpu-project/anpu/internal/http"
-	"github.com/anpu-project/anpu/internal/scanner"
+	anpuhttp "github.com/Marwanmorsy999/anpu/internal/http"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
 )
 
 func postureClient() *anpuhttp.Client {

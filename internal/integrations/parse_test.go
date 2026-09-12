@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/anpu-project/anpu/internal/scanner"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
 )
 
 func testScanContext() *scanner.ScanContext {

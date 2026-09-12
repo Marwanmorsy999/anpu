@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anpu-project/anpu/internal/scanner"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
 )
 
 // SubfinderScanner implements scanner.Scanner by shelling out to subfinder.

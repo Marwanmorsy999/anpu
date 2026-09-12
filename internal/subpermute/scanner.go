@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/anpu-project/anpu/internal/scanner"
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // wordlist and caps bound generation + resolution.

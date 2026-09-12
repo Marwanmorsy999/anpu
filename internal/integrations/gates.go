@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/anpu-project/anpu/internal/scanner"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
 )
 
 // techGates maps wrapper tools to stack tokens; the tool runs unless the

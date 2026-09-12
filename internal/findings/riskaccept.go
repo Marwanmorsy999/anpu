@@ -7,7 +7,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // RiskAcceptEntry is one accepted finding: matched by stable finding ID,

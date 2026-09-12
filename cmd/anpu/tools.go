@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/anpu-project/anpu/internal/integrations"
+	"github.com/Marwanmorsy999/anpu/internal/integrations"
 	"github.com/spf13/cobra"
 )
 

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	anpuhttp "github.com/anpu-project/anpu/internal/http"
-	"github.com/anpu-project/anpu/internal/scanner"
+	anpuhttp "github.com/Marwanmorsy999/anpu/internal/http"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
 )
 
 // Well-known locations probed (GET-only) when no --openapi/--graphql flag

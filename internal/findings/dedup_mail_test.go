@@ -3,7 +3,7 @@ package findings
 import (
 	"testing"
 
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // Mail-posture findings from dnsintel and emailauth share canonical

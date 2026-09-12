@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	anpuhttp "github.com/anpu-project/anpu/internal/http"
+	anpuhttp "github.com/Marwanmorsy999/anpu/internal/http"
 )
 
 // maxManifestFetches bounds manifest HTTP fetches per scan.

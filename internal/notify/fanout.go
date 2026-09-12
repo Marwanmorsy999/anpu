@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anpu-project/anpu/internal/diff"
+	"github.com/Marwanmorsy999/anpu/internal/diff"
 )
 
 // summaryText renders one plain-text diff summary for chat targets.

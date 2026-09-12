@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // Phase 3: delay scaling is pure arithmetic — lock the gate before

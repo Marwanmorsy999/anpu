@@ -1,6 +1,6 @@
 package active
 
-import "github.com/anpu-project/anpu/pkg/models"
+import "github.com/Marwanmorsy999/anpu/pkg/models"
 
 // AdversarialEnabled controls whether the 6 hazardous adversarial rules
 // (jwt, massassign, business, race, smuggling, protopollute) are allowed

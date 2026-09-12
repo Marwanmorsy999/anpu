@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	anpuhttp "github.com/anpu-project/anpu/internal/http"
-	"github.com/anpu-project/anpu/internal/scanner"
-	"github.com/anpu-project/anpu/pkg/models"
+	anpuhttp "github.com/Marwanmorsy999/anpu/internal/http"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // IDORScanner probes for BOLA/IDOR by replaying numeric identifiers with

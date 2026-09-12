@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // severityBase maps security severity to its base score contribution (0-10 scale).

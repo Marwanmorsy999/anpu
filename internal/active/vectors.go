@@ -4,8 +4,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/anpu-project/anpu/internal/api"
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/internal/api"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // ExtractVectors returns all injectable InputVectors for the given endpoint.

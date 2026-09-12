@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	anpuhttp "github.com/anpu-project/anpu/internal/http"
-	"github.com/anpu-project/anpu/pkg/models"
+	anpuhttp "github.com/Marwanmorsy999/anpu/internal/http"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // Limits are deliberately conservative. The safe profile is a single-page

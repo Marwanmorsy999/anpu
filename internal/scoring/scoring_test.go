@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 func TestScoreFindingInfoIsZero(t *testing.T) {

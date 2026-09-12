@@ -293,7 +293,7 @@ Install recipes for optional tools: `anpu tools install --help`.
 
 Recent engine-quality work (see CHANGELOG "Unreleased — engine quality series"): hermetic test safety net; corroboration contract for active findings; shared FP matching (soft-404/WAF/CDN/app-shell); ultra-only confirmations; honest `anpu tools` doctor + wrapper budgets; CSV/MD exports and history/show/query filtering; decomposed CLI with versioned checkpoints.
 
-- **Module import path:** `go.mod` declares `github.com/anpu-project/anpu` while the repository lives at `github.com/Marwanmorsy999/anpu`. The `anpu-project` path is currently canonical for imports; clone URLs, releases, and install scripts stay at `Marwanmorsy999/anpu`. It will only change via a coordinated rename or org transfer.
+- **Module import path:** `go.mod` declares `github.com/Marwanmorsy999/anpu`, matching the repository URL. Fresh `git clone https://github.com/Marwanmorsy999/anpu` + `go build ./...` works with zero replace directives.
 - **External tools:** many wrappers require manual setup or `--adversarial --confirm-authorized`. See `anpu tools` and `docs/scanners.md` for the minimal set per profile.
 - **Web frontend:** the companion site is demo-data only; the CLI remains fully local.
 - **Wordlists/rules:** vendored subsets only; refresh policy is opt-in (see `docs/scanners.md`).

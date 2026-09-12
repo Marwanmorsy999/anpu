@@ -9,12 +9,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/anpu-project/anpu/internal/headers"
-	anpuhttp "github.com/anpu-project/anpu/internal/http"
-	"github.com/anpu-project/anpu/internal/nosqlexpand"
-	"github.com/anpu-project/anpu/internal/scanner"
-	"github.com/anpu-project/anpu/internal/storage"
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/internal/headers"
+	anpuhttp "github.com/Marwanmorsy999/anpu/internal/http"
+	"github.com/Marwanmorsy999/anpu/internal/nosqlexpand"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
+	"github.com/Marwanmorsy999/anpu/internal/storage"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // verifyVerdict is the outcome of replaying one finding's probes.

@@ -8,9 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	anpudiff "github.com/anpu-project/anpu/internal/diff"
-	"github.com/anpu-project/anpu/internal/storage"
-	"github.com/anpu-project/anpu/pkg/models"
+	anpudiff "github.com/Marwanmorsy999/anpu/internal/diff"
+	"github.com/Marwanmorsy999/anpu/internal/storage"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 func newDiffCmd() *cobra.Command {

@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/anpu-project/anpu/internal/importx"
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/internal/importx"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // newImportCmd implements `anpu import` (Wave 4 item 147): normalize

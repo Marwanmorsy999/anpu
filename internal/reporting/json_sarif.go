@@ -9,8 +9,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/anpu-project/anpu/pkg/models"
-	"github.com/anpu-project/anpu/pkg/version"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/pkg/version"
 )
 
 // WriteJSON marshals the full scan summary to indented JSON at path.
@@ -193,7 +193,7 @@ func WriteSARIF(summary *models.ScanSummary, path string) error {
 		Runs: []sarifRun{{
 			Tool: sarifTool{Driver: sarifDriver{
 				Name:           "ANPU",
-				InformationURI: "https://github.com/anpu-project/anpu",
+				InformationURI: "https://github.com/Marwanmorsy999/anpu",
 				Version:        version.Version,
 				Rules:          rules,
 			}},

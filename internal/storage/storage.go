@@ -14,7 +14,7 @@ import (
 	// working executables on every platform without a C toolchain.
 	_ "modernc.org/sqlite"
 
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 const schema = `

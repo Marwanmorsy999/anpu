@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	anpuhttp "github.com/anpu-project/anpu/internal/http"
-	"github.com/anpu-project/anpu/pkg/models"
+	anpuhttp "github.com/Marwanmorsy999/anpu/internal/http"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // raceRule detects race condition / time-of-check-time-of-use issues.

@@ -12,7 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/anpu-project/anpu/internal/feeds"
+	"github.com/Marwanmorsy999/anpu/internal/feeds"
 )
 
 // newFeedsCmd implements `anpu feeds` (Wave 3 refresh + reputation):

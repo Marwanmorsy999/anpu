@@ -19,9 +19,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anpu-project/anpu/internal/scanner"
-	"github.com/anpu-project/anpu/internal/sri"
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
+	"github.com/Marwanmorsy999/anpu/internal/sri"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // NucleiScanner implements scanner.Scanner by shelling out to the real

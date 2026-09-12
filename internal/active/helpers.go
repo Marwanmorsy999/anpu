@@ -1,6 +1,6 @@
 package active
 
-import "github.com/anpu-project/anpu/pkg/models"
+import "github.com/Marwanmorsy999/anpu/pkg/models"
 
 // buildInjectedURL constructs a URL with the payload injected at the
 // vector's location.  It is the single injection point for all rules,

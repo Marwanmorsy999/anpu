@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anpu-project/anpu/internal/scanner"
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // Phase 4: new gates must skip loudly with reasons and fail open on

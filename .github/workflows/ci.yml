@@ -6,9 +6,17 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege by default; jobs escalate only what they need.
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Needed for Codecov's OIDC (tokenless) upload.
+      id-token: write
     steps:
       - name: Check out code
         uses: actions/checkout@v7
@@ -33,11 +41,39 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Test
-        run: go test -v -race ./...
+      - name: Test with race detector and coverage
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
-      - name: Coverage
-        run: go test -coverprofile=coverage.out -covermode=atomic ./... && go tool cover -func=coverage.out | tail -20
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -20
+
+      - name: Enforce coverage floor
+        # Backstop against catastrophic coverage loss. The precise
+        # per-PR ratchet ("fail PRs that drop coverage") lives in
+        # codecov.yml (project target: auto); this floor only needs to
+        # catch a broken harness. Baseline is ~11% (2026-09); raise this
+        # floor as coverage grows — never lower it without a codecov.yml
+        # change in the same PR.
+        run: |
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub(/%/, "", $3); print $3}')
+          echo "total statement coverage: ${total}% (floor 10%)"
+          python3 -c "import sys; cov = float(sys.argv[1]); sys.exit(0 if cov >= 10.0 else 1)" "$total"
+          if [ $? -ne 0 ]; then echo "::error::total coverage ${total}% is below the 10% floor"; exit 1; fi
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-${{ github.run_id }}
+          path: coverage.out
+          retention-days: 30
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.out
+          use_oidc: true
+          fail_ci_if_error: false
+          verbose: true
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7

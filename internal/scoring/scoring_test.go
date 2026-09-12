@@ -64,6 +64,49 @@ func TestAggregateScoreVolumeAndInfo(t *testing.T) {
 	}
 }
 
+// ScoreAll scores every finding in place and returns the slice.
+func TestScoreAllScoresInPlace(t *testing.T) {
+	fs := []models.Finding{
+		{Severity: models.SeverityInfo, Confidence: models.ConfidenceHigh, Category: models.CategoryHeaders},
+		{Severity: models.SeverityHigh, Confidence: models.ConfidenceHigh, Category: models.CategoryHeaders},
+	}
+	out := ScoreAll(fs)
+	if len(out) != 2 {
+		t.Fatalf("expected 2 scored findings, got %d", len(out))
+	}
+	if out[0].RiskScore != 0 || out[1].RiskScore != 6.4 {
+		t.Fatalf("ScoreAll mismatch: info=%.1f high=%.1f", out[0].RiskScore, out[1].RiskScore)
+	}
+	if out[1].ScoreExplanation == "" {
+		t.Fatal("scored finding must carry an explanation")
+	}
+}
+
+// Unknown severity/confidence fall back to documented defaults instead of
+// panicking or scoring zero: base=1.0, multiplier=0.5.
+func TestScoreFindingUnknownSeverityConfidence(t *testing.T) {
+	f := ScoreFinding(models.Finding{Severity: "bogus", Confidence: "bogus", Category: models.CategoryOther})
+	if f.RiskScore != 0.5 {
+		t.Fatalf("fallback expected 0.5 (1.0*0.5+0.0), got %.1f (%s)", f.RiskScore, f.ScoreExplanation)
+	}
+	if !strings.Contains(f.ScoreExplanation, "base=1.0") {
+		t.Fatalf("explanation must show fallback base: %q", f.ScoreExplanation)
+	}
+}
+
+// Scores clamp at 10: critical/confirmed vuln with corroboration would
+// otherwise reach 9.0*1.0+1.0+0.5 = 10.5.
+func TestScoreFindingClampsAtTen(t *testing.T) {
+	f := models.Finding{
+		Severity: models.SeverityCritical, Confidence: models.ConfidenceConfirmed,
+		Category:   models.CategoryVulnerability,
+		MergedFrom: make([]models.SourceRef, 10),
+	}
+	if got := ScoreFinding(f); got.RiskScore != 10.0 {
+		t.Fatalf("expected clamp at 10.0, got %.1f (%s)", got.RiskScore, got.ScoreExplanation)
+	}
+}
+
 // Unconfirmed differentials (low confidence, no corroboration) must not
 // drive the grade numerator — only a capped posture penalty.
 func TestAggregateUnconfirmedIsPostureOnly(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anpu-project/anpu/internal/scanner"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
 )
 
 // Phase 4: colorized piped output must not silently break text parsers,

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 func platTech(name, category string, conf float64) models.Technology {

@@ -3,7 +3,7 @@ package findings
 import (
 	"testing"
 
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 func mkFinding(sev models.Severity, conf models.Confidence, src models.Source) models.Finding {

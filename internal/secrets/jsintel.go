@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // jsRoutePatterns extracts candidate paths/URLs from JS source:

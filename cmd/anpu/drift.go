@@ -6,9 +6,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/anpu-project/anpu/internal/drift"
-	"github.com/anpu-project/anpu/internal/storage"
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/internal/drift"
+	"github.com/Marwanmorsy999/anpu/internal/storage"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // newDriftCmd implements `anpu drift` (Wave 4 item 152): compare a

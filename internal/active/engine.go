@@ -23,8 +23,8 @@ package active
 import (
 	"context"
 
-	anpuhttp "github.com/anpu-project/anpu/internal/http"
-	"github.com/anpu-project/anpu/pkg/models"
+	anpuhttp "github.com/Marwanmorsy999/anpu/internal/http"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // Rule is implemented by every active test rule.

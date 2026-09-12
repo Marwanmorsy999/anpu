@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/anpu-project/anpu/internal/scanner"
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // Config holds the Phase 5 options supplied via CLI / YAML config.

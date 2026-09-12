@@ -1,6 +1,6 @@
 package findings
 
-import "github.com/anpu-project/anpu/pkg/models"
+import "github.com/Marwanmorsy999/anpu/pkg/models"
 
 // FilterByConfidence removes findings whose Confidence rank falls below
 // the minimum. When min is empty ("") the input slice is returned

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 type stubScanner struct {

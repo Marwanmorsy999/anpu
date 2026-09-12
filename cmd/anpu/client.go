@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/anpu-project/anpu/internal/api"
-	anpuhttp "github.com/anpu-project/anpu/internal/http"
-	"github.com/anpu-project/anpu/internal/scanner"
+	"github.com/Marwanmorsy999/anpu/internal/api"
+	anpuhttp "github.com/Marwanmorsy999/anpu/internal/http"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
 )
 
 // client.go — HTTP client + API config construction (Phase 6).

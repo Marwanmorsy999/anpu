@@ -10,9 +10,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/anpu-project/anpu/internal/integrations"
-	"github.com/anpu-project/anpu/internal/reporting"
-	"github.com/anpu-project/anpu/pkg/version"
+	"github.com/Marwanmorsy999/anpu/internal/integrations"
+	"github.com/Marwanmorsy999/anpu/internal/reporting"
+	"github.com/Marwanmorsy999/anpu/pkg/version"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )

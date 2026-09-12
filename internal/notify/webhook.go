@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anpu-project/anpu/internal/diff"
+	"github.com/Marwanmorsy999/anpu/internal/diff"
 )
 
 // On controls which diff events trigger a notification.

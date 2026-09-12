@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"testing"
 
-	anpuhttp "github.com/anpu-project/anpu/internal/http"
-	"github.com/anpu-project/anpu/internal/scanner"
+	anpuhttp "github.com/Marwanmorsy999/anpu/internal/http"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
 )
 
 func heapdumpCtx(srv string) *scanner.ScanContext {

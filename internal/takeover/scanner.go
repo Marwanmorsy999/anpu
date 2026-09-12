@@ -27,8 +27,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anpu-project/anpu/internal/scanner"
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 // providerSig describes one cloud provider's CNAME pattern and unclaimed-

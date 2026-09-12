@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anpu-project/anpu/pkg/models"
+	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
 func TestRiskGradeBoundaries(t *testing.T) {

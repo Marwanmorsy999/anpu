@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/anpu-project/anpu/internal/fpmatch"
-	anpuhttp "github.com/anpu-project/anpu/internal/http"
+	"github.com/Marwanmorsy999/anpu/internal/fpmatch"
+	anpuhttp "github.com/Marwanmorsy999/anpu/internal/http"
 )
 
 // soft404.go — active soft-404 detection (mirrors dirs.go:122,176).

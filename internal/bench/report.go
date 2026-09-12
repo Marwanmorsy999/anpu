@@ -212,5 +212,5 @@ func RefreshSection(path, generated string) error {
 	if !strings.HasSuffix(out, "\n") {
 		out += "\n"
 	}
-	return os.WriteFile(path, []byte(out), 0o600)
+	return os.WriteFile(path, []byte(out), 0o600) // #nosec G703 -- path is the operator's explicit --refresh-docs target, same class as other operator-specified report outputs.
 }

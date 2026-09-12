@@ -144,7 +144,7 @@ func runChildScan(exe, target, profile, outDir string, allowLocal bool) (*models
 		"--json", "--html=false", "--sarif=false", "--csv=false", "--md=false",
 		"--output", outDir,
 	}
-	c := exec.Command(exe, args...)
+	c := exec.Command(exe, args...) // #nosec G204 -- bench re-invokes ANPU's own binary (os.Executable) with fixed scan flags; only target/profile come from operator flags.
 	c.Env = os.Environ()
 	if allowLocal {
 		c.Env = append(c.Env, "ANPU_ALLOW_LOCAL_NETWORK=1")
@@ -220,7 +220,7 @@ func runBench(cmd *cobra.Command, target, profilesFlag, format, out, gtPath, ref
 				firstResults = append(firstResults, result)
 				durations = append(durations, elapsed)
 			}
-			fmt.Fprintf(cmd.ErrOrStderr(), "bench: %s run %d/%d: %d findings in %.1fs\n",
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "bench: %s run %d/%d: %d findings in %.1fs\n",
 				profile, i+1, runs, result.Total, elapsed)
 		}
 	}
@@ -246,7 +246,7 @@ func runBench(cmd *cobra.Command, target, profilesFlag, format, out, gtPath, ref
 		if err := bench.RefreshSection(refreshDocs, output); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.ErrOrStderr(), "bench: refreshed %s\n", refreshDocs)
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "bench: refreshed %s\n", refreshDocs)
 	}
 	if checkFile != "" {
 		if format != "markdown" {
@@ -255,7 +255,7 @@ func runBench(cmd *cobra.Command, target, profilesFlag, format, out, gtPath, ref
 		if err := bench.CheckSection(checkFile, output); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.ErrOrStderr(), "bench: %s is fresh\n", checkFile)
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "bench: %s is fresh\n", checkFile)
 	}
 	if out != "" {
 		if err := os.WriteFile(out, []byte(output), 0o600); err != nil {
@@ -263,7 +263,7 @@ func runBench(cmd *cobra.Command, target, profilesFlag, format, out, gtPath, ref
 		}
 		return nil
 	}
-	fmt.Fprint(cmd.OutOrStdout(), output)
+	_, _ = fmt.Fprint(cmd.OutOrStdout(), output)
 
 	misses := 0
 	for _, r := range firstResults {
@@ -274,7 +274,7 @@ func runBench(cmd *cobra.Command, target, profilesFlag, format, out, gtPath, ref
 		}
 	}
 	if misses > 0 {
-		fmt.Fprintf(cmd.ErrOrStderr(), "bench: %d MISS verdict(s) — see docs/benchmark.md\n", misses)
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "bench: %d MISS verdict(s) — see docs/benchmark.md\n", misses)
 	}
 	return nil
 }

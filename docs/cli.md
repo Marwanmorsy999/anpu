@@ -287,6 +287,24 @@ anpu drift --write-pins --pins pins.json
 anpu drift base.json now.json --pins pins.json --json
 ```
 
+## `anpu bench`
+
+Measure detection against the planted-signal fixture (`tests/bench`):
+per-profile hits, misses, and unmatched counts — including what ANPU
+did NOT detect. The benchmark measures (exit 0 on completion);
+`--check` enforces freshness of `docs/benchmark.md` for CI.
+
+```sh
+docker compose -f tests/bench/docker-compose.yml up -d
+anpu bench --target http://127.0.0.1:8901
+anpu bench --profiles safe,advanced --format markdown --out /tmp/bench.md
+anpu bench --format markdown --check docs/benchmark.md
+```
+
+Only loopback targets get automatic `ANPU_ALLOW_LOCAL_NETWORK=1` for
+the child scans; anything else inherits your environment. See
+[`benchmark.md`](benchmark.md) for results and methodology.
+
 ## `anpu show` export formats
 
 `--format` accepts `html`, `json`, `sarif`, `csv`, and `md`.

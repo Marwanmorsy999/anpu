@@ -68,6 +68,7 @@ authorized to test.`,
 	root.AddCommand(newFeedsCmd())
 	root.AddCommand(newWordlistsCmd())
 	root.AddCommand(newDriftCmd())
+	root.AddCommand(newBenchCmd())
 
 	// Group commands by what they do for you, so the list reads
 	// clearly for first-time and non-technical users.
@@ -86,6 +87,7 @@ authorized to test.`,
 		"show": "results", "history": "results", "diff": "results",
 		"verify": "results",
 		"query":  "results", "import": "results", "drift": "results",
+		"bench": "results",
 		"tools": "setup", "search": "setup", "feeds": "setup",
 		"wordlists": "setup", "completion": "setup", "help": "setup",
 	}

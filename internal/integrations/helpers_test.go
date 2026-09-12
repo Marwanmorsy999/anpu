@@ -1,6 +1,9 @@
 package integrations
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestRegistrableBase(t *testing.T) {
 	cases := map[string]string{
@@ -60,5 +63,20 @@ func TestFirstLinesAndTrimMiddle(t *testing.T) {
 	}
 	if trimMiddle("123456789", 5) != "12345..." {
 		t.Fatalf("trimMiddle must truncate: %q", trimMiddle("123456789", 5))
+	}
+}
+
+// Tool stderr can carry raw non-UTF-8 bytes (observed with gotator on
+// Windows) — notes must be sanitized, never split mid-rune.
+func TestTrimMiddleSanitizesUTF8(t *testing.T) {
+	if got := trimMiddle("ok\xff\xfe output", 100); strings.Contains(got, "\xff") {
+		t.Fatalf("invalid bytes must be replaced, got %q", got)
+	}
+	emoji := strings.Repeat("😀", 10)
+	if got := trimMiddle(emoji, 5); got != strings.Repeat("😀", 5)+"..." {
+		t.Fatalf("must truncate by runes, got %q", got)
+	}
+	if got := truncateRunes("123456789", 5); got != "12345..." {
+		t.Fatalf("truncateRunes wrong: %q", got)
 	}
 }

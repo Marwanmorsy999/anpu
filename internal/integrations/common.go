@@ -131,7 +131,9 @@ func versionCheck(ctx context.Context, path string) bool {
 }
 
 // runCapture executes the tool and returns its stdout. Stderr is captured
-// for diagnostics; over-long output is trimmed to 500 runes.
+// for diagnostics; over-long output is trimmed to 500 runes. Stderr is
+// sanitized to valid UTF-8 first — Go toolchains can emit raw non-UTF-8
+// bytes (e.g. gotator on Windows) that would otherwise pollute notes.
 func runCapture(ctx context.Context, timeout time.Duration, path string, args ...string) (stdout []byte, stderr string, err error) {
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -141,12 +143,23 @@ func runCapture(ctx context.Context, timeout time.Duration, path string, args ..
 	cmd.Stdout = &out
 	cmd.Stderr = &serr
 	err = cmd.Run()
-	stderr = strings.TrimSpace(serr.String())
+	stderr = strings.ToValidUTF8(strings.TrimSpace(serr.String()), "�")
 	if stderr != "" {
 		stderr = strings.Join(strings.Fields(stderr), " ")
-		if len(stderr) > 500 {
-			stderr = stderr[:500] + "..."
-		}
+		stderr = truncateRunes(stderr, 500)
 	}
 	return out.Bytes(), stderr, err
+}
+
+// truncateRunes cuts s to n runes (not bytes) so multi-byte sequences
+// are never split mid-rune.
+func truncateRunes(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "..."
 }

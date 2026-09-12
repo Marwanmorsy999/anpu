@@ -712,11 +712,15 @@ func firstLines(out []byte, n int) string {
 }
 
 func trimMiddle(s string, n int) string {
-	s = strings.Join(strings.Fields(s), " ")
+	s = strings.ToValidUTF8(strings.Join(strings.Fields(s), " "), "�")
 	if len(s) <= n {
 		return s
 	}
-	return s[:n] + "..."
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "..."
 }
 
 // mapSeverity normalizes tool severity strings.

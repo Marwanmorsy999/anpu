@@ -454,20 +454,41 @@ func detectFromBody(body string) []models.Technology {
 				}
 			}
 		}
+		confidence := 0.65
+		location := "HTML/JavaScript response body"
+		observed := fmt.Sprintf("matched pattern in page content: %q", truncate(m[0], 80))
+		// Content-mention softening: bare-word body hits (e.g.
+		// "WooCommerce" on a /vs/woocommerce comparison page) are
+		// page-copy mentions, not stack signals. Flag the source so
+		// downstream stack gates don't treat them as detected tech.
+		if contentMentionOnly[sig.Name] {
+			confidence = 0.35
+			location = "page content (mention, not asset signal)"
+			observed = fmt.Sprintf("mentioned-in-content (not detected): %q", truncate(m[0], 80))
+		}
 		out = append(out, models.Technology{
 			Name:       sig.Name,
 			Category:   sig.Category,
 			Version:    version,
-			Confidence: 0.65,
+			Confidence: confidence,
 			Evidence: models.Evidence{
-				Observed: fmt.Sprintf("matched pattern in page content: %q", truncate(m[0], 80)),
-				Location: "HTML/JavaScript response body",
+				Observed: observed,
+				Location: location,
 			},
 		})
 	}
 
 	out = append(out, detectFromGenerator(body)...)
 	return out
+}
+
+// contentMentionOnly marks body signatures whose bare-word pattern fires
+// on marketing/comparison copy. These stay in the report as low-confidence
+// mentions so the signal isn't lost, but stack-gated stages must ignore
+// them (see hasTechnology callers).
+var contentMentionOnly = map[string]bool{
+	"Magento":     true,
+	"WooCommerce": true,
 }
 
 // detectFromGenerator extracts technology and version from <meta name="generator">.

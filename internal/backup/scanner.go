@@ -49,6 +49,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anpu-project/anpu/internal/adaptive"
 	"github.com/anpu-project/anpu/internal/fpmatch"
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/scanner"
@@ -155,6 +156,9 @@ type probeResult struct {
 }
 
 func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+	if class, reason := adaptive.SurfaceClass(sc.Endpoints, sc.Technologies, sc.Auth.IsAuthenticated()); class == adaptive.ClassStaticMarketing {
+		return scanner.StageResult{Skipped: "Backup-file search skipped: " + reason}, nil
+	}
 	var findings []models.Finding
 	var warnings []string
 	var mu sync.Mutex

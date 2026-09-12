@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anpu-project/anpu/internal/adaptive"
 	"github.com/anpu-project/anpu/internal/fpmatch"
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/scanner"
@@ -69,6 +70,9 @@ func bases(sc *scanner.ScanContext) []string {
 
 // Run implements scanner.Scanner.
 func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+	if class, reason := adaptive.SurfaceClass(sc.Endpoints, sc.Technologies, sc.Auth.IsAuthenticated()); class == adaptive.ClassStaticMarketing {
+		return scanner.StageResult{Skipped: "Backup-file search skipped: " + reason}, nil
+	}
 	made := 0
 	get := func(u string) *anpuhttp.Response {
 		if made >= maxRequests {

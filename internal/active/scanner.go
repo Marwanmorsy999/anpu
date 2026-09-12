@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/anpu-project/anpu/internal/adaptive"
 	anpuhttp "github.com/anpu-project/anpu/internal/http"
 	"github.com/anpu-project/anpu/internal/params"
 	"github.com/anpu-project/anpu/internal/route"
@@ -66,6 +67,22 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	// vector loop below cannot reach them (no injectable locations),
 	// but cached marketing pages are prime poisoning targets.
 	pageOracle := &cachePoisonRule{}
+
+	// Adaptive scheduling: on a static-marketing surface the server-side
+	// injection rules cannot pay off — skip them with a logged reason
+	// instead of burning probes. Anything else runs the full battery.
+	adaptiveClass, adaptiveReason := adaptive.SurfaceClass(sc.Endpoints, sc.Technologies, sc.Auth.IsAuthenticated())
+	adaptiveSkipped := map[string]bool{}
+	skipRule := func(id models.ActiveRuleID) bool {
+		if adaptiveClass != adaptive.ClassStaticMarketing {
+			return false
+		}
+		if !adaptive.StaticMarketingSkipRules[string(id)] {
+			return false
+		}
+		adaptiveSkipped[string(id)] = true
+		return true
+	}
 
 	for _, ep := range endpoints {
 		// Skip static assets — low value for active testing.
@@ -129,6 +146,9 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 				if isAdversarialRule(rule.ID()) && !IsAdversarialEnabled() {
 					continue
 				}
+				if skipRule(rule.ID()) {
+					continue
+				}
 				// Skip cache oracle when authed (personalized responses).
 				if sc.Auth.IsAuthenticated() && rule.ID() == "cache-poisoning-oracle" {
 					continue
@@ -173,6 +193,9 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			if isAdversarialRule(rule.ID()) && !IsAdversarialEnabled() {
 				continue
 			}
+			if skipRule(rule.ID()) {
+				continue
+			}
 			select {
 			case <-ctx.Done():
 				return scanner.StageResult{Findings: findings, Warnings: warnings}, nil
@@ -198,6 +221,17 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		warnings = append(warnings, fmt.Sprintf(
 			"active-tester: tested %d vectors across %d endpoints (%d HTTP probes)",
 			totalVectors, len(endpoints), totalProbes,
+		))
+	}
+	if len(adaptiveSkipped) > 0 {
+		names := make([]string, 0, len(adaptiveSkipped))
+		for n := range adaptiveSkipped {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		warnings = append(warnings, fmt.Sprintf(
+			"active-tester: skipped %d server-side rule(s) (%s) — %s",
+			len(names), strings.Join(names, ", "), adaptiveReason,
 		))
 	}
 

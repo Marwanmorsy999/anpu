@@ -151,6 +151,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	candidates := faviconCandidates(sc.Target.Raw, resp.Body)
 	var icon []byte
 	var iconURL string
+	var iconCT string
 	var lastErr error
 	for _, cand := range candidates {
 		candResp, err := s.client.WithAuth(sc.Auth.RequestHeaders()).Get(ctx, cand)
@@ -162,32 +163,34 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			lastErr = fmt.Errorf("HTTP %d", candResp.StatusCode)
 			continue
 		}
+		// Validity gate: Content-Type must be image/*, size < 64KB, and
+		// first bytes must be a valid image magic number. A logo.png
+		// served as text/html (or any oversized fallback page) is
+		// rejected here — never hashed with a Shodan pivot.
 		ct := candResp.Header.Get("Content-Type")
-		if !strings.Contains(strings.ToLower(ct), "image/") && len(candResp.Body) < 16 {
-			// Tiny non-image likely fallback HTML, skip unless it's the last fallback
-			if cand != candidates[len(candidates)-1] {
-				continue
-			}
+		if !strings.Contains(strings.ToLower(ct), "image/") {
+			lastErr = fmt.Errorf("rejected %s: Content-Type %q is not image/*", cand, ct)
+			continue
 		}
-		// Cap at 512k
-		if len(candResp.Body) > 512*1024 {
-			icon = candResp.Body[:512*1024]
-		} else {
-			icon = candResp.Body
+		if len(candResp.Body) > 64*1024 {
+			lastErr = fmt.Errorf("rejected %s: %d bytes exceeds 64KB icon gate", cand, len(candResp.Body))
+			continue
 		}
+		if !isImageMagic(candResp.Body) {
+			lastErr = fmt.Errorf("rejected %s: missing image magic number (likely HTML fallback)", cand)
+			continue
+		}
+		icon = candResp.Body
 		iconURL = cand
+		iconCT = ct
 		lastErr = nil
 		break
 	}
 	if len(icon) == 0 {
-		return scanner.StageResult{Warnings: []string{fmt.Sprintf("favicon: no icon fetched: %v", lastErr)}}, nil
-	}
-	// Quick sanity: must look like image magic (PNG, ICO, JPEG, SVG, GIF).
-	// Anything else is usually an HTML fallback page served as the icon —
-	// still hashed, but at lower confidence.
-	confidence := models.ConfidenceHigh
-	if !bytes.HasPrefix(icon, []byte("\x89PNG")) && !bytes.HasPrefix(icon, []byte("\x00\x00\x01\x00")) && !bytes.HasPrefix(icon, []byte("\xff\xd8\xff")) && !bytes.Contains(icon[:min(512, len(icon))], []byte("<svg")) && !bytes.HasPrefix(icon, []byte("GIF8")) {
-		confidence = models.ConfidenceMedium
+		if lastErr == nil {
+			lastErr = fmt.Errorf("no icon candidate passed the validity gate")
+		}
+		return scanner.StageResult{Warnings: []string{fmt.Sprintf("favicon: %v", lastErr)}}, nil
 	}
 
 	h := shodanFaviconHash(icon)
@@ -196,9 +199,9 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	findings = append(findings, models.Finding{
 		ID:              fmt.Sprintf("favicon-hash-%d", h),
 		Title:           fmt.Sprintf("Favicon hash (Shodan mmh3) %d", h),
-		Description:     fmt.Sprintf("Favicon at %s hashed to Shodan http.favicon.hash %d (%d bytes, %s). Pivot in Shodan/Censys to find other hosts sharing this icon — useful for asset correlation and shadow-IT discovery.", iconURL, h, len(icon), resp.Header.Get("Content-Type")),
+		Description:     fmt.Sprintf("Favicon at %s hashed to Shodan http.favicon.hash %d (%d bytes, %s). Pivot in Shodan/Censys to find other hosts sharing this icon — useful for asset correlation and shadow-IT discovery.", iconURL, h, len(icon), iconCT),
 		Severity:        models.SeverityInfo,
-		Confidence:      confidence,
+		Confidence:      models.ConfidenceHigh,
 		Category:        models.CategoryExposure,
 		Target:          sc.Target.Raw,
 		Evidence:        models.Evidence{Observed: fmt.Sprintf("mmh3=%d base64_len=%d url=%s", h, len(base64.StdEncoding.EncodeToString(icon)), iconURL), Location: "favicon.ico / link[rel=icon]"},
@@ -231,4 +234,17 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// isImageMagic reports whether b starts with a known image magic number
+// (PNG, ICO, JPEG, GIF) or contains an SVG marker in the first 512 bytes.
+func isImageMagic(b []byte) bool {
+	if bytes.HasPrefix(b, []byte("\x89PNG")) || bytes.HasPrefix(b, []byte("\x00\x00\x01\x00")) || bytes.HasPrefix(b, []byte("\xff\xd8\xff")) || bytes.HasPrefix(b, []byte("GIF8")) {
+		return true
+	}
+	head := b
+	if len(head) > 512 {
+		head = head[:512]
+	}
+	return bytes.Contains(head, []byte("<svg"))
 }

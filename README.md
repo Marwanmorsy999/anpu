@@ -257,14 +257,16 @@ Reports include observed evidence and score explanations. ANPU does not manufact
 
 ![ANPU HTML report: risk grade, severity summary, attack surface, and findings](docs/screenshots/report-hero.png)
 
-<details>
-<summary>Full report (long)</summary>
-
-![Full ANPU HTML report](docs/screenshots/report-full.png)
-
-</details>
+![Full ANPU HTML report, findings detail](docs/screenshots/report-full.png)
 
 Screenshots show a demo scan against a local fixture (`safe` intel plus planted XSS / open-redirect / exposed-file signals), rendered with headless Chromium at 1440px.
+
+### Terminal recording
+
+A real `advanced` scan against the benchmark fixture (grade E, planted signals detected), recorded with asciinema — idle gaps compressed, every byte of output authentic:
+
+- [`docs/demo/scan.cast`](docs/demo/scan.cast) — play with `asciinema play docs/demo/scan.cast`
+- [`docs/demo/record.sh`](docs/demo/record.sh) — the exact container recipe to reproduce the recording
 
 ## 9. Integrations
 

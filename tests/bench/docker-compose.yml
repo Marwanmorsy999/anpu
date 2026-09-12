@@ -1,0 +1,35 @@
+# ANPU benchmark fixture target.
+#
+# Deliberately vulnerable local app for `anpu bench` ground-truth
+# measurement. stdlib-only Python, no build step, no pip packages.
+# Start it, then point the harness at it:
+#
+#   docker compose -f tests/bench/docker-compose.yml up -d
+#   go run ./cmd/anpu bench --target http://127.0.0.1:8901
+#
+# Or without Docker (same server, same signals):
+#
+#   python tests/bench/server.py 8901
+#
+# The harness sets ANPU_ALLOW_LOCAL_NETWORK=1 for its child scans when
+# (and only when) the target is loopback.
+services:
+  bench-target:
+    # Versioned tag; no digest pin on purpose — this is a throwaway local
+    # target, not a release artifact. Re-pull weekly in CI for freshness.
+    image: python:3.13-slim
+    command: ["python", "/srv/server.py"]
+    volumes:
+      - ./server.py:/srv/server.py:ro
+    # Published on host loopback only: the fixture never leaves the
+    # machine even though the container itself listens on 0.0.0.0
+    # (required — Docker forwards host ports via container eth0,
+    # which a loopback bind inside the container would refuse).
+    ports:
+      - "127.0.0.1:8901:8901"
+    environment:
+      BENCH_HOST: "0.0.0.0"
+      BENCH_PORT: "8901"
+    read_only: true
+    tmpfs:
+      - /tmp

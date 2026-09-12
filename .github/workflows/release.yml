@@ -25,6 +25,10 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Install syft (SBOM generator)
+        # Pinned; required on PATH for GoReleaser's sboms pipe.
+        run: curl -sSfL https://get.anchore.io/syft | sh -s -- -b /usr/local/bin v1.40.0
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:

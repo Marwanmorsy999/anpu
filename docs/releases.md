@@ -199,6 +199,13 @@ The release archive includes the executable plus these project files:
 
 The GoReleaser configuration also publishes `checksums.txt`. Release version and commit metadata are injected into the binary at build time.
 
+Each archive also ships a CycloneDX SBOM,
+`<archive>.sbom.cyclonedx.json`, generated with syft at release time.
+It lists every component in that archive — inspect it with any
+CycloneDX tooling, e.g. `grype sbom:<file>` for a vulnerability pass.
+SBOM files are listed in `checksums.txt`, so they are covered by the
+release signature and provenance checks in section 2.
+
 ## 5. Release process for maintainers
 
 ANPU's release automation is tag-driven. A maintainer should:

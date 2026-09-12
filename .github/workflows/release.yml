@@ -30,7 +30,7 @@ jobs:
         run: curl -sSfL https://get.anchore.io/syft | sh -s -- -b /usr/local/bin v1.40.0
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: v2.17.1

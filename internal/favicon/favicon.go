@@ -10,7 +10,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -225,15 +224,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		})
 	}
 	// Cap icon usage to avoid unbounded read
-	_ = io.Discard
 	return scanner.StageResult{Findings: findings}, nil
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // isImageMagic reports whether b starts with a known image magic number

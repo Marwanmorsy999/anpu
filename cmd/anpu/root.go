@@ -421,11 +421,9 @@ func installMissingForLevel(level string, toolArgs []string) bool {
 		if !ok {
 			continue
 		}
-		if level != "" && !strings.EqualFold(r.Level, level) && !(level == "ultra") {
+		if level != "" && !strings.EqualFold(level, "ultra") && !strings.EqualFold(r.Level, level) {
 			// ultra runs everything; safe/advanced stay level-scoped.
-			if level == "safe" || level == "advanced" {
-				continue
-			}
+			continue
 		}
 		if len(only) > 0 {
 			matched := false

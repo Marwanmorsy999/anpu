@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	anpudiff "github.com/anpu-project/anpu/internal/diff"
 	"github.com/anpu-project/anpu/internal/storage"
+	"github.com/anpu-project/anpu/pkg/models"
 )
 
 func newDiffCmd() *cobra.Command {
@@ -16,9 +18,9 @@ func newDiffCmd() *cobra.Command {
 	var output string
 
 	cmd := &cobra.Command{
-		Use:   "diff <older-scan-id> <newer-scan-id>",
+		Use:   "diff <older-scan-id|older.json> <newer-scan-id|newer.json>",
 		Short: "See what changed between two scans",
-		Long: `Compare two stored scans from the local history database.
+		Long: `Compare two scans — stored history IDs or --json report files.
 
 Identity model: findings match by DedupKey
 (category + normalized URL + title + parameter + CWE); a finding whose
@@ -26,21 +28,17 @@ severity, confidence, score, evidence, or remediation changed reports
 as "changed". Endpoints match by normalized URL, technologies by
 name + category (version bumps report as "changed").
 
-Targets must be equivalent after normalization (scheme/host case,
-default ports, and trailing slashes are ignored).`,
+HTML/CSV/MD reports are lossy renders and cannot be diffed — use the
+--json siblings (same filename stem). Targets must be equivalent after
+normalization (scheme/host case, default ports, and trailing slashes
+are ignored).`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			store, err := storage.Open(defaultDBPath())
-			if err != nil {
-				return fmt.Errorf("opening scan history database: %w", err)
-			}
-			defer func() { _ = store.Close() }()
-
-			before, err := store.GetScan(args[0])
+			before, err := loadDiffInput(args[0])
 			if err != nil {
 				return err
 			}
-			after, err := store.GetScan(args[1])
+			after, err := loadDiffInput(args[1])
 			if err != nil {
 				return err
 			}
@@ -70,6 +68,34 @@ default ports, and trailing slashes are ignored).`,
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print the comparison as JSON")
 	cmd.Flags().StringVar(&output, "output", "", "write the JSON comparison to a file")
 	return cmd
+}
+
+// loadDiffInput resolves one diff operand: a --json report file when the
+// argument names an existing file, otherwise a history scan ID.
+func loadDiffInput(arg string) (*models.ScanSummary, error) {
+	if info, err := os.Stat(arg); err == nil && !info.IsDir() {
+		if !strings.HasSuffix(strings.ToLower(arg), ".json") {
+			return nil, fmt.Errorf("report files for diff must be --json reports (.json); %q is a lossy render — use its .json sibling", arg)
+		}
+		data, err := os.ReadFile(arg) // #nosec G304 -- CLI diffs an operator-specified report file.
+		if err != nil {
+			return nil, fmt.Errorf("reading report %q: %w", arg, err)
+		}
+		var summary models.ScanSummary
+		if err := json.Unmarshal(data, &summary); err != nil {
+			return nil, fmt.Errorf("parsing report %q as an ANPU JSON report: %w", arg, err)
+		}
+		if strings.TrimSpace(summary.Target) == "" {
+			return nil, fmt.Errorf("report %q has no scan target — not an ANPU JSON report", arg)
+		}
+		return &summary, nil
+	}
+	store, err := storage.Open(defaultDBPath())
+	if err != nil {
+		return nil, fmt.Errorf("opening scan history database: %w", err)
+	}
+	defer func() { _ = store.Close() }()
+	return store.GetScan(arg)
 }
 
 func printDiff(r *anpudiff.Result) {

@@ -159,10 +159,11 @@ anpu show scan-1234567890-1 --export ./reports/scan.sarif --format sarif
 
 ## `anpu diff`
 
-Compare two scans of the same target (from history).
+Compare two scans — history IDs or `--json` report files (weekly
+rescan workflow: `anpu diff old.json new.json`).
 
 ```sh
-anpu diff <older-scan-id> <newer-scan-id>
+anpu diff <older-scan-id|older.json> <newer-scan-id|newer.json>
 ```
 
 Identity model: findings match by DedupKey (category + normalized URL +
@@ -186,7 +187,11 @@ Examples:
 anpu diff scan-old scan-new
 anpu diff scan-old scan-new --json
 anpu diff scan-old scan-new --output ./reports/diff.json
+anpu diff ./reports/old.json ./reports/new.json
 ```
+
+HTML/CSV/MD reports are lossy renders and cannot be diffed — pass the
+`--json` siblings (same filename stem).
 
 ## `anpu verify`
 

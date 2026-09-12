@@ -160,6 +160,9 @@ func normalizeForCheck(s string) string {
 	var kept []string
 	for _, line := range strings.Split(s, "\n") {
 		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
 		if strings.HasPrefix(trimmed, "Findings (") {
 			continue
 		}

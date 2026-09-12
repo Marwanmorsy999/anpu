@@ -125,7 +125,16 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			break
 		}
 	}
-	// (a) Inert Spring classLoader-prefix differential.
+	// (a) Inert Spring classLoader-prefix differential. Skipped when the
+	// stack confidently says Next.js: a Node framework cannot process
+	// Spring data-binding prefixes, so any differential there is edge
+	// behavior, not Spring surface. Weak/unknown stacks fail open.
+	if confidentNextJS(sc.Technologies) {
+		return scanner.StageResult{
+			Findings: findings,
+			Warnings: []string{"cvepack: skipped Spring classLoader probe — confident Next.js stack cannot process Spring prefixes"},
+		}, nil
+	}
 	made := 0
 	get := func(u string) string {
 		if made >= maxRequests {
@@ -156,6 +165,22 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		}
 	}
 	return scanner.StageResult{Findings: findings}, nil
+}
+
+// confidentNextJS reports whether the fingerprinted stack confidently
+// says Next.js (header/CDN-tier confidence only — never body-text
+// mentions), in which case Spring probes are meaningless.
+func confidentNextJS(techs []models.Technology) bool {
+	for _, t := range techs {
+		if t.Confidence < 0.8 {
+			continue
+		}
+		n := strings.ToLower(t.Name)
+		if strings.Contains(n, "next.js") || strings.Contains(n, "nextjs") {
+			return true
+		}
+	}
+	return false
 }
 
 func withParam(raw, name, value string) string {

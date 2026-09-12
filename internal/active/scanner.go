@@ -201,6 +201,13 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		))
 	}
 
+	// Platform-artifact filter: managed edges answer Host-header and
+	// cache probes in expected ways. Demoted items become warnings so
+	// the decision is visible; unknown stacks fail open (no filtering).
+	filtered, platWarnings := platformFilter(findings, sc.Technologies)
+	findings = filtered
+	warnings = append(warnings, platWarnings...)
+
 	// Sibling merge: the same differential firing on many same-shape
 	// URLs (blog slugs, paginated routes) is one issue, not N. Group by
 	// detection method + parameter + CWE and fold sibling URLs into a

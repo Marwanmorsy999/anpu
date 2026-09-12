@@ -5,8 +5,13 @@ on:
     tags:
       - "v*"
 
+# contents:write publishes the GitHub Release; id-token:write mints the
+# OIDC identity for keyless cosign signing and SLSA attestations;
+# attestations:write persists the attestations to the repo.
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -29,7 +34,42 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download published Linux amd64 artifact
+      - name: Attest release artifacts (SLSA provenance)
+        # GitHub artifact attestations bind every file listed in
+        # GoReleaser's checksums.txt to SLSA build provenance
+        # (in-toto format, Sigstore-signed). Anyone can verify with:
+        #   gh attestation verify <file> --repo Marwanmorsy999/anpu
+        uses: actions/attest@v4
+        with:
+          subject-checksums: dist/checksums.txt
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v4.1.2
+
+      - name: Sign checksums with cosign (keyless)
+        # One keyless signature over checksums.txt covers every release
+        # artifact transitively. The bundle holds signature + Fulcio
+        # certificate + Rekor transparency proof. Verify with:
+        #   cosign verify-blob --bundle checksums.txt.sigstore.json \
+        #     --certificate-identity-regexp 'https://github.com/Marwanmorsy999/anpu/.github/workflows/release.yml@refs/tags/.*' \
+        #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+        #     checksums.txt
+        run: |
+          set -euo pipefail
+          cosign sign-blob --yes \
+            --bundle dist/checksums.txt.sigstore.json \
+            dist/checksums.txt
+          test -s dist/checksums.txt.sigstore.json
+
+      - name: Upload signature bundle to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" dist/checksums.txt.sigstore.json --clobber
+
+      - name: Download published artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
@@ -40,7 +80,13 @@ jobs:
             --repo "${{ github.repository }}" \
             --pattern "anpu_*_linux_amd64.tar.gz" \
             --dir /tmp/anpu-release
+          gh release download "$RELEASE_TAG" \
+            --repo "${{ github.repository }}" \
+            --pattern "checksums.txt*" \
+            --dir /tmp/anpu-release
           test -n "$(find /tmp/anpu-release -name 'anpu_*_linux_amd64.tar.gz' -print -quit)"
+          test -f /tmp/anpu-release/checksums.txt
+          test -f /tmp/anpu-release/checksums.txt.sigstore.json
 
       - name: Smoke test published artifact
         run: |
@@ -51,3 +97,20 @@ jobs:
           tar -xzf "$archive" -C /tmp/anpu-bin
           /tmp/anpu-bin/anpu --version
           /tmp/anpu-bin/anpu --help >/dev/null
+
+      - name: Verify release signature and provenance
+        # The workflow eats its own cooking: checksum, cosign bundle,
+        # and SLSA attestation are all verified against the files a
+        # user would download before the release is considered good.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd /tmp/anpu-release
+          archive="$(find /tmp/anpu-release -name 'anpu_*_linux_amd64.tar.gz' -print -quit)"
+          sha256sum -c <(grep "  $(basename "$archive")$" checksums.txt)
+          cosign verify-blob --bundle checksums.txt.sigstore.json \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/.*$" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            checksums.txt
+          gh attestation verify "$archive" --repo "${{ github.repository }}"

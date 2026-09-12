@@ -65,19 +65,49 @@ Scope notes: the scan grade is driven only by target findings — local-code res
 ## 2. What it does
 
 - **Recon**: DNS resolution, robots.txt/sitemap.xml parsing, redirect-chain observation, and source-map exposure detection.
-- **HTTP / security headers**: CSP, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, Server/X-Powered-By disclosure.
+- **HTTP / security headers**: one posture finding with a per-header checklist (CSP, framing, HSTS, XCTO, COOP/COEP/CORP, Referrer/Permissions-Policy) instead of a row per header, plus present-but-weak quality rows and Server/X-Powered-By disclosure.
 - **Cookies**: Secure, HttpOnly, SameSite, with context-aware severity.
 - **TLS**: certificate validity, expiration, hostname match, protocol version, and HTTP→HTTPS redirect behavior.
-- **Technology fingerprinting**: web servers, frameworks, CMSs, CDNs, JS libraries — using observed signals without inventing versions.
-- **Endpoint discovery**: links, forms, and JavaScript references, normalized and categorized.
-- **Subdomains / ports / paths**: profile-gated discovery engines with safety and false-positive safeguards.
+- **Technology fingerprinting**: web servers, frameworks, CMSs, CDNs, JS libraries — using observed signals without inventing versions. Body-text mentions (e.g. "WooCommerce" in comparison copy) report as mentions, not detections.
+- **Endpoint discovery**: links, forms, and JavaScript references, normalized and categorized. Same-site redirects (apex → www) auto-expand scope so discovery never starves.
+- **Subdomains / ports / paths**: profile-gated discovery engines with safety and false-positive safeguards. Backup-file search is request-budgeted.
 - **Secret detection**: scans discovered content for supported credential/token patterns without treating target-controlled data as executable.
 - **CORS / HTTP methods**: targeted configuration and method checks behind the same SSRF protections as core requests.
 - **Nuclei integration**: optional execution of a real Nuclei binary, with profile-aware template scope and graceful degradation when Nuclei is unavailable.
-- **Deduplication**: merges overlapping findings while preserving source evidence.
-- **Transparent scoring**: deterministic per-finding and aggregate scoring with explanations stored in results.
+- **Deduplication**: merges overlapping findings (same root cause across stages becomes one row) while preserving source evidence.
+- **Transparent scoring**: deterministic per-finding and aggregate scoring with explanations stored in results. Only confirmed findings drive the grade; unconfirmed differentials add a small posture penalty.
+- **Verification**: `anpu verify --finding <id>` replays a finding's probes with fresh controls (CONFIRMED / REJECTED / INCONCLUSIVE).
+
+### Engine honesty (short version)
+
+| Signal | Proves | Without it |
+|---|---|---|
+| Boolean differential + random control + stable baseline | SQLi class issue (High) | Low + unconfirmed label |
+| Backend error marker (MongoError, BSON, …) | NoSQL backend reach (Medium) | Low + unconfirmed label |
+| Benign math evaluated server-side | SSTI (Critical) | No finding at all |
+| Marker file contents (`root:x:0:0`) | Path traversal (High) | No finding at all |
+| Clean re-request still poisoned | Cache poisoning (High) | Medium candidate at most |
+| OOB callback with probe nonce | Blind SSRF / XXE / Log4Shell (Critical) | Reflection-only, capped |
+
+Full matrix: [Scanner and Engine Reference](docs/scanners.md#engine-capability-matrix-what-each-check-can-and-cannot-prove).
 
 ## 3. Installation
+
+### Quick install (one-liner)
+
+Linux / macOS:
+
+```sh
+curl -sSL https://raw.githubusercontent.com/Marwanmorsy999/anpu/main/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/Marwanmorsy999/anpu/main/install.ps1 | iex
+```
+
+Both resolve the latest release and verify the SHA-256 checksum. See **[docs/releases.md](docs/releases.md)** for version pins, verification details, and Docker.
 
 ### Pre-built binaries
 
@@ -263,7 +293,7 @@ Install recipes for optional tools: `anpu tools install --help`.
 
 Recent engine-quality work (see CHANGELOG "Unreleased — engine quality series"): hermetic test safety net; corroboration contract for active findings; shared FP matching (soft-404/WAF/CDN/app-shell); ultra-only confirmations; honest `anpu tools` doctor + wrapper budgets; CSV/MD exports and history/show/query filtering; decomposed CLI with versioned checkpoints.
 
-- **Module import path:** `go.mod` declares `github.com/anpu-project/anpu` while the repository lives at `github.com/Marwanmorsy999/anpu`. The `anpu-project` path is currently canonical for imports; it will only change via a coordinated rename or org transfer.
+- **Module import path:** `go.mod` declares `github.com/anpu-project/anpu` while the repository lives at `github.com/Marwanmorsy999/anpu`. The `anpu-project` path is currently canonical for imports; clone URLs, releases, and install scripts stay at `Marwanmorsy999/anpu`. It will only change via a coordinated rename or org transfer.
 - **External tools:** many wrappers require manual setup or `--adversarial --confirm-authorized`. See `anpu tools` and `docs/scanners.md` for the minimal set per profile.
 - **Web frontend:** the companion site is demo-data only; the CLI remains fully local.
 - **Wordlists/rules:** vendored subsets only; refresh policy is opt-in (see `docs/scanners.md`).

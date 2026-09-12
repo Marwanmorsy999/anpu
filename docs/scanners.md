@@ -9,7 +9,7 @@ ANPU combines built-in analyzers with an optional Nuclei integration. The scanne
 | Recon | DNS, robots.txt, sitemap.xml, security.txt, redirects, source maps | All | Passive | No |
 | Technology | Server/framework/CMS/CDN/library signals (~130 fingerprints), WordPress version/users/xmlrpc | All | Passive + ≤3 WP GETs | No |
 | TLS | Certificate validity, expiry, hostname, protocols, HTTPS behavior | All | Passive | No |
-| Headers | CSP, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, disclosure headers | All | Passive | No |
+| Headers | One posture finding with per-header checklist (CSP, framing, HSTS, XCTO, COOP/COEP/CORP, Referrer/Permissions-Policy) + present-but-weak quality rows + disclosure headers | All | Passive | No |
 | Cookies | Secure, HttpOnly, SameSite attributes | All | Passive | No |
 | Endpoints / Crawler | Same-host pages, links, forms, scripts, API/path references | All | Bounded GETs | No |
 | SRI | Subresource Integrity for cross-origin scripts/styles | All | Passive | No |
@@ -69,7 +69,7 @@ ANPU combines built-in analyzers with an optional Nuclei integration. The scanne
 | ForbiddenBypass | Header/path 403-bypass matrix, dual baseline | Advanced/Ultra | ≤24 GETs | No |
 | TakeoverPlus | 30 dnsReaper-family sigs, CNAME + body required | Advanced/Ultra | ≤20 hosts | No |
 | Clickjack | X-Frame-Options + CSP frame-ancestors analysis | All | ≤3 GETs | No |
-| PolicyHeaders | HSTS preload readiness + COOP/COEP/CORP gaps | All | 1 GET | No |
+| PolicyHeaders | HSTS preload readiness when HSTS is present (presence gaps live in the Headers posture finding) | All | 1 GET | No |
 | CookiePrefix | __Host-/__Secure- attribute rule audit | All | ≤3 GETs | No |
 | APIVersion | Sibling API version fuzz + endpoint harvest | Advanced/Ultra | ≤11 reqs | No |
 | APIConsole | GraphiQL/Altair/RapiDoc/Redoc walk + schema harvest | Advanced/Ultra | ≤11 GETs | No |

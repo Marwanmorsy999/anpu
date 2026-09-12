@@ -1,0 +1,92 @@
+# ANPU benchmark ground truth (tests/bench/ground-truth.yml).
+#
+# Machine-readable contract between the fixture (server.py) and the
+# harness (`anpu bench`, internal/bench). Each signal is a deliberately
+# planted weakness with a precise, code-verified matching rule.
+#
+# Matching semantics (implemented by the harness, documented here so the
+# file stays reviewable without reading Go):
+#   - a finding MATCHES a signal when ALL specified match keys hold:
+#       title_contains: case-insensitive substring of finding.title
+#       category:       exact finding.category
+#       path:           substring of finding.url (empty/absent = skip URL check)
+#   - outcome per profile: HIT (>=1 match) or MISS (no match).
+#   - expectation per profile (from `profiles`):
+#       hit:            signal in scope — a MISS is a benchmark failure.
+#       miss-expected:  out of scope for the profile (e.g. active-only
+#                       engines under `safe`) — absence is correct behavior.
+#   - verdicts: ok | MISS (expected hit, got none) | surprise-hit
+#     (expected miss, got a hit — investigate, usually good news).
+#   - findings matching NO signal are reported as UNMATCHED with a count,
+#     never auto-labeled false positives: the harness cannot prove a
+#     negative, and neither should your reading of the table.
+#   - gate: false marks a signal observed flaky during calibration; it is
+#     still measured and shown, but excluded from `--check` freshness
+#     comparison until the flakiness is root-caused.
+version: 1
+target_hint: http://127.0.0.1:8901
+calibrated_against: main@13bb274
+calibration:
+  runs: 4 advanced + 1 safe (2026-09-12, local fixture, no nuclei binary)
+  notes:
+    - safe is deterministic across runs (passive engines only).
+    - backup-zip hit 3/4 advanced runs; the single miss was the first
+      (cold) run. Mechanism unproven — tracked, non-gating (gate: false).
+    - verbose scans add ~25 "<tool> external run" info findings; the
+      harness always runs default (non-verbose) scans.
+signals:
+  - id: weak-headers
+    description: No security headers served on / (expect headers-posture).
+    match:
+      title_contains: headers-posture
+      category: security-headers
+    profiles:
+      safe: hit
+      advanced: hit
+
+  - id: exposed-env
+    description: /.env serves fake KEY= secrets (expect exposedconfig hit).
+    path: /.env
+    match:
+      title_contains: Exposed environment file
+    profiles:
+      # ExposedConfig engine runs on advanced/ultra only.
+      safe: miss-expected
+      advanced: hit
+
+  - id: backup-zip
+    description: /backup.zip serves a generated ZIP (expect backup finding).
+    path: /backup.zip
+    match:
+      title_contains: Backup file exposed
+    # Observed flaky 3/4 during calibration (one cold-run miss, mechanism
+    # unproven). Measured and shown; excluded from --check until fixed.
+    gate: false
+    profiles:
+      # Backup engine runs on advanced/ultra only.
+      safe: miss-expected
+      advanced: hit
+
+  - id: reflected-xss
+    description: /search?q= reflects input unescaped in element content.
+    path: /search
+    match:
+      # Case-insensitive. In calibration the hit came from the dalfox
+      # embedded candidate, not the active xss-reflected rule (see
+      # docs/benchmark.md engine notes).
+      title_contains: XSS
+    profiles:
+      # Active/dalfox engines run on advanced/ultra only.
+      safe: miss-expected
+      advanced: hit
+
+  - id: open-redirect
+    description: /go?url= 302-redirects to absolute URLs.
+    path: /go
+    match:
+      # Case-insensitive. In calibration the hits came from redirectpack
+      # ("Open redirect confirmed"), not the active open-redirect rule.
+      title_contains: redirect
+    profiles:
+      safe: miss-expected
+      advanced: hit

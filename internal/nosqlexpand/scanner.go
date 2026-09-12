@@ -56,24 +56,29 @@ func (s *Scanner) Available(_ context.Context) bool { return true }
 func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
 	targets := pickTargets(sc)
 	made := 0
-	get := func(u string) string {
+	type fetch struct {
+		body   string
+		status int
+		length int
+	}
+	get := func(u string) fetch {
 		if made >= maxRequests {
-			return ""
+			return fetch{}
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		made++
 		resp, err := s.client.Get(cctx, u)
 		if err != nil || resp == nil {
-			return ""
+			return fetch{}
 		}
-		return string(resp.Body)
+		return fetch{body: string(resp.Body), status: resp.StatusCode, length: len(resp.Body)}
 	}
 
 	var findings []models.Finding
 	for _, target := range targets {
 		base := get(target)
-		if base == "" {
+		if base.body == "" {
 			continue
 		}
 		control := get(withParam(target, "anpucontrolxyz", "anputest9"))
@@ -82,17 +87,21 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			param  string
 			value  string
 			marker string
+			status int
+			length int
 		}
 		var hits []hit
+		var verdicts []string
 		for _, p := range nosqlProbes {
 			if made >= maxRequests {
 				break
 			}
-			body := get(withParam(target, p.param, p.value))
-			if body == "" || body == base || body == control {
+			r := get(withParam(target, p.param, p.value))
+			if r.body == "" || r.body == base.body || r.body == control.body {
+				verdicts = append(verdicts, fmt.Sprintf("%s: no-change (%d, %dB vs base %dB)", p.name, r.status, r.length, base.length))
 				continue
 			}
-			lower := strings.ToLower(body)
+			lower := strings.ToLower(r.body)
 			marker := ""
 			for _, m := range nosqlMarkers {
 				if strings.Contains(lower, m) {
@@ -100,20 +109,23 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 					break
 				}
 			}
-			hits = append(hits, hit{probe: p.name, param: p.param, value: p.value, marker: marker})
+			verdicts = append(verdicts, fmt.Sprintf("%s: changed (%d, %dB vs base %dB%s)", p.name, r.status, r.length, base.length, markerSuffix(marker)))
+			hits = append(hits, hit{probe: p.name, param: p.param, value: p.value, marker: marker, status: r.status, length: r.length})
 		}
 		if len(hits) == 0 {
 			continue
 		}
-		// Corroboration bar: a backend error marker or TWO distinct
-		// probes differing earns Medium; a lone differential without
-		// any marker is Low — modern frameworks (SSR, image
-		// optimizers, edge middleware) routinely answer unknown
-		// params differently without any NoSQL backend involved.
+		// Two-confirmation rule: a raw response differential alone never
+		// scores above LOW — modern frameworks (SSR, image optimizers,
+		// edge middleware) answer unknown params differently with no
+		// NoSQL backend involved. An independent second signal is
+		// required for Medium: a backend error marker (MongoError,
+		// CastError, BSON, $where, mongod, ObjectId). Same-family
+		// probe-count alone does not corroborate.
 		chosen := hits[0]
 		sev := models.SeverityLow
 		conf := models.ConfidenceLow
-		standing := "single-signal differential without a backend marker — possible framework behavior, needs review"
+		standing := "unconfirmed differential, manual verification required — response differs from baseline + control with no independent backend signal"
 		for _, h := range hits {
 			if h.marker != "" {
 				chosen = h
@@ -123,12 +135,11 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 				break
 			}
 		}
-		if sev == models.SeverityLow && len(hits) >= 2 {
-			sev = models.SeverityMedium
-			conf = models.ConfidenceMedium
-			standing = fmt.Sprintf("%d distinct operator probes (%s, %s) corroborate", len(hits), hits[0].probe, hits[1].probe)
+		verdictSummary := strings.Join(verdicts, "; ")
+		if len(verdictSummary) > 600 {
+			verdictSummary = verdictSummary[:600] + "..."
 		}
-		obs := fmt.Sprintf("operator %q changes response vs baseline + control (%s)", chosen.probe, standing)
+		obs := fmt.Sprintf("operator %q changes response vs baseline + control (%s; probes: %s)", chosen.probe, standing, verdictSummary)
 		if chosen.marker != "" {
 			obs = fmt.Sprintf("operator %q leaks marker %q", chosen.probe, chosen.marker)
 		}
@@ -153,6 +164,13 @@ func markerNote(m string) string {
 		return ""
 	}
 	return fmt.Sprintf(" (backend marker %q)", m)
+}
+
+func markerSuffix(m string) string {
+	if m == "" {
+		return ""
+	}
+	return fmt.Sprintf(", marker=%s", m)
 }
 
 func pickTargets(sc *scanner.ScanContext) []string {

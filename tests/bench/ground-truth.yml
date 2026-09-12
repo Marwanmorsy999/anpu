@@ -31,7 +31,7 @@ calibration:
   notes:
     - safe is deterministic across runs (passive engines only).
     - backup-zip hit 3/4 advanced runs; the single miss was the first
-      (cold) run. Mechanism unproven — tracked, non-gating ("gate: false").
+      (cold) run. Mechanism unproven — tracked below as non-gating.
     - verbose scans add ~25 "<tool> external run" info findings; the
       harness always runs default (non-verbose) scans.
 signals:

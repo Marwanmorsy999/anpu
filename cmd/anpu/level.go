@@ -41,6 +41,7 @@ func newLevelCmd(use string, profile models.Profile, short string) *cobra.Comman
 		checkpointLevel        string
 		resumeLevel            string
 		riskAcceptLevel        string
+		budgetLevel            time.Duration
 		disableModsLevel       []string
 		enableModsLevel        []string
 		onlyModsLevel          []string
@@ -71,6 +72,7 @@ func newLevelCmd(use string, profile models.Profile, short string) *cobra.Comman
 				Checkpoint:           checkpointLevel,
 				Resume:               resumeLevel,
 				RiskAccept:           riskAcceptLevel,
+				Budget:               budgetLevel,
 				Ghost:                ghostLevel,
 				GhostCanaryPrefix:    ghostCanaryPrefixLevel,
 				GhostWorkers:         ghostWorkersLevel,
@@ -137,6 +139,7 @@ func newLevelCmd(use string, profile models.Profile, short string) *cobra.Comman
 	cmd.Flags().StringVar(&checkpointLevel, "checkpoint", "", "write per-stage checkpoint snapshots here for --resume")
 	cmd.Flags().StringVar(&resumeLevel, "resume", "", "resume an interrupted scan from a checkpoint file")
 	cmd.Flags().StringVar(&riskAcceptLevel, "risk-accept", "", "suppress finding IDs listed in a YAML accept file")
+	cmd.Flags().DurationVar(&budgetLevel, "budget", 0, "cap total scan wall time, e.g. 15m (0 = uncapped)")
 	cmd.Flags().StringSliceVar(&disableModsLevel, "disable", nil, "disable modules (comma-separated, e.g. --disable dirs,active)")
 	cmd.Flags().StringSliceVar(&enableModsLevel, "enable", nil, "enable modules (comma-separated, e.g. --enable portscan,naabu)")
 	cmd.Flags().StringSliceVar(&onlyModsLevel, "only", nil, "run only this module(s) (e.g. --only headers,tls)")

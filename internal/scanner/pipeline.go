@@ -249,6 +249,18 @@ func (p *Pipeline) Run(
 	}
 
 	i := 0
+	// Scan-time budget (--budget): stages run in declared phase order
+	// (passive value first), and once the budget is spent the queue
+	// stops between stages with per-phase coverage in the warnings.
+	// Coverage counts runnable stages only (enabled, available,
+	// not resumed) — profile-gated skips are not "missed".
+	budgetStart := time.Now()
+	covTotal := map[Phase]int{}
+	covDone := map[Phase]int{}
+	budgetHit := false
+	overBudget := func() bool {
+		return cfg.Budget > 0 && time.Since(budgetStart) >= cfg.Budget
+	}
 	for i < len(p.Stages) {
 		stage := p.Stages[i]
 		if !stage.Enabled {
@@ -273,6 +285,15 @@ func (p *Pipeline) Run(
 			i++
 			continue
 		}
+		covTotal[stage.Phase]++
+		if overBudget() {
+			budgetHit = true
+			if progress != nil {
+				progress(StageProgress{StageName: stage.Label, Skipped: true, Reason: fmt.Sprintf("over scan budget (%s)", cfg.Budget), Phase: stage.Phase})
+			}
+			i++
+			continue
+		}
 
 		// Parallel group: maximal contiguous run of enabled, available,
 		// concurrent stages. Each gets a snapshot; results merge back
@@ -293,6 +314,7 @@ func (p *Pipeline) Run(
 					res, rerr := results[k].res, results[k].err
 					charge(st.Phase, results[k].dur)
 					stageDur[st.Label] = results[k].dur
+					covDone[st.Phase]++
 					if rerr != nil {
 						summary.Warnings = append(summary.Warnings, fmt.Sprintf("%s: %v", st.Label, rerr))
 						if progress != nil {
@@ -331,6 +353,7 @@ func (p *Pipeline) Run(
 		d := time.Since(t0)
 		charge(stage.Phase, d)
 		stageDur[stage.Label] = d
+		covDone[stage.Phase]++
 		if err != nil {
 			summary.Warnings = append(summary.Warnings, fmt.Sprintf("%s: %v", stage.Label, err))
 			if progress != nil {
@@ -362,6 +385,24 @@ func (p *Pipeline) Run(
 			})
 		}
 		i++
+	}
+
+	// Budget coverage report: per-phase completed vs runnable stages so
+	// a capped scan is honest about what it did not get to.
+	if budgetHit {
+		parts := []string{}
+		for _, ph := range []Phase{PhaseFoundation, PhaseDiscovery, PhaseTargeted, PhaseActive} {
+			if covTotal[ph] == 0 {
+				continue
+			}
+			parts = append(parts, fmt.Sprintf("%s %d/%d", ph, covDone[ph], covTotal[ph]))
+		}
+		if len(parts) == 0 {
+			parts = append(parts, "no runnable stages")
+		}
+		summary.Warnings = append(summary.Warnings, fmt.Sprintf(
+			"budget: stopped at %s — coverage %s (remaining stages skipped, rerun without --budget for full coverage)",
+			cfg.Budget, strings.Join(parts, ", ")))
 	}
 
 	summary.Findings = dedup(summary.Findings)

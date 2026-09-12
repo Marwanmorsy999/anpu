@@ -1,5 +1,7 @@
 package main
 
+import "time"
+
 // runtime.go — explicit scan runtime state (Phase 6).
 //
 // runScan used to read 15 package globals populated by flag parsing,
@@ -43,6 +45,9 @@ type ScanRuntime struct {
 	GhostWorkers      int
 	// ProxyPool rotates per-request proxies from a file.
 	ProxyPool string
+	// Budget caps total scan wall time (0 = uncapped). Queued stages
+	// stop between stages with per-phase coverage in the warnings.
+	Budget time.Duration
 }
 
 // applyUnsafeOverride folds --unsafe into its implied settings.

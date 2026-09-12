@@ -78,6 +78,7 @@ anpu scan
 | `--enable <a,b>` | empty | Enable modules (e.g. `--enable archiveurls,certsan`). |
 | `--disable <a,b>` | empty | Disable modules (e.g. `--disable brokenlink,originip`). |
 | `--parallel N` | `8` | Run snapshot-safe stages concurrently with N workers (max 32); merging stays in stage order so output is deterministic. |
+| `--budget <dur>` | `0` | Cap total scan wall time, e.g. `15m` (queued stages stop between stages with per-phase coverage in warnings; `0` = uncapped). Makes capped scans viable in CI. |
 | `--checkpoint <path>` | empty | Write per-stage checkpoint snapshots here as the scan runs. |
 | `--resume <path>` | empty | Resume an interrupted scan from a checkpoint file (completed stages merge without re-running). |
 | `--risk-accept <path>` | empty | Suppress finding IDs listed in a YAML accept file (`accept: [{id, reason, expires}]`); expired entries re-arm with a warning. |

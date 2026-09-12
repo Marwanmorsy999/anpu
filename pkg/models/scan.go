@@ -106,6 +106,10 @@ type ScanConfig struct {
 	RateLimit float64
 	// RequestDelay is a fixed inter-request sleep added after every HTTP request.
 	RequestDelay time.Duration
+	// Budget caps total scan wall time (0 = uncapped). When exceeded,
+	// queued stages skip with a reason and the report carries per-phase
+	// coverage (completed vs runnable stages).
+	Budget time.Duration
 
 	// Auth is the credential context for this scan.  An empty AuthContext
 	// (Method == AuthMethodNone) means the scan runs anonymously.

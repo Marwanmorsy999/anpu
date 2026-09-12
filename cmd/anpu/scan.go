@@ -119,6 +119,7 @@ func newScanCmd() *cobra.Command {
 		autoInst       bool
 		yesFlag        bool
 		riskAcceptFlag string
+		budgetFlag     time.Duration
 	)
 
 	cmd := &cobra.Command{
@@ -145,6 +146,7 @@ are explicitly authorized to test.`,
 				AutoInstall:          autoInst,
 				AssumeYes:            yesFlag,
 				Unsafe:               unsafeFlag,
+				Budget:               budgetFlag,
 				Parallel:             parallelFlag,
 				Checkpoint:           checkpointFlag,
 				Resume:               resumeFlag,
@@ -292,6 +294,7 @@ are explicitly authorized to test.`,
 	cmd.Flags().StringVar(&checkpointFlag, "checkpoint", "", "write per-stage checkpoint snapshots here for --resume")
 	cmd.Flags().StringVar(&resumeFlag, "resume", "", "resume an interrupted scan from a checkpoint file")
 	cmd.Flags().StringVar(&riskAcceptFlag, "risk-accept", "", "suppress finding IDs listed in a YAML accept file (id/reason/expires)")
+	cmd.Flags().DurationVar(&budgetFlag, "budget", 0, "cap total scan wall time, e.g. 15m (queued stages stop between stages with per-phase coverage; 0 = uncapped)")
 	cmd.Flags().BoolVar(&jsonlOut, "jsonl", false, "stream findings as JSON lines to stdout for piping (implies --silent human output)")
 
 	return cmd
@@ -568,6 +571,7 @@ func runScan(cmd *cobra.Command, rt *ScanRuntime, targetArg, profileStr string, 
 		cfg := models.ScanConfig{
 			Target:        target.Raw,
 			TargetAliases: targetAliases,
+			Budget:        rt.Budget,
 			Profile:       profile,
 			OutputDir:     outputDir,
 			JSON:          jsonOut,

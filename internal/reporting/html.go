@@ -206,6 +206,17 @@ const htmlReportTemplate = `<!DOCTYPE html>
     {{end}}
   </section>
 
+  {{if .Summary.NucleiCorrelation}}
+  <section>
+    <h2>Nuclei correlation</h2>
+    <p style="color:var(--muted)">Overlap between ANPU-native engines and Nuclei template matches, derived from post-dedup finding sources. <strong>Native-only</strong> means Nuclei ran but reported nothing for that issue; <strong>Nuclei-only</strong> means no native engine reported it. Neither side is ground truth — treat both lists as review queues.</p>
+    {{range .NucleiCorr}}
+    <h3>{{.Heading}} ({{len .Items}})</h3>
+    {{if .Items}}<ul>{{range .Items}}<li>{{.}}</li>{{end}}</ul>{{else}}<p>None.</p>{{end}}
+    {{end}}
+  </section>
+  {{end}}
+
   {{if .Summary.PhaseTimings}}
   <section>
     <h2>Pipeline phases</h2>
@@ -266,6 +277,14 @@ type htmlReportData struct {
 	MediumCount        int
 	LowCount           int
 	InfoCount          int
+	NucleiCorr         []NucleiCorrGroup
+}
+
+// NucleiCorrGroup is one rendered row-set of the Nuclei correlation
+// section: a heading plus "ID — Title" items.
+type NucleiCorrGroup struct {
+	Heading string
+	Items   []string
 }
 
 var reportFuncs = template.FuncMap{
@@ -296,6 +315,36 @@ func RiskGrade(score float64) string {
 		return "B"
 	default:
 		return "A"
+	}
+}
+
+// nucleiCorrGroups resolves correlation finding IDs to "ID — Title"
+// rows for the HTML section. Unknown IDs (e.g. findings since filtered)
+// render bare rather than vanishing.
+func nucleiCorrGroups(summary *models.ScanSummary) []NucleiCorrGroup {
+	if summary.NucleiCorrelation == nil {
+		return nil
+	}
+	titles := map[string]string{}
+	for _, f := range summary.Findings {
+		titles[f.ID] = f.Title
+	}
+	resolve := func(ids []string) []string {
+		var out []string
+		for _, id := range ids {
+			if t, ok := titles[id]; ok && t != "" {
+				out = append(out, id+" — "+t)
+			} else {
+				out = append(out, id)
+			}
+		}
+		return out
+	}
+	c := summary.NucleiCorrelation
+	return []NucleiCorrGroup{
+		{Heading: "Confirmed by both", Items: resolve(c.Agreed)},
+		{Heading: "Native-only (Nuclei ran but did not report)", Items: resolve(c.AnpuOnly)},
+		{Heading: "Nuclei-only (no native engine reported)", Items: resolve(c.NucleiOnly)},
 	}
 }
 
@@ -331,6 +380,7 @@ func WriteHTML(summary *models.ScanSummary, path string) error {
 		MediumCount:        summary.SeverityCounts[models.SeverityMedium],
 		LowCount:           summary.SeverityCounts[models.SeverityLow],
 		InfoCount:          summary.SeverityCounts[models.SeverityInfo],
+		NucleiCorr:         nucleiCorrGroups(summary),
 	}
 
 	f, err := os.Create(path) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).

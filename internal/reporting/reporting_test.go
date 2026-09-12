@@ -73,6 +73,43 @@ func TestWriteHTMLSeverityOrder(t *testing.T) {
 	}
 }
 
+func TestWriteHTMLNucleiCorrelation(t *testing.T) {
+	mk := func() *models.ScanSummary {
+		return &models.ScanSummary{Target: "https://example.com",
+			Findings: []models.Finding{
+				{ID: "a1", Severity: models.SeverityHigh, Title: "Agreed issue"},
+				{ID: "n1", Severity: models.SeverityLow, Title: "Native only issue"},
+			},
+			NucleiCorrelation: &models.NucleiCorrelation{
+				NucleiAvailable: true,
+				Agreed:          []string{"a1"},
+				AnpuOnly:        []string{"n1"},
+			}}
+	}
+	path := filepath.Join(t.TempDir(), "out.html")
+	if err := WriteHTML(mk(), path); err != nil {
+		t.Fatalf("WriteHTML: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	html := string(raw)
+	for _, want := range []string{"Nuclei correlation", "Confirmed by both", "a1 — Agreed issue", "Native-only", "n1 — Native only issue", "Nuclei-only"} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("HTML must render correlation %q", want)
+		}
+	}
+	// Nil correlation (old reports, nuclei off): section hidden.
+	plain := mk()
+	plain.NucleiCorrelation = nil
+	path2 := filepath.Join(t.TempDir(), "out2.html")
+	if err := WriteHTML(plain, path2); err != nil {
+		t.Fatalf("WriteHTML: %v", err)
+	}
+	raw2, _ := os.ReadFile(path2)
+	if strings.Contains(string(raw2), "Nuclei correlation") {
+		t.Fatal("HTML must omit the correlation section when nil")
+	}
+}
+
 func TestWriteCSVAndMarkdown(t *testing.T) {
 	sum := &models.ScanSummary{Target: "https://example.com", Profile: "safe",
 		Findings: []models.Finding{

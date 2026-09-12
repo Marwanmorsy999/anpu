@@ -45,6 +45,18 @@ try {
   $got = (Get-FileHash -Path (Join-Path $Tmp $ZipName) -Algorithm SHA256).Hash.ToLower()
   if ($got -ne $want.ToLower()) { Write-Error "anpu installer: checksum mismatch (want $want, got $got)"; exit 1 }
 
+  # Cosign signature over checksums.txt (Sigstore keyless, published per
+  # release as checksums.txt.sigstore.json). Verified when cosign is
+  # available; otherwise the SHA-256 check above is the verification.
+  if (Get-Command cosign -ErrorAction SilentlyContinue) {
+    Write-Host "anpu installer: verifying cosign signature..."
+    Invoke-WebRequest -Uri "$Base/checksums.txt.sigstore.json" -OutFile (Join-Path $Tmp "checksums.txt.sigstore.json")
+    & cosign verify-blob --bundle (Join-Path $Tmp "checksums.txt.sigstore.json") --certificate-identity-regexp "^https://github.com/$Repo/\.github/workflows/release\.yml@refs/tags/.*$" --certificate-oidc-issuer "https://token.actions.githubusercontent.com" (Join-Path $Tmp "checksums.txt")
+    if ($LASTEXITCODE -ne 0) { Write-Error "anpu installer: cosign signature verification failed"; exit 1 }
+  } else {
+    Write-Host "anpu installer: cosign not found, skipping signature verification (checksum verified; install cosign from https://docs.sigstore.dev for full verification)"
+  }
+
   Expand-Archive -Path (Join-Path $Tmp $ZipName) -DestinationPath (Join-Path $Tmp "out") -Force
   $bin = Get-ChildItem -Path (Join-Path $Tmp "out") -Filter "anpu.exe" -Recurse | Select-Object -First 1
   if ($null -eq $bin) { Write-Error "anpu installer: archive did not contain anpu.exe"; exit 1 }

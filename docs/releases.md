@@ -19,7 +19,9 @@ irm https://raw.githubusercontent.com/Marwanmorsy999/anpu/main/install.ps1 | iex
 ```
 
 Both scripts resolve the latest release, verify the SHA-256 checksum
-against `checksums.txt`, and install the binary. Useful overrides:
+against `checksums.txt`, verify the cosign signature over
+`checksums.txt` when `cosign` is installed, and install the binary.
+Useful overrides:
 
 ```sh
 ANPU_VERSION=v0.3.1 install.sh            # pin a version
@@ -48,7 +50,10 @@ sudo pacman -U ./anpu_<version>_linux_amd64.pkg.tar.zst
 
 The preferred path for most users is the repository's **Releases** page. Release archives are produced by GoReleaser and are published when a `v*` tag is pushed. The release workflow also smoke-tests the published Linux amd64 artifact before the workflow completes. See `.github/workflows/release.yml` for the authoritative automation.
 
-Each release contains a platform archive and `checksums.txt`.
+Each release contains a platform archive, `checksums.txt`, and the
+cosign signature bundle `checksums.txt.sigstore.json`. Every published
+archive and package is additionally covered by SLSA build provenance
+(GitHub artifact attestations, Sigstore-signed).
 
 Current release targets are:
 
@@ -101,6 +106,12 @@ Only scan systems you own or are explicitly authorized to test.
 
 ## 2. Verify a downloaded release
 
+Three independent layers, strongest last. All three are produced by
+`.github/workflows/release.yml` on every `v*` tag, and the workflow
+re-verifies all three against the published files before finishing.
+
+### 2a. SHA-256 checksum (required)
+
 GoReleaser publishes `checksums.txt` alongside the release archives. Use it to verify the downloaded file before execution.
 
 On Linux/macOS:
@@ -118,6 +129,38 @@ Get-FileHash .\anpu_<version>_windows_amd64.tar.gz -Algorithm SHA256
 ```
 
 The reported digest must match the release checksum.
+
+### 2b. Cosign signature (recommended, needs `cosign`)
+
+`checksums.txt` is signed keyless via Sigstore (Fulcio + Rekor) under
+the release workflow's identity, and the bundle is published as
+`checksums.txt.sigstore.json`. This proves the checksums — and
+transitively every artifact — were produced by ANPU's release workflow,
+not just by someone holding a file with matching hashes.
+
+```sh
+cosign verify-blob --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/Marwanmorsy999/anpu/\.github/workflows/release\.yml@refs/tags/.*$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+```
+
+Install cosign from https://docs.sigstore.dev/. The `install.sh` /
+`install.ps1` scripts run this check automatically when `cosign` is on
+`PATH` and fail closed if the signature is invalid.
+
+### 2c. SLSA build provenance (strongest, needs `gh`)
+
+Every file in `checksums.txt` carries a Sigstore-signed SLSA provenance
+attestation (GitHub artifact attestations) recording exactly which
+repository, workflow, and commit built it:
+
+```sh
+gh attestation verify anpu_<version>_linux_amd64.tar.gz --repo Marwanmorsy999/anpu
+```
+
+A passing verification means: this exact byte sequence was built from
+commit `<sha>` of `Marwanmorsy999/anpu` by `.github/workflows/release.yml`.
 
 ## 3. Run the first scan
 
@@ -172,7 +215,8 @@ git push origin v0.2.0
 
 5. GitHub Actions starts `.github/workflows/release.yml`.
 6. GoReleaser builds the configured OS/architecture matrix, creates archives, generates `checksums.txt`, and publishes the GitHub Release.
-7. The release workflow downloads the published Linux amd64 archive and runs `anpu --version` and `anpu --help` as a post-publish smoke test.
+7. The workflow then attests every file in `checksums.txt` (SLSA provenance), signs `checksums.txt` with keyless cosign, and uploads `checksums.txt.sigstore.json` to the release.
+8. The release workflow downloads the published Linux amd64 archive and runs `anpu --version` and `anpu --help` as a post-publish smoke test, then re-verifies the checksum, the cosign bundle, and the SLSA attestation against the published files.
 
 Do not publish a release from a failing or unreviewed `main` branch.
 
@@ -195,7 +239,10 @@ After publishing:
 - [ ] Release is visible on GitHub.
 - [ ] Expected archives are present.
 - [ ] `checksums.txt` is present.
+- [ ] `checksums.txt.sigstore.json` (cosign bundle) is present.
 - [ ] Downloaded artifact checksum matches.
+- [ ] `cosign verify-blob` passes (section 2b).
+- [ ] `gh attestation verify` passes (section 2c).
 - [ ] The published binary reports the expected version.
 - [ ] The release notes clearly identify new features, fixes, limitations, and any breaking changes.
 

@@ -74,6 +74,20 @@ else
   echo "anpu installer: no sha256sum/shasum found, skipping verification (NOT recommended)" >&2
 fi
 
+# Cosign signature over checksums.txt (Sigstore keyless, published per
+# release as checksums.txt.sigstore.json). Verified when cosign is
+# available; otherwise the SHA-256 check above is the verification.
+if command -v cosign >/dev/null 2>&1; then
+  echo "anpu installer: verifying cosign signature..." >&2
+  curl -sSL --fail -o "$TMPDIR/checksums.txt.sigstore.json" "$BASE/checksums.txt.sigstore.json"
+  cosign verify-blob --bundle "$TMPDIR/checksums.txt.sigstore.json" \
+    --certificate-identity-regexp "^https://github.com/$REPO/\.github/workflows/release\.yml@refs/tags/.*$" \
+    --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+    "$TMPDIR/checksums.txt"
+else
+  echo "anpu installer: cosign not found, skipping signature verification (checksum verified; install cosign from https://docs.sigstore.dev for full verification)" >&2
+fi
+
 tar -xzf "$TMPDIR/$TARBALL" -C "$TMPDIR"
 
 BIN_SRC="$TMPDIR/anpu"

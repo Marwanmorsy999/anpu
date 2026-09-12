@@ -1,0 +1,68 @@
+name: False Positive Report
+description: Report a finding you believe ANPU got wrong
+title: "[FP] "
+labels: ["false-positive"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping ANPU stay honest about what it can prove.
+        If this is a security vulnerability in ANPU itself, do NOT file a public issue — see `SECURITY.md` and use **Repository → Security → Advisories → Report a vulnerability**.
+        Only report scans against targets you own or are explicitly authorized to test.
+  - type: input
+    id: version
+    attributes:
+      label: ANPU Version
+      description: Output of `anpu version` (e.g., v0.2.0)
+      placeholder: vX.Y.Z
+    validations:
+      required: true
+  - type: dropdown
+    id: profile
+    attributes:
+      label: Scan profile
+      description: Which profile produced the finding?
+      options:
+        - safe
+        - advanced
+        - other (specify in details)
+    validations:
+      required: true
+  - type: input
+    id: finding
+    attributes:
+      label: Finding type / title
+      description: 'The finding title as shown in the report (e.g., "Missing Security Header: CSP").'
+      placeholder: e.g., Exposed .env file
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Command run and target type. Do NOT paste credentials, tokens, or unauthorized real-world targets — use a sanitized local/mock reproduction where possible.
+      placeholder: |
+        1. Run `anpu scan http://localhost:8080 --profile safe`
+        2. Observe finding ...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence ANPU cited
+      description: Paste the evidence block from the JSON/HTML report that you believe is wrong. Redact secrets.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: why-fp
+    attributes:
+      label: Why is this a false positive?
+      description: What did you check manually that contradicts the finding?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should ANPU have reported instead?
+      description: E.g., no finding, lower confidence, or a different classification.

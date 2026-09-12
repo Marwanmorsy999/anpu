@@ -66,19 +66,27 @@ So the bonus is `0.0` for one source, `0.15` for two sources, `0.30` for three, 
 
 ## Aggregate scan score
 
-The overall scan score is not simply the average of findings. ANPU uses the highest individual finding score and then adds a volume bonus for medium-or-higher findings: 
+The overall scan score is not simply the average of findings. Only **confirmed** findings feed the grade numerator: the highest confirmed finding score plus a volume bonus for confirmed medium-or-higher findings. Unconfirmed differentials and informational observations add only a small posture penalty, not risk:
 
 ```text
-Aggregate = min(Max Finding Score + Volume Bonus, 10.0)
+Aggregate = min(Max Confirmed Score + Volume Bonus + Posture Penalty, 10.0)
 ```
 
 The volume bonus is:
 
 ```text
-min(0.15 × count_of_medium_or_higher_findings, 1.5)
+min(0.15 × count_of_confirmed_medium_or_higher_findings, 1.5)
 ```
 
-Informational findings do not contribute to the aggregate score.
+The posture penalty is:
+
+```text
+min(0.10 × count_of_unconfirmed_non_info_findings, 1.0)
+```
+
+A finding counts as confirmed when it carries high/confirmed confidence without a needs-review flag (single-technique, disputed sources), or when independent sources agree (merged). Informational findings do not contribute to the aggregate score.
+
+This keeps the grade honest: a scan whose top finding is an unconfirmed differential grades on posture (A/B territory), not on unproven risk.
 
 This makes the score sensitive to both the most serious issue and the breadth of the security problem without allowing a large number of low-severity observations to dominate the result.
 

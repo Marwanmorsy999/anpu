@@ -57,9 +57,48 @@ func TestAggregateScoreVolumeAndInfo(t *testing.T) {
 	}
 	many := []models.Finding{}
 	for i := 0; i < 20; i++ {
-		many = append(many, models.Finding{Severity: models.SeverityMedium, RiskScore: 3.5})
+		many = append(many, models.Finding{Severity: models.SeverityMedium, Confidence: models.ConfidenceHigh, RiskScore: 3.5})
 	}
 	if got := AggregateScore(many); got != 5.0 {
 		t.Fatalf("volume bonus must cap at 1.5 over max 3.5 = 5.0, got %.1f", got)
+	}
+}
+
+// Unconfirmed differentials (low confidence, no corroboration) must not
+// drive the grade numerator — only a capped posture penalty.
+func TestAggregateUnconfirmedIsPostureOnly(t *testing.T) {
+	diffs := []models.Finding{}
+	for i := 0; i < 20; i++ {
+		diffs = append(diffs, models.Finding{Severity: models.SeverityMedium, Confidence: models.ConfidenceLow, RiskScore: 3.5})
+	}
+	if got := AggregateScore(diffs); got != 1.0 {
+		t.Fatalf("20 unconfirmed must cap at posture 1.0, got %.1f", got)
+	}
+	single := []models.Finding{{Severity: models.SeverityHigh, Confidence: models.ConfidenceLow, RiskScore: 5.0}}
+	if got := AggregateScore(single); got != 0.1 {
+		t.Fatalf("one unconfirmed high must be posture 0.1, got %.1f", got)
+	}
+}
+
+// Needs-review findings (single-technique, disputed sources) stay out of
+// the numerator even at high confidence.
+func TestAggregateNeedsReviewExcluded(t *testing.T) {
+	fs := []models.Finding{{
+		Severity: models.SeverityHigh, Confidence: models.ConfidenceHigh, RiskScore: 6.4,
+		EvidenceBundle: &models.EvidenceBundle{NeedsReview: true, Technique: "single-technique"},
+	}}
+	if got := AggregateScore(fs); got != 0.1 {
+		t.Fatalf("needs-review must be posture-only, got %.1f", got)
+	}
+}
+
+// Multi-source agreement counts as confirmed even without high confidence.
+func TestAggregateMergedCountsConfirmed(t *testing.T) {
+	fs := []models.Finding{{
+		Severity: models.SeverityMedium, Confidence: models.ConfidenceMedium, RiskScore: 3.5,
+		MergedFrom: make([]models.SourceRef, 2),
+	}}
+	if got := AggregateScore(fs); got != 3.7 {
+		t.Fatalf("merged medium must drive numerator (3.5+0.15=3.65→3.7), got %.1f", got)
 	}
 }

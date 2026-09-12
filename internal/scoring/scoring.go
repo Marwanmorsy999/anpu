@@ -98,18 +98,41 @@ func ScoreAll(fs []models.Finding) []models.Finding {
 	return fs
 }
 
-// AggregateScore computes the overall scan risk score (0-10) from a set
-// of already-scored findings. It is dominated by the single worst finding
-// but factors in the overall volume of medium+ severity issues, so that
-// "one high" and "one high plus twenty mediums" don't score identically.
-// Informational observations never affect the aggregate score.
+// confirmedForGrade reports whether a finding is proven enough to drive
+// the grade numerator: high/confirmed confidence without a needs-review
+// flag (single-technique or disputed-sources), or agreement from multiple
+// independent sources. Raw differentials (Low confidence, Medium without
+// corroboration) and info observations only add a small posture penalty.
+func confirmedForGrade(f models.Finding) bool {
+	if len(f.MergedFrom) > 1 {
+		return true
+	}
+	if f.EvidenceBundle != nil && f.EvidenceBundle.NeedsReview {
+		return false
+	}
+	return f.Confidence == models.ConfidenceHigh || f.Confidence == models.ConfidenceConfirmed
+}
+
+// AggregateScore computes the overall scan risk score (0-10). Only
+// confirmed findings feed the grade numerator (worst confirmed score +
+// volume bonus for confirmed medium+ issues); unconfirmed differentials
+// and info observations add a small capped posture penalty instead of
+// risk. Informational observations never affect the aggregate score.
 func AggregateScore(fs []models.Finding) float64 {
 	if len(fs) == 0 {
 		return 0
 	}
 	var maxScore float64
 	var volumeBonus float64
+	var posturePenalty float64
 	for _, f := range fs {
+		if f.Severity == models.SeverityInfo {
+			continue
+		}
+		if !confirmedForGrade(f) {
+			posturePenalty += 0.1
+			continue
+		}
 		if f.RiskScore > maxScore {
 			maxScore = f.RiskScore
 		}
@@ -118,7 +141,8 @@ func AggregateScore(fs []models.Finding) float64 {
 		}
 	}
 	volumeBonus = math.Min(volumeBonus, 1.5)
-	total := math.Min(maxScore+volumeBonus, 10.0)
+	posturePenalty = math.Min(posturePenalty, 1.0)
+	total := math.Min(maxScore+volumeBonus+posturePenalty, 10.0)
 	return math.Round(total*10) / 10
 }
 

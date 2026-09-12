@@ -119,6 +119,12 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(os.environ.get("BENCH_PORT", sys.argv[1] if len(sys.argv) > 1 else "8901"))
-    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print(f"bench fixture on 127.0.0.1:{port}", flush=True)
+    # Loopback by default (direct host runs stay local-only). Inside
+    # Docker the server must bind 0.0.0.0: port-forwarded connections
+    # arrive via the container's eth0, not its loopback, so a loopback
+    # bind refuses them. Compose sets BENCH_HOST=0.0.0.0 and publishes
+    # the port on host loopback only, keeping the same guarantee.
+    host = os.environ.get("BENCH_HOST", "127.0.0.1")
+    srv = ThreadingHTTPServer((host, port), Handler)
+    print(f"bench fixture on {host}:{port}", flush=True)
     srv.serve_forever()

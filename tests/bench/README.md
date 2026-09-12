@@ -29,6 +29,10 @@ go run ./cmd/anpu bench --target http://127.0.0.1:8901
 Tear down with `docker compose -f tests/bench/docker-compose.yml down`.
 The fixture binds loopback only and serves fake secrets (`server.py`
 `FAKE_ENV`) — safe to run anywhere, nothing leaves the machine.
+(Direct `python server.py` runs bind `127.0.0.1`; under compose the
+container listens on `0.0.0.0` while the port is published on host
+loopback only — Docker forwards host ports via container eth0, so a
+loopback bind inside the container would refuse them.)
 
 ## What's planted
 

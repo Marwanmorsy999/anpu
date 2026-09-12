@@ -21,9 +21,14 @@ services:
     command: ["python", "/srv/server.py"]
     volumes:
       - ./server.py:/srv/server.py:ro
+    # Published on host loopback only: the fixture never leaves the
+    # machine even though the container itself listens on 0.0.0.0
+    # (required — Docker forwards host ports via container eth0,
+    # which a loopback bind inside the container would refuse).
     ports:
-      - "8901:8901"
+      - "127.0.0.1:8901:8901"
     environment:
+      BENCH_HOST: "0.0.0.0"
       BENCH_PORT: "8901"
     read_only: true
     tmpfs:

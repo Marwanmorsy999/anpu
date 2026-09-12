@@ -18,6 +18,7 @@
 - [Scanner and Engine Reference](docs/scanners.md)
 - [Development and Testing](docs/development.md)
 - [Risk Scoring Deep Dive](docs/scoring.md)
+- [Trust & Supply Chain](docs/trust.md)
 - [CI/CD Integration](docs/ci-cd.md)
 - [Security Policy](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)

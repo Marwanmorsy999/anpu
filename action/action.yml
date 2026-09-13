@@ -1,0 +1,174 @@
+# ANPU scan action (composite).
+#
+# Runs an authorized ANPU scan with the checksum-verified install script,
+# gates on --fail-on, and reports grade + top findings to the step
+# summary (always) and optionally to the PR (comment: true).
+#
+# Minimal permissions: contents: read. Add pull-requests: write only
+# when comment: true. Uploading SARIF to code scanning stays a separate
+# step in the caller (needs security-events: write) — see docs/ci-cd.md.
+name: ANPU scan
+description: Authorized web-security scan with evidence-backed findings, deterministic grade, and SARIF/JSON reports.
+author: ANPU Contributors
+
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  target:
+    description: Target URL to scan. Only scan systems you own or are explicitly authorized to test.
+    required: true
+  profile:
+    description: Scan profile (safe, advanced, ultra).
+    required: false
+    default: safe
+  fail-on:
+    description: Fail the step on findings at or above this severity (none, low, medium, high, critical).
+    required: false
+    default: high
+  version:
+    description: ANPU release tag (e.g. v0.3.1) or latest. Pin for reproducible gates.
+    required: false
+    default: latest
+  sarif:
+    description: Write a SARIF 2.1.0 report.
+    required: false
+    default: "true"
+  json:
+    description: Keep the JSON report file (always generated internally for outputs/summary).
+    required: false
+    default: "true"
+  html:
+    description: Write an HTML report.
+    required: false
+    default: "false"
+  args:
+    description: Extra arguments appended verbatim to `anpu scan` (e.g. "--only headers,tls").
+    required: false
+    default: ""
+  comment:
+    description: "Post grade + top findings as a PR comment (needs pull-requests: write)."
+    required: false
+    default: "false"
+  output-dir:
+    description: Directory for generated reports (created if missing).
+    required: false
+    default: anpu-reports
+
+outputs:
+  grade:
+    description: Letter grade A-F derived from the aggregate risk score (mirrors ANPU RiskGrade).
+    value: ${{ steps.parse.outputs.grade }}
+  risk-score:
+    description: Aggregate risk score 0-10.
+    value: ${{ steps.parse.outputs.risk-score }}
+  json-report:
+    description: Path to the JSON report.
+    value: ${{ steps.parse.outputs.json-report }}
+  sarif-report:
+    description: Path to the SARIF report (empty when sarif is false).
+    value: ${{ steps.parse.outputs.sarif-report }}
+  html-report:
+    description: Path to the HTML report (empty when html is false).
+    value: ${{ steps.parse.outputs.html-report }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install ANPU (Linux/macOS)
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        ANPU_VERSION: ${{ inputs.version }}
+        ANPU_INSTALL_DIR: ${{ runner.temp }}/anpu-bin
+      run: |
+        set -euo pipefail
+        curl -sSL https://raw.githubusercontent.com/Marwanmorsy999/anpu/main/install.sh | sh
+        echo "${{ runner.temp }}/anpu-bin" >> "$GITHUB_PATH"
+
+    - name: Install ANPU (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        ANPU_VERSION: ${{ inputs.version }}
+        ANPU_INSTALL_DIR: ${{ runner.temp }}\anpu-bin
+      run: |
+        $ErrorActionPreference = "Stop"
+        irm https://raw.githubusercontent.com/Marwanmorsy999/anpu/main/install.ps1 | iex
+        "${{ runner.temp }}\anpu-bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+    - name: Run ANPU scan
+      id: scan
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "${{ inputs.output-dir }}"
+        # --json stays on: outputs, summary, and comment all parse it.
+        # shellcheck disable=SC2086 (inputs.args splitting is intentional)
+        set +e
+        anpu scan "${{ inputs.target }}" \
+          --profile "${{ inputs.profile }}" \
+          --fail-on "${{ inputs.fail-on }}" \
+          --json --sarif="${{ inputs.sarif }}" --html="${{ inputs.html }}" \
+          --output "${{ inputs.output-dir }}" \
+          ${{ inputs.args }}
+        SCAN_EXIT=$?
+        set -e
+        echo "scan exit: $SCAN_EXIT (non-zero means --fail-on tripped; reports are still written)"
+        exit "$SCAN_EXIT"
+
+    - name: Parse results
+      id: parse
+      if: always()
+      shell: bash
+      run: |
+        set -euo pipefail
+        OUT="${{ inputs.output-dir }}"
+        JSON_REPORT="$(ls "$OUT"/*.json 2>/dev/null | head -n 1 || true)"
+        if [ -z "$JSON_REPORT" ]; then
+          echo "::error::no JSON report in $OUT — the scan produced nothing to parse"
+          exit 1
+        fi
+        SARIF_REPORT="$(ls "$OUT"/*.sarif 2>/dev/null | head -n 1 || true)"
+        HTML_REPORT="$(ls "$OUT"/*.html 2>/dev/null | head -n 1 || true)"
+        SCORE="$(jq -r '.risk_score' "$JSON_REPORT")"
+        # Grade mirrors internal/reporting RiskGrade: >=9 F, >=8 E, >=7 D,
+        # >=5.5 C, >=3.5 B, else A.
+        GRADE="$(jq -r '.risk_score | if . >= 9 then "F" elif . >= 8 then "E" elif . >= 7 then "D" elif . >= 5.5 then "C" elif . >= 3.5 then "B" else "A" end' "$JSON_REPORT")"
+        {
+          echo "grade=$GRADE"
+          echo "risk-score=$SCORE"
+          echo "json-report=$JSON_REPORT"
+          echo "sarif-report=$SARIF_REPORT"
+          echo "html-report=$HTML_REPORT"
+        } >> "$GITHUB_OUTPUT"
+        {
+          echo "## ANPU scan: $GRADE ($SCORE/10)"
+          echo ""
+          echo "Target: \`${{ inputs.target }}\` · profile \`${{ inputs.profile }}\` · fail-on \`${{ inputs.fail-on }}\`"
+          echo ""
+          echo "Top findings:"
+          echo ""
+          jq -r '.findings | sort_by(.risk_score) | reverse | .[0:5] | .[] | "- [\(.severity)/\(.confidence)] \(.title) (score \(.risk_score))"' "$JSON_REPORT"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Comment on PR
+      if: always() && inputs.comment == 'true' && github.event_name == 'pull_request' && steps.parse.outcome == 'success'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        OUT="${{ inputs.output-dir }}"
+        JSON_REPORT="$(ls "$OUT"/*.json | head -n 1)"
+        {
+          echo "## ANPU scan: ${{ steps.parse.outputs.grade }} (${{ steps.parse.outputs.risk-score }}/10)"
+          echo ""
+          echo "Target: \`${{ inputs.target }}\` · profile \`${{ inputs.profile }}\`"
+          echo ""
+          jq -r '.findings | sort_by(.risk_score) | reverse | .[0:5] | .[] | "- [\(.severity)/\(.confidence)] \(.title) (score \(.risk_score))"' "$JSON_REPORT"
+          echo ""
+          echo "_Evidence-backed findings; full JSON/SARIF in workflow artifacts._"
+        } > "$RUNNER_TEMP/anpu-comment.md"
+        gh pr comment "${{ github.event.pull_request.number }}" --body-file "$RUNNER_TEMP/anpu-comment.md"

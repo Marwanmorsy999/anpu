@@ -33,6 +33,51 @@ A separate security workflow builds ANPU, runs it against a controlled Juice Sho
 
 ## GitHub Actions example
 
+### Option A: ANPU Action (recommended)
+
+```yaml
+name: ANPU Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read # + pull-requests: write only when comment: true
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - id: anpu
+        uses: Marwanmorsy999/anpu/action@v1
+        with:
+          target: https://staging.example.com
+          profile: advanced
+          fail-on: high
+          sarif: "true"
+          # version: v0.3.1  # pin for reproducible gates
+          # comment: "true"  # PR comment with grade + top findings
+
+      - name: Upload SARIF report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: anpu-sarif
+          path: ${{ steps.anpu.outputs.sarif-report }}
+          if-no-files-found: error
+```
+
+Replace `https://staging.example.com` with a system you own or are
+explicitly authorized to test. The action installs a checksum-verified
+release, so no Go toolchain is needed. See [`action/README.md`](../action/README.md)
+for all inputs/outputs.
+
+### Option B: build from source
+
 The following workflow builds ANPU from source, scans an authorized staging target, and uploads the generated SARIF report as a workflow artifact. The current repository workflow uses `actions/checkout@v7` and `actions/setup-go@v7` with the Go version from `go.mod`.
 
 ```yaml

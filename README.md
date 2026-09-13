@@ -225,6 +225,18 @@ See [docs/configuration.md](docs/configuration.md) for profile/module precedence
 
 See [docs/ci-cd.md](docs/ci-cd.md) for a complete GitHub Actions example and [docs/cli.md](docs/cli.md) for all command and flag details.
 
+### GitHub Action
+
+```yaml
+- uses: Marwanmorsy999/anpu/action@v1
+  with:
+    target: https://staging.example.com
+    profile: advanced
+    fail-on: high
+```
+
+Grade, risk score, and report paths come back as step outputs; a PR comment with the top findings is one `comment: "true"` away. Full inputs in [`action/README.md`](action/README.md).
+
 ## 8. Output formats
 
 ANPU can write:

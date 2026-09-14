@@ -1,0 +1,98 @@
+# Monthly release train: checklist automation, human-owned tagging.
+#
+# Deliberately NOT auto-tagging: pushing a v* tag publishes a real
+# release (signed artifacts, attestations, installers), and this repo
+# does not publish from unreviewed automation. Instead, on the 1st of
+# each month (or on demand), this workflow computes the next minor
+# version, snapshots the benchmark table, and opens a release-tracking
+# issue with the full checklist. A maintainer reviews, tags, and closes
+# the loop. Idempotent: re-runs skip when the issue already exists.
+name: Release train
+
+on:
+  schedule:
+    # Monthly on the 1st at 09:00 UTC.
+    - cron: '0 9 1 * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Override version (e.g. v0.4.0). Empty = next minor after latest release.
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Open release-train issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_OVERRIDE: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "$VERSION_OVERRIDE" ]; then
+            NEXT="$VERSION_OVERRIDE"
+          else
+            LATEST="$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo '')"
+            if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+              NEXT="v0.1.0"
+            else
+              NEXT="v$(echo "$LATEST" | sed 's/^v//' | awk -F. '{print $1"."($2+1)".0"}')"
+            fi
+          fi
+          MONTH="$(date -u +%Y-%m)"
+          TITLE="Release train $NEXT ($MONTH)"
+          if [ -n "$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number')" ]; then
+            echo "Issue already open for $TITLE — nothing to do."
+            exit 0
+          fi
+          BASE="$(git describe --tags --abbrev=0 2>/dev/null || echo '')"
+          if [ -n "$BASE" ]; then
+            # '|| true': head closing the pipe early (SIGPIPE) must not
+            # fail the run under 'set -o pipefail'.
+            CHANGES="$(git log "$BASE"..HEAD --oneline | head -n 50 || true)"
+          else
+            CHANGES="$(git log --oneline | head -n 50 || true)"
+          fi
+          BENCH="benchmark table not found (docs/benchmark.md markers missing)"
+          if grep -q "BENCH:START" docs/benchmark.md 2>/dev/null; then
+            BENCH="$(sed -n '/BENCH:START/,/BENCH:END/p' docs/benchmark.md)"
+          fi
+          {
+            echo "Monthly release candidate **$NEXT**. Human-owned tagging:"
+            echo "review the checklist, update CHANGELOG, then \`git tag $NEXT && git push origin $NEXT\`."
+            echo ""
+            echo "## Pre-tag checklist (from docs/releases.md)"
+            echo ""
+            echo "- [ ] \`main\` is green in CI (including the benchmark gate)."
+            echo "- [ ] CHANGELOG.md covers everything below."
+            echo "- [ ] Benchmark table is fresh (\`anpu bench --format markdown --check docs/benchmark.md\`)."
+            echo "- [ ] Version/tag choice is intentional (minor per cadence; patch for fixes only)."
+            echo ""
+            echo "## Changes since ${BASE:-the beginning}"
+            echo ""
+            echo '```'
+            echo "$CHANGES"
+            echo '```'
+            echo ""
+            echo "## Benchmark snapshot (shipped with the notes)"
+            echo ""
+            echo "$BENCH"
+            echo ""
+            echo "## Post-publish (release.yml verifies most of this automatically)"
+            echo ""
+            echo "- [ ] \`checksums.txt\` + \`checksums.txt.sigstore.json\` present."
+            echo "- [ ] CycloneDX SBOMs present per archive."
+            echo "- [ ] \`cosign verify-blob\` and \`gh attestation verify\` pass."
+            echo "- [ ] Release notes identify features, fixes, limitations, breaking changes."
+          } > /tmp/train.md
+          gh issue create --title "$TITLE" --body-file /tmp/train.md

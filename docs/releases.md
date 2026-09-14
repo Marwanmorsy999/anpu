@@ -227,6 +227,14 @@ git push origin v0.2.0
 
 Do not publish a release from a failing or unreviewed `main` branch.
 
+### Monthly cadence
+
+`.github/workflows/release-train.yml` runs on the 1st of each month
+(and on demand): it computes the next minor version, snapshots the
+benchmark table, and opens a release-tracking issue with the checklist
+above pre-filled. Tagging stays human-owned — automation prepares the
+release, never publishes it.
+
 ## 6. Release checklist
 
 Before creating the tag:

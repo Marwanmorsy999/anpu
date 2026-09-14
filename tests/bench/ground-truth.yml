@@ -29,11 +29,19 @@ calibrated_against: main@13bb274
 calibration:
   runs: 4 advanced + 1 safe (2026-09-12, local fixture, no nuclei binary)
   notes:
-    - safe is deterministic across runs (passive engines only).
-    - backup-zip hit 3/4 advanced runs; the single miss was the first
-      (cold) run. Mechanism unproven — tracked below as non-gating.
+    - safe verdicts are stable across 20+ runs; finding COUNTS wobble
+      (8 vs 12) under connection pressure — the gate compares verdicts,
+      never counts.
+    - backup-zip hit 3/4 calibration runs. Root cause found 2026-09-14:
+      the fixture's listen backlog (stdlib default 5) dropped connections
+      under scan burst; raised to 128 with 18/18 clean follow-up runs.
+      Stays non-gating until scheduled CI runs demonstrate stability;
+      re-gate after 4 consecutive green weekly runs.
     - verbose scans add ~25 "<tool> external run" info findings; the
       harness always runs default (non-verbose) scans.
+    - fetch failures under load produce silent rule misses (rules
+      fail closed on unreachable probes, correctly). Never overlap bench
+      runs; see docs/benchmark.md methodology.
 signals:
   - id: weak-headers
     description: No security headers served on / (expect headers-posture).

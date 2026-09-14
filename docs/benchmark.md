@@ -70,17 +70,24 @@ project exists to oppose.
 
 Signal-level HITs hide engine-level gaps worth stating plainly:
 
-- **open-redirect** was caught by redirectpack (`Open redirect confirmed`),
-  never by the active engine's `open-redirect` rule. Suspected mechanism:
-  the HTTP client follows the 302 to the unresolvable canary domain, so
-  the rule's `3xx + Location` check never sees it (verified code path,
-  `internal/active/open_redirect.go` vs `internal/http/client.go`).
-- **reflected-xss** was caught by the dalfox embedded candidate, never by
-  the active `xss-reflected` rule. Mechanism unproven — recorded, not
-  diagnosed.
-- **backup-zip** hit 3 of 4 calibration runs; the single miss was the
-  first (cold) run, mechanism unproven. Tracked as non-gating (`gate:
-  false` in ground truth) until root-caused.
+- **open-redirect** was caught by redirectpack (`Open redirect confirmed`)
+  while the active engine's `open-redirect` rule was provably dead: the
+  following HTTP client chased the unresolvable canary domain, so the
+  rule's `3xx + Location` check never saw it. Fixed with a no-redirect
+  client variant (`GetNoRedirect`, same guards/transport); the rule now
+  fires alongside redirectpack (verified live + unit-tested).
+- **reflected-xss** was caught by the dalfox embedded candidate. The
+  active `xss-reflected` rule itself fires correctly in isolation and
+  narrow runs; its full-scan silence correlates with fetch failures
+  under connection pressure (rules fail closed on unreachable probes —
+  correct behavior, invisible in output). A fixture listen-backlog fix
+  removed the largest pressure source; residual variance is tracked,
+  not hidden.
+- **backup-zip** hit 3 of 4 calibration runs. Root cause found: the
+  fixture dropped burst connections (listen backlog 5, raised to 128;
+  18/18 clean after). Tracked as non-gating (`gate: false`) until
+  scheduled CI runs demonstrate stability; re-gate after 4 consecutive
+  green weekly runs.
 - `/backup.zip`, `/go`, and `/search` were additionally flagged by the
   authz-tester as unauthenticated sensitive endpoints — corroboration,
   not double-counting.

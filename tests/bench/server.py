@@ -125,6 +125,11 @@ if __name__ == "__main__":
     # bind refuses them. Compose sets BENCH_HOST=0.0.0.0 and publishes
     # the port on host loopback only, keeping the same guarantee.
     host = os.environ.get("BENCH_HOST", "127.0.0.1")
+    # Deep listen queue: ANPU scans burst dozens of parallel requests
+    # (parallel stage groups); the stdlib default backlog of 5 drops
+    # connections under burst, which surfaces as flaky missing
+    # findings. 128 absorbs the burst on any loopback interface.
+    ThreadingHTTPServer.request_queue_size = 128
     srv = ThreadingHTTPServer((host, port), Handler)
     print(f"bench fixture on {host}:{port}", flush=True)
     srv.serve_forever()

@@ -36,6 +36,7 @@ func newScanCmd() *cobra.Command {
 		sarifOut              bool
 		csvOut                bool
 		mdOut                 bool
+		junitOut              bool
 		outputDir             string
 		noNuclei              bool
 		noZAP                 bool
@@ -185,7 +186,7 @@ are explicitly authorized to test.`,
 				active.GhostEnabled = false
 				anpuhttp.GhostCanaryPrefix = ghostCanaryPrefixFlag
 			}
-			return runScan(cmd, rt, targetArg, profile, jsonOut, htmlOut, sarifOut, csvOut, mdOut, outputDir, noNuclei, noZAP, noActive, noCSRF, noDeps, noTakeover, noSRI, noBackup, noKatana, noHttpx, noSubfinder, noDalfox, noDNSIntel, noIPIntel, noNaabu, noDNSx, noRDAP, noLeak, noFavicon, noDoH, noBucket, noBGP, noAPI, noAuthZ, oobHost, failOn, skipPreCheck,
+			return runScan(cmd, rt, targetArg, profile, jsonOut, htmlOut, sarifOut, csvOut, mdOut, junitOut, outputDir, noNuclei, noZAP, noActive, noCSRF, noDeps, noTakeover, noSRI, noBackup, noKatana, noHttpx, noSubfinder, noDalfox, noDNSIntel, noIPIntel, noNaabu, noDNSx, noRDAP, noLeak, noFavicon, noDoH, noBucket, noBGP, noAPI, noAuthZ, oobHost, failOn, skipPreCheck,
 				quiet, silent, plain, noBanner, proxyURL, minConfidence, rateLimit, requestDelay, stealth, randomAgent, customUA, disableMods, enableMods, onlyMods,
 				stdinFlag, listFile, jsonlOut,
 				authToken, authCookies, authHeaders, authRole,
@@ -200,6 +201,7 @@ are explicitly authorized to test.`,
 	cmd.Flags().BoolVar(&sarifOut, "sarif", false, "write a SARIF report")
 	cmd.Flags().BoolVar(&csvOut, "csv", false, "write a CSV finding export (one row per finding)")
 	cmd.Flags().BoolVar(&mdOut, "md", false, "write a Markdown finding summary")
+	cmd.Flags().BoolVar(&junitOut, "junit", false, "write a JUnit XML export for CI parsing")
 	cmd.Flags().StringVar(&outputDir, "output", "./reports", "directory to write reports into")
 	cmd.Flags().BoolVar(&noNuclei, "no-nuclei", false, "disable the Nuclei integration for this scan")
 	cmd.Flags().BoolVar(&noActive, "no-active", false, "disable the safe active testing engine (Phase 4) for this scan")
@@ -300,7 +302,7 @@ are explicitly authorized to test.`,
 	return cmd
 }
 
-func runScan(cmd *cobra.Command, rt *ScanRuntime, targetArg, profileStr string, jsonOut, htmlOut, sarifOut, csvOut, mdOut bool, outputDir string, noNuclei, noZAP, noActive, noCSRF, noDeps, noTakeover, noSRI, noBackup, noKatana, noHttpx, noSubfinder, noDalfox, noDNSIntel, noIPIntel, noNaabu, noDNSx, noRDAP, noLeak, noFavicon, noDoH, noBucket, noBGP, noAPI, noAuthZ bool, oobHost, failOn string, skipPreCheck bool,
+func runScan(cmd *cobra.Command, rt *ScanRuntime, targetArg, profileStr string, jsonOut, htmlOut, sarifOut, csvOut, mdOut, junitOut bool, outputDir string, noNuclei, noZAP, noActive, noCSRF, noDeps, noTakeover, noSRI, noBackup, noKatana, noHttpx, noSubfinder, noDalfox, noDNSIntel, noIPIntel, noNaabu, noDNSx, noRDAP, noLeak, noFavicon, noDoH, noBucket, noBGP, noAPI, noAuthZ bool, oobHost, failOn string, skipPreCheck bool,
 	quiet, silent, plain, noBanner bool, proxyURL, minConfidenceStr string, rateLimit float64, requestDelay time.Duration, stealth, randomAgent bool, customUA string, disableMods, enableMods, onlyMods []string,
 	stdinFlag bool, listFile string, jsonlOut bool,
 	authToken string, authCookies, authHeaders []string, authRole string,
@@ -690,7 +692,7 @@ func runScan(cmd *cobra.Command, rt *ScanRuntime, targetArg, profileStr string, 
 		dateStr := time.Now().Format("2006-01-02-150405")
 
 		reportPath, skipTarget, err := writeScanReports(summary,
-			reportOutputs{HTML: htmlOut, JSON: jsonOut, SARIF: sarifOut, CSV: csvOut, MD: mdOut},
+			reportOutputs{HTML: htmlOut, JSON: jsonOut, SARIF: sarifOut, CSV: csvOut, MD: mdOut, JUnit: junitOut},
 			outputDir, slug, dateStr, target.Raw, batch, &scanErrors)
 		if err != nil {
 			return err

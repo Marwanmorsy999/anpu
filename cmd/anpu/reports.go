@@ -20,6 +20,7 @@ type reportOutputs struct {
 	SARIF bool
 	CSV   bool
 	MD    bool
+	JUnit bool
 }
 
 // writeOneReport writes a single artifact file. On failure it either
@@ -76,6 +77,11 @@ func writeScanReports(summary *models.ScanSummary, opts reportOutputs, outputDir
 	}
 	if opts.MD {
 		if skip, err := write("Markdown", "md", reporting.WriteMarkdown); err != nil || skip {
+			return reportPath, skip, err
+		}
+	}
+	if opts.JUnit {
+		if skip, err := write("JUnit", "xml", reporting.WriteJUnit); err != nil || skip {
 			return reportPath, skip, err
 		}
 	}

@@ -10,6 +10,24 @@
 
 [![Build Status](https://img.shields.io/github/actions/workflow/status/Marwanmorsy999/anpu/ci.yml?branch=main&style=flat-square)](https://github.com/Marwanmorsy999/anpu/actions) [![Coverage](https://codecov.io/github.com/Marwanmorsy999/anpu/graph/badge.svg)](https://codecov.io/github.com/Marwanmorsy999/anpu) [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go)](https://go.dev/) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](https://github.com/Marwanmorsy999/anpu/blob/main/LICENSE) [![SARIF](https://img.shields.io/badge/SARIF-Supported-success?style=flat-square)](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?style=flat-square&logo=Docker)](https://docs.docker.com/)
 
+## Why ANPU
+
+- **Evidence-backed findings only.** No finding without observed evidence — unverifiable checks render as "unavailable", and [miss rates are published](docs/benchmark.md), not buried.
+- **One row per issue, whatever the engine.** Native analyzers, Nuclei, and ZAP deduplicate into a single finding with every source preserved, plus a Nuclei-overlap report.
+- **Deterministic scoring with explanations.** A 0–10 score and grade every run, with the math shown per finding; only confirmed findings move the grade.
+
+ANPU complements Nuclei and ZAP — it does not replace them:
+
+| Capability | Raw Nuclei | Raw ZAP | ANPU |
+|---|---|---|---|
+| Finding evidence | Template match output | Alert with request/response | Observed evidence required; unverifiable checks marked, never fabricated |
+| Multi-engine overlap | Single engine | Single engine | Dedupes native + Nuclei + ZAP into one row, sources preserved (`nuclei_correlation` overlap report) |
+| Risk grade | Per-template severity | Per-alert risk level | Deterministic 0–10 score + grade with per-finding explanation; only confirmed findings drive the grade |
+| Miss reporting | No output on no-match | No alert on no-match | Publishes detection *and* miss rates ([honesty benchmark](docs/benchmark.md)) |
+| Local-first run | Needs templates download | Needs daemon or Docker | Zero-dependency `safe` profile; optional tools degrade gracefully with a warning |
+
+`advanced`/`ultra` profiles run Nuclei/ZAP when installed and correlate their results — the table above is why the combination beats any single engine.
+
 ### Quick links
 
 - [Release & Installation Guide](docs/releases.md)

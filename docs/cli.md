@@ -312,6 +312,18 @@ Localhost-only by design: non-loopback `--addr` is refused (use an SSH
 tunnel for remote access), and only GET routes exist, so history can
 never be modified over HTTP.
 
+## `anpu plugin`
+
+Run user-supplied detections (YAML checks or Go plugins) through ANPU's
+guarded fetching. See [`plugins.md`](plugins.md) for the SDK contract.
+
+```sh
+anpu plugin init --dir mycheck
+anpu plugin list
+anpu plugin run --plugin mycheck/mycheck.yaml https://target.example
+anpu plugin run --name example-generator-meta https://target.example --format json
+```
+
 ## `anpu drift`
 
 Compare a current report against an authorized baseline with parser-pin verification (exit 1 on new findings or pin drift).

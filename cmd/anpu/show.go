@@ -55,8 +55,10 @@ files), URLs, and evidence excerpts.`,
 					exportErr = reporting.WriteCSV(summary, exportPath)
 				case "md", "markdown":
 					exportErr = reporting.WriteMarkdown(summary, exportPath)
+				case "junit", "xml":
+					exportErr = reporting.WriteJUnit(summary, exportPath)
 				default:
-					return fmt.Errorf("unknown --format %q: must be html, json, sarif, csv, or md", format)
+					return fmt.Errorf("unknown --format %q: must be html, json, sarif, csv, md, or junit", format)
 				}
 				if exportErr == nil {
 					_, _ = fmt.Fprintf(os.Stderr, "Wrote %s to %s\n", format, exportPath)
@@ -70,7 +72,7 @@ files), URLs, and evidence excerpts.`,
 	}
 
 	cmd.Flags().StringVar(&exportPath, "export", "", "re-render this scan to a file instead of printing a summary")
-	cmd.Flags().StringVar(&format, "format", "html", "export format when --export is set: html, json, sarif, csv, md")
+	cmd.Flags().StringVar(&format, "format", "html", "export format when --export is set: html, json, sarif, csv, md, junit")
 	cmd.Flags().StringVar(&severityFloor, "severity", "", "minimum severity to print: low, medium, high, critical (empty = all)")
 	cmd.Flags().IntVar(&limit, "limit", 50, "max findings to print (0 = all)")
 	cmd.Flags().BoolVar(&longOut, "long", false, "print full finding IDs, URLs, and evidence excerpts")

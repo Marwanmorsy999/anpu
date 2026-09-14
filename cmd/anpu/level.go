@@ -21,6 +21,7 @@ func newLevelCmd(use string, profile models.Profile, short string) *cobra.Comman
 		sarifOut               bool
 		csvOut                 bool
 		mdOut                  bool
+		junitOut               bool
 		jsonlOut               bool
 		proxyURL               string
 		stealth                bool
@@ -104,7 +105,7 @@ func newLevelCmd(use string, profile models.Profile, short string) *cobra.Comman
 			// Delegate to the full scan pipeline with level-appropriate profile.
 			// We reuse runScan with sensible defaults: html=true, silent/plain handling via reporting.
 			return runScan(cmd, rt, targetArg, string(profile),
-				jsonOut, true, sarifOut, csvOut, mdOut, outputDir,
+				jsonOut, true, sarifOut, csvOut, mdOut, junitOut, outputDir,
 				false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, "", "none", false,
 				false, false, false, false, proxyURL, "none", rateLimit, time.Duration(0), stealth, false, "", disableModsLevel, enableModsLevel, onlyModsLevel,
 				false, "", jsonlOut,
@@ -119,6 +120,7 @@ func newLevelCmd(use string, profile models.Profile, short string) *cobra.Comman
 	cmd.Flags().BoolVar(&sarifOut, "sarif", false, "also write SARIF report")
 	cmd.Flags().BoolVar(&csvOut, "csv", false, "also write CSV finding export")
 	cmd.Flags().BoolVar(&mdOut, "md", false, "also write Markdown finding summary")
+	cmd.Flags().BoolVar(&junitOut, "junit", false, "also write JUnit XML export")
 	cmd.Flags().BoolVar(&jsonlOut, "jsonl", false, "stream findings as JSONL to stdout")
 	cmd.Flags().StringVar(&proxyURL, "proxy", "", "proxy URL (http/https/socks5) e.g. http://127.0.0.1:8080")
 	cmd.Flags().BoolVar(&stealth, "stealth", false, "random UA + jitter + TLS shuffle")

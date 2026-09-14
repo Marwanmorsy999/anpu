@@ -235,7 +235,7 @@ Single installs print the recipe and ask for confirmation first (default No; `--
 
 Fuzzers additionally need `ANPU_WORDLIST`, code tools `ANPU_CODE_DIR`, mass-DNS tools `ANPU_RESOLVERS` before their stages will run.
 
-`--csv` / `--md` write finding exports alongside the scan (same filename stem as the other reports); `show <id> --export --format csv|md` re-renders them later from history.
+`--csv` / `--md` / `--junit` write finding exports alongside the scan (same filename stem as the other reports); `show <id> --export --format csv|md|junit` re-renders them later from history. JUnit marks medium-and-above findings as failures (one testsuite per scan) for CI parsers.
 
 ## `anpu query`
 
@@ -278,6 +278,40 @@ Live EPSS scoring is opt-in via `ANPU_EPSS=1`. The KEV cache auto-refreshes when
 
 Mobile scope: set `ANPU_APK` to your APK/IPA plus `ANPU_MOBSF_URL`/`ANPU_MOBSF_KEY` for your operator-run MobSF server to enable the ultra-profile MobSF static stage (dynamic analysis is never run).
 
+## `anpu watch`
+
+Rescan on an interval (or cron) and report attack-surface changes:
+added/removed/changed findings, added/removed endpoints, and added,
+removed, or version-changed technologies. Each iteration diffs against
+the previous completed scan (rolling comparison); the first run only
+establishes the baseline.
+
+```sh
+anpu watch https://staging.example.com --interval 1h
+anpu watch https://staging.example.com --cron "0 * * * *" --fail-on high --json
+```
+
+Exit non-zero when a *new* finding meets `--fail-on` (removed findings
+never trip the gate). `--webhook`, `--discord`, and `--telegram` fan
+out the same diff (`--webhook-on always|change|finding`, default
+`change`). For a pinned baseline that fails CI on drift, use
+[`anpu drift`](#anpu-drift) instead.
+
+## `anpu serve`
+
+Browse scan history in a local read-only dashboard: scan list, per-scan
+findings with evidence, and scan diffs (`/`, `/scan?id=`,
+`/finding?scan=&finding=`, `/diff?from=&to=`).
+
+```sh
+anpu serve                                  # http://127.0.0.1:8080
+anpu serve --addr 127.0.0.1:9000 --limit 20
+```
+
+Localhost-only by design: non-loopback `--addr` is refused (use an SSH
+tunnel for remote access), and only GET routes exist, so history can
+never be modified over HTTP.
+
 ## `anpu plugin`
 
 Run user-supplied detections (YAML checks or Go plugins) through ANPU's
@@ -319,7 +353,7 @@ the child scans; anything else inherits your environment. See
 
 ## `anpu show` export formats
 
-`--format` accepts `html`, `json`, `sarif`, `csv`, and `md`.
+`--format` accepts `html`, `json`, `sarif`, `csv`, `md`, and `junit`.
 
 ## Authorization and safety
 

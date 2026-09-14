@@ -47,7 +47,9 @@ are shown, not alerted. For pin-guarded baseline checks in CI, use
 ` + "`anpu drift`" + ` (stable-ID identity + parser pins) instead.
 
 The first run establishes a baseline. Every subsequent run diffs against
-that baseline, so output stays quiet until something actually changes.
+the previous completed scan (rolling comparison), so output stays quiet
+until something actually changes. For a pinned baseline that never
+moves, use ` + "`anpu drift`" + ` instead.
 
 Examples:
   anpu watch https://staging.example.com
@@ -65,7 +67,7 @@ Examples:
 			}
 			profile := models.Profile(profileStr)
 			if !profile.Valid() {
-				return fmt.Errorf("invalid --profile %q: must be one of safe, standard, deep", profileStr)
+				return fmt.Errorf("invalid --profile %q: must be one of safe, advanced, ultra (standard and deep are accepted aliases)", profileStr)
 			}
 			// Parse optional cron expression.
 			var sched *schedule.Schedule
@@ -91,7 +93,7 @@ Examples:
 	cmd.Flags().StringVar(&discordURL, "discord", "", "Discord webhook URL for fan-out diff notifications")
 	cmd.Flags().StringVar(&telegramCreds, "telegram", "", "Telegram botToken:chatID for fan-out diff notifications")
 	cmd.Flags().StringVar(&webhookOn, "webhook-on", "change", "when to send webhook notifications: always, change, finding")
-	cmd.Flags().StringVar(&profileStr, "profile", "standard", "scan profile: safe, standard, deep")
+	cmd.Flags().StringVar(&profileStr, "profile", "advanced", "scan profile: safe, advanced, ultra (standard and deep are accepted aliases)")
 	cmd.Flags().StringVar(&failOn, "fail-on", "none", "exit non-zero if a new finding at or above this severity is found")
 	cmd.Flags().StringVar(&minConfidence, "min-confidence", "none", "skip findings below this confidence level")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print diff results as JSON instead of the default text format")
@@ -149,7 +151,7 @@ func runWatch(
 			} else {
 				result := diff.Compare(prev, summary)
 				if jsonOut {
-					if b, e := json.Marshal(result); e == nil {
+					if b, e := json.MarshalIndent(result, "", "  "); e == nil {
 						fmt.Println(string(b))
 					}
 				} else {
@@ -158,14 +160,13 @@ func runWatch(
 				if failThreshold != "" && watchHasSeverityAtOrAbove(result, failThreshold) {
 					exitErr = fmt.Errorf("new finding at or above %s severity", failThreshold)
 				}
-			}
-		}
-
-		// Fan-out notifications (best-effort, per-channel errors logged).
-		if summary != nil && prev != nil {
-			wResult := diff.Compare(prev, summary)
-			for _, wErr := range notify.Fanout(ctx, targets, wResult, webhookOn) {
-				_, _ = fmt.Fprintf(os.Stderr, "[watch] notify error: %v\n", wErr)
+				// Fan-out notifications (best-effort, per-channel errors logged).
+				// Reuses the same comparison: no second diff, no drift.
+				if summary != nil {
+					for _, wErr := range notify.Fanout(ctx, targets, result, webhookOn) {
+						_, _ = fmt.Fprintf(os.Stderr, "[watch] notify error: %v\n", wErr)
+					}
+				}
 			}
 		}
 
@@ -234,8 +235,16 @@ func runWatchScan(ctx context.Context, target, profileStr string, minConf models
 }
 
 func printWatchDiff(result *diff.Result) {
+	techChanged := false
+	for _, tc := range result.Technologies {
+		if tc.Kind == "changed" {
+			techChanged = true
+			break
+		}
+	}
 	noChanges := result.FindingsAdded == 0 && result.FindingsChanged == 0 &&
-		result.FindingsRemoved == 0 && result.EndpointsAdded == 0 && result.TechnologiesAdded == 0
+		result.FindingsRemoved == 0 && result.EndpointsAdded == 0 && result.EndpointsRemoved == 0 &&
+		result.TechnologiesAdded == 0 && result.TechnologiesRemoved == 0 && !techChanged
 
 	if noChanges {
 		fmt.Printf("[watch] no changes — %s\n", result.Summary())
@@ -269,11 +278,39 @@ func printWatchDiff(result *diff.Result) {
 		}
 	}
 
+	if result.EndpointsRemoved > 0 {
+		fmt.Printf("\n  %d removed endpoint(s):\n", result.EndpointsRemoved)
+		for _, ec := range result.Endpoints {
+			if ec.Kind == "removed" {
+				fmt.Printf("    - %s\n", ec.Endpoint.URL)
+			}
+		}
+	}
+
 	if result.TechnologiesAdded > 0 {
 		fmt.Printf("\n  %d new technology detected:\n", result.TechnologiesAdded)
 		for _, tc := range result.Technologies {
 			if tc.Kind == "added" {
 				fmt.Printf("    + %s %s\n", tc.Technology.Name, tc.Technology.Version)
+			}
+		}
+	}
+
+	for _, tc := range result.Technologies {
+		if tc.Kind == "changed" {
+			fmt.Printf("\n  ~ technology changed: %s %s → %s\n", tc.Technology.Name, tc.Previous.Version, tc.Technology.Version)
+		}
+	}
+
+	if result.TechnologiesRemoved > 0 {
+		label := "removed technologies:"
+		if result.TechnologiesRemoved == 1 {
+			label = "removed technology:"
+		}
+		fmt.Printf("\n  %d %s\n", result.TechnologiesRemoved, label)
+		for _, tc := range result.Technologies {
+			if tc.Kind == "removed" {
+				fmt.Printf("    - %s %s\n", tc.Technology.Name, tc.Technology.Version)
 			}
 		}
 	}

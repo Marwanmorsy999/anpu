@@ -69,6 +69,7 @@ authorized to test.`,
 	root.AddCommand(newWordlistsCmd())
 	root.AddCommand(newDriftCmd())
 	root.AddCommand(newBenchCmd())
+	root.AddCommand(newServeCmd())
 	root.AddCommand(newPluginCmd())
 
 	// Group commands by what they do for you, so the list reads
@@ -88,7 +89,7 @@ authorized to test.`,
 		"show": "results", "history": "results", "diff": "results",
 		"verify": "results",
 		"query":  "results", "import": "results", "drift": "results",
-		"bench": "results",
+		"bench": "results", "serve": "results",
 		"tools": "setup", "search": "setup", "feeds": "setup",
 		"plugin":    "setup",
 		"wordlists": "setup", "completion": "setup", "help": "setup",

@@ -307,7 +307,7 @@ the child scans; anything else inherits your environment. See
 
 ## `anpu show` export formats
 
-`--format` accepts `html`, `json`, `sarif`, `csv`, and `md`.
+`--format` accepts `html`, `json`, `sarif`, `csv`, `md`, and `junit`.
 
 ## Authorization and safety
 

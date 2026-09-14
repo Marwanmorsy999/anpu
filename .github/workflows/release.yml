@@ -5,23 +5,25 @@ on:
     tags:
       - "v*"
 
-# contents:write publishes the GitHub Release; id-token:write mints the
-# OIDC identity for keyless cosign signing and SLSA attestations;
-# attestations:write persists the attestations to the repo.
+# Least privilege: no workflow-level writes (Scorecard Token-Permissions
+# flags those). The release job escalates only what publishing, keyless
+# cosign signing, and SLSA attestations require.
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # publish the GitHub Release
+      id-token: write # OIDC for keyless cosign + attestations
+      attestations: write # persist attestations to the repo
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
 
@@ -30,7 +32,7 @@ jobs:
         run: curl -sSfL https://get.anchore.io/syft | sh -s -- -b /usr/local/bin v1.40.0
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
           distribution: goreleaser
           version: v2.17.1
@@ -43,12 +45,12 @@ jobs:
         # GoReleaser's checksums.txt to SLSA build provenance
         # (in-toto format, Sigstore-signed). Anyone can verify with:
         #   gh attestation verify <file> --repo Marwanmorsy999/anpu
-        uses: actions/attest@v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-checksums: dist/checksums.txt
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v4.1.2
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       - name: Sign checksums with cosign (keyless)
         # One keyless signature over checksums.txt covers every release

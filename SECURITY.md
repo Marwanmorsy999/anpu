@@ -21,9 +21,9 @@ ANPU's built-in guardrails reduce the risk of accidental harm, but they are not 
 
 If you find a security issue in ANPU's own code — for example, a bug that could let a malicious target compromise the machine running ANPU — please report it privately rather than opening a public issue.
 
-Use GitHub's private security advisory flow:
+Use GitHub's [private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing/privately-reporting-a-security-vulnerability) flow:
 
-**Repository → Security → Advisories → Report a vulnerability**
+**Repository → [Security](https://github.com/Marwanmorsy999/anpu/security) → Advisories → Report a vulnerability**
 
 Please include:
 

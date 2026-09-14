@@ -84,7 +84,7 @@ func allToolsRanked() []toolInfo {
 		{"Logout", "adversarial logout invalidation", "advanced", 2},
 		{"PasswordPolicy", "adversarial password policy", "advanced", 2},
 		{"IDOR", "bola/idor numeric id+1 replay RequestBudget 5", "advanced", 2},
-		{"Ghost", "ghost undetectable Chrome131 JA3 h2 GREASE Pareto jitter proxy rotation", "advanced", 2},
+		{"Ghost", "ghost low-visibility contracted red-team Chrome131 JA3 h2 GREASE Pareto jitter proxy rotation", "advanced", 2},
 		{"GRPC", "grpc reflection ListServices application/grpc", "advanced", 2},
 		// Wave 1 batch 1 — native passive recon (LIVE).
 		{"ArchiveURLs", "live-page URL + param corpus (homepage/robots/JS, 3 reqs)", "safe", 1},

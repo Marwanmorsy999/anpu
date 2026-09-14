@@ -126,7 +126,7 @@ func newLevelCmd(use string, profile models.Profile, short string) *cobra.Comman
 	cmd.Flags().BoolVar(&oobInteractshLevel, "oob-interactsh", false, "use the public interactsh fleet (oast.pro) to CONFIRM blind SSRF/XXE/Log4Shell via observed callbacks")
 	cmd.Flags().BoolVar(&adversarialLevel, "adversarial", false, "enable adversarial hazardous probes — requires --confirm-authorized on authorized ultra targets only; Benign/LowImpact only, no data destruction")
 	cmd.Flags().BoolVar(&confirmAuthorizedLevel, "confirm-authorized", false, "confirm you are authorized to run hazardous adversarial probes against this target (required with --adversarial)")
-	cmd.Flags().BoolVar(&ghostLevel, "ghost", false, "undetectable mode: Chrome 131 JA3, h2, GREASE, Pareto 800-3500ms jitter, no anpu canary substring, proxy rotation, adaptive rate")
+	cmd.Flags().BoolVar(&ghostLevel, "ghost", false, "low-visibility mode for contracted red-team engagements: Chrome 131 JA3, h2, GREASE, Pareto 800-3500ms jitter, no anpu canary substring, proxy rotation, adaptive rate")
 	cmd.Flags().StringVar(&ghostCanaryPrefixLevel, "ghost-canary-prefix", "", "custom ghost canary prefix (default \"\" when --ghost, no anpu substring)")
 	cmd.Flags().IntVar(&ghostWorkersLevel, "ghost-workers", 4, "parallel ghost workers for sharded active scanning (0 = sequential)")
 	cmd.Flags().StringVar(&proxyPoolLevel, "proxy-pool", "", "path to file with proxy URLs (one per line, http/https/socks5) for RoundRobin rotation")

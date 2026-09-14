@@ -312,7 +312,9 @@ Severity/confidence below are what the engine emits today, verified against the 
 
 ## Master Ghost Core (P0)
 
-Undetectable transport via `--ghost`:
+Low-visibility transport via `--ghost`, for contracted red-team
+engagements where alerting defenders mid-test would invalidate the
+assessment:
 - **Ghost Transport** (`http/ghost.go`): utls (Chrome 131 JA3, h2, GREASE) + stable header set in Chrome 131 order (`GhostHeaderOrder`). Note: Go's stdlib serializes h1 headers sorted, so true wire-order control needs an fhttp-style fork (tracked); ghost still removes all scanner-specific header behaviors.
 - **Proxy Pool** (`http/proxy_pool.go`): RoundRobin per-request rotation with healthcheck, SOCKS5 via `x/net/proxy` (fixes `client.go:644` leak)
 - **Jitter** (`http/jitter.go`): Pareto 800-3500ms lognormal (replaces uniform 50-250ms in `client.go:590`)

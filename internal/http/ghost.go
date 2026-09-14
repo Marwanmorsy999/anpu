@@ -9,7 +9,7 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
-// GhostEnabled controls undetectable mode. When true, all canaries avoid
+// GhostEnabled controls low-visibility mode. When true, all canaries avoid
 // the `anpu-` substring, header order mimics Chrome, and TLS ClientHello
 // uses a current Chrome JA3 profile.
 var GhostEnabled bool
@@ -119,7 +119,7 @@ type GhostTransport struct {
 //
 // The input request is never mutated: the normalization applies to a clone,
 // so retries and concurrent ghost workers sharing a base request cannot race.
-// No internal trace header is emitted on the wire (Q2 default: undetectable
+// No internal trace header is emitted on the wire (low visibility
 // first; operators correlate via client-side logs, not request headers).
 func (g *GhostTransport) RoundTrip(req *stdhttp.Request) (*stdhttp.Response, error) {
 	outReq := req.Clone(req.Context())

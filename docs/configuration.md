@@ -169,7 +169,8 @@ scan:
 
 ### `scan.ghost`
 
-Undetectable mode: Chrome 131 JA3, h2, GREASE, stable Chrome-ordered header set (stdlib serializes sorted; true wire-order needs fhttp, tracked), Pareto 800-3500ms jitter, no `anpu` canary substring, proxy rotation, adaptive rate, payload polymorphism. Equivalent to CLI `--ghost`. Combines with `--adversarial --confirm-authorized --proxy-pool` for max power.
+Low-visibility mode for contracted red-team engagements (where alerting
+defenders mid-test would invalidate the assessment): Chrome 131 JA3, h2, GREASE, stable Chrome-ordered header set (stdlib serializes sorted; true wire-order needs fhttp, tracked), Pareto 800-3500ms jitter, no `anpu` canary substring, proxy rotation, adaptive rate, payload polymorphism. Equivalent to CLI `--ghost`. Combines with `--adversarial --confirm-authorized --proxy-pool` for max power.
 
 ```yaml
 scan:

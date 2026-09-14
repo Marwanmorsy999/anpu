@@ -229,7 +229,7 @@ are explicitly authorized to test.`,
 	cmd.Flags().BoolVar(&zapAjax, "zap-ajax", false, "enable the ZAP Ajax spider for JS-heavy routes (Docker runs only; longer scan)")
 	cmd.Flags().BoolVar(&adversarial, "adversarial", false, "enable adversarial hazardous probes (stateful multi-step, header/body/WS, JWT/mass-assign/race/smuggling/proto-pollute) — requires --confirm-authorized on authorized ultra targets only; Benign/LowImpact only, no data destruction")
 	cmd.Flags().BoolVar(&confirmAuthorized, "confirm-authorized", false, "confirm you are authorized to run hazardous adversarial probes against this target (required with --adversarial)")
-	cmd.Flags().BoolVar(&ghostFlag, "ghost", false, "undetectable mode: Chrome 131 JA3, h2, GREASE, stable header set, Pareto 800-3500ms jitter, no anpu canary substring, proxy rotation, adaptive rate, payload polymorphism (combine with --proxy-pool and --adversarial for max power)")
+	cmd.Flags().BoolVar(&ghostFlag, "ghost", false, "low-visibility mode for contracted red-team engagements: Chrome 131 JA3, h2, GREASE, stable header set, Pareto 800-3500ms jitter, no anpu canary substring, proxy rotation, adaptive rate, payload polymorphism (combine with --proxy-pool and --adversarial for max power)")
 	cmd.Flags().StringVar(&ghostCanaryPrefixFlag, "ghost-canary-prefix", "", "custom ghost canary prefix (default \"\" when --ghost, no anpu substring; set to \"anpu\" to keep allowlist mode)")
 	cmd.Flags().IntVar(&ghostWorkersFlag, "ghost-workers", 4, "parallel ghost workers for sharded active scanning (0 = sequential)")
 	cmd.Flags().StringVar(&proxyPoolFlag, "proxy-pool", "", "path to file with proxy URLs (one per line, http/https/socks5) for RoundRobin per-request rotation with healthcheck")

@@ -235,7 +235,7 @@ Single installs print the recipe and ask for confirmation first (default No; `--
 
 Fuzzers additionally need `ANPU_WORDLIST`, code tools `ANPU_CODE_DIR`, mass-DNS tools `ANPU_RESOLVERS` before their stages will run.
 
-`--csv` / `--md` write finding exports alongside the scan (same filename stem as the other reports); `show <id> --export --format csv|md` re-renders them later from history.
+`--csv` / `--md` / `--junit` write finding exports alongside the scan (same filename stem as the other reports); `show <id> --export --format csv|md|junit` re-renders them later from history. JUnit marks medium-and-above findings as failures (one testsuite per scan) for CI parsers.
 
 ## `anpu query`
 
@@ -307,7 +307,7 @@ the child scans; anything else inherits your environment. See
 
 ## `anpu show` export formats
 
-`--format` accepts `html`, `json`, `sarif`, `csv`, and `md`.
+`--format` accepts `html`, `json`, `sarif`, `csv`, `md`, and `junit`.
 
 ## Authorization and safety
 

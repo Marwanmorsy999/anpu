@@ -2,6 +2,7 @@ package reporting
 
 import (
 	"encoding/csv"
+	"encoding/xml"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,6 +111,38 @@ func TestWriteHTMLNucleiCorrelation(t *testing.T) {
 	}
 }
 
+func TestWriteJUnit(t *testing.T) {
+	sum := &models.ScanSummary{Target: "https://example.com",
+		Findings: []models.Finding{
+			{ID: "b", Severity: models.SeverityLow, Confidence: models.ConfidenceLow, Title: "Low <thing> & stuff", Category: models.CategoryHeaders, URL: "https://example.com"},
+			{ID: "a", Severity: models.SeverityHigh, Confidence: models.ConfidenceHigh, Title: "High", Category: models.CategoryTLS, URL: "https://example.com", CWE: "CWE-693", Description: "desc"},
+			{ID: "c", Severity: models.SeverityMedium, Confidence: models.ConfidenceMedium, Title: "Medium", Category: models.CategoryCookies, URL: "https://example.com"},
+		}}
+	path := filepath.Join(t.TempDir(), "out.xml")
+	if err := WriteJUnit(sum, path); err != nil {
+		t.Fatalf("WriteJUnit: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	var suite junitSuite
+	if err := xml.Unmarshal(raw, &suite); err != nil {
+		t.Fatalf("JUnit must be valid XML: %v\n%s", err, raw)
+	}
+	if suite.Tests != 3 || suite.Failures != 2 {
+		t.Fatalf("tests=3 failures=2 (high+medium) expected, got %+v", suite)
+	}
+	if suite.Testcases[0].Name != "[high] High" || suite.Testcases[0].Failure == nil {
+		t.Fatalf("worst-first with failure expected: %+v", suite.Testcases[0])
+	}
+	if suite.Testcases[2].Failure != nil {
+		t.Fatalf("low must pass (no failure element): %+v", suite.Testcases[2])
+	}
+	if !strings.Contains(string(raw), "Low &lt;thing&gt; &amp; stuff") {
+		t.Fatal("XML must escape finding titles")
+	}
+	if !strings.Contains(suite.Name, "https://example.com") {
+		t.Fatalf("suite must name the target: %q", suite.Name)
+	}
+}
 func TestWriteCSVAndMarkdown(t *testing.T) {
 	sum := &models.ScanSummary{Target: "https://example.com", Profile: "safe",
 		Findings: []models.Finding{

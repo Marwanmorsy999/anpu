@@ -18,42 +18,57 @@ is verifiable in this repo or in the workflow runs.
 - After the first green run on `main`, add the badge to README next to
   the build badge:
   `[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Marwanmorsy999/anpu/badge)](https://scorecard.dev/viewer/?uri=github.com/Marwanmorsy999/anpu)`
+  (done — see README).
 
-## Current score (as of 2026-09-12)
+## Current score: 4.2/10 (as of 2026-09-14, Scorecard v5.5.0)
 
-> **Pending first run.** This table is filled in from the first
-> `Scorecard analysis` run on `main` after this page merges — update it
-> in the same PR that records any remediation, never in advance.
+First published run above; refresh this table when the score moves.
+Scores we disagree with say so — a scoreboard you cannot argue with is
+marketing, not measurement.
 
 | Check | Score | Notes |
 | ----- | ----- | ----- |
-| Overall | — | fill after first run |
-| Maintained | — | — |
-| Code-Review | — | CODEOWNERS + PR-only `main` (see checklist) |
-| Branch-Protection | — | needs the settings below |
-| Token-Permissions | — | least-privilege blocks in every workflow |
-| Pinned-Dependencies | — | actions pinned, Dependabot weekly |
-| Security-Policy | — | `SECURITY.md` with private reporting |
-| License | — | Apache-2.0 (`LICENSE` + `NOTICE`) |
-| SAST | — | pending P1-5 (CodeQL) |
-| Signed-Releases | — | pending P1-3 (cosign + SLSA) |
-| SBOM | — | informational; pending P1-4 (CycloneDX) |
-| Binary-Artifacts | — | no binaries tracked (verified) |
-| Dangerous-Workflow | — | no untrusted-code execution patterns |
-| Dependency-Update-Tool | — | Dependabot: gomod + github-actions |
+| Overall | 4.2 | up from unmeasured; biggest levers left are branch protection (human) and a first signed release |
+| Maintained | 0 | repo under 90 days old — auto-resolves with age, not action |
+| Code-Review | 0 | 0/13 changesets human-approved — structural for a solo dev; needs a second reviewer, not a config |
+| Branch-Protection | 0 | **not enabled on `main`** — the single biggest lever; see human checklist below |
+| Token-Permissions | 0 → fixed | flagged top-level `contents: write` in `release.yml`; moved to job-level least privilege |
+| Pinned-Dependencies | 0 → fixed | was: 0/33 deps pinned; now every action pinned by hash (`# tag` comments, Dependabot-kept), go-installs version-pinned, Docker bases digest-pinned |
+| Security-Policy | 4 | policy detected but "no linked content" — added real links to the advisory flow |
+| License | 9 | standard Apache-2.0 text; the "not FSF/OSI" warn looks like detector quirk — watching, file untouched |
+| SAST | 10 | CodeQL on all 30 commits (live since P1-5) |
+| Signed-Releases | 0 | v0.1.0/v0.3.1 predate signing; lifts automatically with the first cosign+SLSA release (v1.0 train) |
+| SBOM | informational | CycloneDX per archive live since P1-4 (Scorecard does not score it) |
+| Binary-Artifacts | 10 | no binaries tracked |
+| Dangerous-Workflow | 10 | no untrusted-code patterns |
+| Dependency-Update-Tool | 10 | Dependabot gomod + actions |
+| Packaging | 10 | release workflow detected |
+| CI-Tests | 10 | 13/13 merged PRs checked |
+| Vulnerabilities | 3 | 7 upstream OSV items, none reachable per `govulncheck` (one ID-scoped waiver); Dependabot owns the fixes |
+| Fuzzing | 0 | no fuzzer integration — future work, not a claim |
+| Contributors | 0 | solo project — structural, not a defect |
+
+Accepted exceptions (flagged by Scorecard, consciously kept): the
+`install.sh` pipe in `release.yml` (`downloadThenRun` — it is our own
+script at a pinned path; a release-asset install would remove the
+warning at the cost of bootstrapping complexity) and the `syft`
+installer (version-pinned `v1.40.0`, hash-pinning a pipe is not
+meaningful).
 
 ## Already hardened (verifiable in-repo)
 
 | Hardening | Evidence |
 | --------- | -------- |
-| Least-privilege tokens | `permissions:` blocks in `ci.yml`, `scan.yml`, `release.yml`, `scorecard.yml` |
-| Pinned actions | exact pins (`golangci-lint-action@v7` + tool `v2.13.2`, `scorecard-action@v2.4.4`) or weekly-bumped majors via Dependabot |
+| Least-privilege tokens | `permissions:` blocks in every workflow; writes scoped to the job that needs them (`release`) |
+| Hash-pinned actions | every `uses:` pinned by commit SHA with `# tag` comments (Dependabot-kept); go-installs version-pinned; Docker bases digest-pinned |
 | Weekly dependency PRs | `.github/dependabot.yml` (gomod + github-actions, Mondays) |
-| Private vuln reporting | `SECURITY.md` → Security → Advisories flow, 2-day ack target |
+| Private vuln reporting | `SECURITY.md` → Security → Advisories flow with real links, 2-day ack target |
 | Review routing | `.github/CODEOWNERS` (`@Marwanmorsy999`), PR template with security checklist |
 | False-positive intake | `.github/ISSUE_TEMPLATE/false_positive.yml` |
 | No tracked binaries | `.gitignore` covers `*.exe`, `/dist/`, reports/; verified via `git ls-files` |
 | Coverage ratchet | `codecov.yml` (project `auto`, patch 80%) + CI floor gate |
+| Signed releases + SBOM | cosign bundle + SLSA attestations + CycloneDX per archive on every `v*` tag (score lifts on first signed release) |
+| SAST + dependency review | CodeQL `security-extended` on push/PR/weekly; dependency-review on PRs |
 
 ## Human checklist (GitHub UI, cannot be set from files)
 
@@ -63,7 +78,7 @@ required for a maximal Branch-Protection score:
 - [ ] Require a pull request before merging (required approvals ≥ 1)
 - [ ] Dismiss stale pull request approvals when new commits are pushed
 - [ ] Require review from Code Owners
-- [ ] Require status checks to pass (select `build-test`, and after P1-5 the CodeQL check)
+- [ ] Require status checks to pass (select `build-test` and the CodeQL check)
 - [ ] Require branches to be up to date before merging
 - [ ] Do not allow bypassing the above settings (include administrators)
 - [ ] Restrict who can push (no direct pushes); block force pushes and deletions
@@ -71,10 +86,15 @@ required for a maximal Branch-Protection score:
 Also confirm: **Settings → Code security →** Dependabot alerts + security
 updates enabled (Dependabot PRs already configured in-repo).
 
-## Roadmap (lifts the remaining checks)
+## Roadmap (lifts what is left)
 
-- **P1-3 Signed releases** — cosign signing, SLSA provenance, real
-  SHA-256 checksums in `release.yml` → lifts Signed-Releases.
-- **P1-4 SBOM** — CycloneDX SBOM attached to every release.
-- **P1-5 CodeQL + dependency scanning** on PR → SAST score + earlier
-  vulnerability signal than govulncheck/gosec alone.
+- **Branch protection (human, biggest lever)** — checklist below;
+  flips Branch-Protection 0 → ~10 and helps Code-Review.
+- **First signed release (v1.0 train)** — flips Signed-Releases once
+  `v*` artifacts carry cosign + SLSA provenance.
+- **Second reviewer (human, structural)** — the only fix for
+  Code-Review on a solo project.
+- **Dependabot cadence** — owns the Vulnerabilities tail; the
+  `govulncheck` gate guarantees nothing reachable ships meanwhile.
+- **CII badge / fuzzing (optional, future)** — CII Best Practices
+  effort and fuzzer integration; tracked, not claimed.

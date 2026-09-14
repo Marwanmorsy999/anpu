@@ -32,9 +32,9 @@ calibration:
     - safe verdicts are stable across 20+ runs; finding COUNTS wobble
       (8 vs 12) under connection pressure — the gate compares verdicts,
       never counts.
-    - backup-zip hit 3/4 calibration runs. Root cause found 2026-09-14:
-      the fixture's listen backlog (stdlib default 5) dropped connections
-      under scan burst; raised to 128 with 18/18 clean follow-up runs.
+    - backup-zip hit 3/4 calibration runs. Root cause found 2026-09-14
+      (fixture listen backlog dropping burst connections); raised to 128
+      with 18/18 clean follow-up runs.
       Stays non-gating until scheduled CI runs demonstrate stability;
       re-gate after 4 consecutive green weekly runs.
     - verbose scans add ~25 "<tool> external run" info findings; the

@@ -36,7 +36,7 @@ type ScanFileConfig struct {
 	AutoInstall *bool `yaml:"auto_install"`
 	// Unsafe is the operator master override (CLI --unsafe wins).
 	Unsafe *bool `yaml:"unsafe"`
-	// Ghost undetectable-mode defaults (CLI flags win when set).
+	// Ghost low-visibility-mode defaults (CLI flags win when set).
 	Ghost             *bool   `yaml:"ghost"`
 	GhostCanaryPrefix *string `yaml:"ghost_canary_prefix"`
 	GhostWorkers      *int    `yaml:"ghost_workers"`

@@ -13,7 +13,7 @@ scan:
   # unsafe: false         # operator master override: implies adversarial+confirmed, lifts safe-purity filters, fuller wrapper strength (CLI --unsafe wins; defaults/warnings/exclusions unchanged)
   # adversarial: false          # enable hazardous probes (stateful, JWT/mass-assign/race/smuggling/proto-pollute, sqli boolean differential + bundle, alias flood) — requires --confirm-authorized on CLI
   # confirm-authorized: false   # confirm you are authorized to run adversarial probes against this target
-  # ghost: false                # undetectable mode: Chrome 131 JA3, h2, GREASE, header-order overwrite, Pareto 800-3500ms jitter, no anpu canary, proxy rotation, adaptive rate
+  # ghost: false                # low-visibility mode for contracted red-team engagements: Chrome 131 JA3, h2, GREASE, header-order overwrite, Pareto 800-3500ms jitter, no anpu canary, proxy rotation, adaptive rate
   # ghost_canary_prefix: ""     # default "" when ghost, no anpu substring; set "anpu" to keep allowlist
   # ghost_workers: 4            # parallel ghost workers (0 = sequential)
   # proxy_pool: ""              # path to proxy list for RoundRobin rotation (one per line, http/https/socks5)

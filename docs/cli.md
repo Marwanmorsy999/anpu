@@ -54,7 +54,7 @@ anpu scan
 | `--oob-host` | empty | Custom OOB callback host for blind injection detection. |
 | `--adversarial` | `false` | Enable hazardous adversarial probes (stateful multi-step, header/body/WS, JWT/mass-assign/race/smuggling/proto-pollute, sqli boolean differential with bundle) — requires `--confirm-authorized` on authorized ultra/adversarial targets only; Benign/LowImpact only, no `SafetyDestructive` (no data destruction). |
 | `--confirm-authorized` | `false` | Confirm you are authorized to run adversarial probes (required with `--adversarial`). |
-| `--ghost` | `false` | Undetectable mode: Chrome 131 JA3, h2, GREASE, stable Chrome-ordered header set, Pareto 800-3500ms jitter, no `anpu` canary substring, proxy rotation, adaptive rate, payload polymorphism (combine with `--proxy-pool` and `--adversarial` for max power). |
+| `--ghost` | `false` | Low-visibility mode for contracted red-team engagements: Chrome 131 JA3, h2, GREASE, stable Chrome-ordered header set, Pareto 800-3500ms jitter, no `anpu` canary substring, proxy rotation, adaptive rate, payload polymorphism (combine with `--proxy-pool` and `--adversarial` for max power). |
 | `--ghost-canary-prefix` | `""` when `--ghost`, `anpu` otherwise | Custom ghost canary prefix (default `""` when `--ghost`, no `anpu` substring; set to `anpu` to keep allowlist mode). |
 | `--ghost-workers` | `4` | Parallel ghost workers for sharded active scanning (0 = sequential). |
 | `--proxy-pool` | empty | Path to file with proxy URLs (one per line, `http/https/socks5`) for RoundRobin per-request rotation with healthcheck. |

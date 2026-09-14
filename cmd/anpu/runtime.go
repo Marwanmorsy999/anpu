@@ -39,7 +39,7 @@ type ScanRuntime struct {
 	Resume     string
 	// RiskAccept suppresses listed finding IDs with reason/expiry.
 	RiskAccept string
-	// Ghost enables undetectable transport (JA3, jitter, canaries).
+	// Ghost enables low-visibility transport (JA3, jitter, canaries) for contracted tests.
 	Ghost             bool
 	GhostCanaryPrefix string
 	GhostWorkers      int

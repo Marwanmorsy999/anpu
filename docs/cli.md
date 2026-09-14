@@ -278,6 +278,18 @@ Live EPSS scoring is opt-in via `ANPU_EPSS=1`. The KEV cache auto-refreshes when
 
 Mobile scope: set `ANPU_APK` to your APK/IPA plus `ANPU_MOBSF_URL`/`ANPU_MOBSF_KEY` for your operator-run MobSF server to enable the ultra-profile MobSF static stage (dynamic analysis is never run).
 
+## `anpu plugin`
+
+Run user-supplied detections (YAML checks or Go plugins) through ANPU's
+guarded fetching. See [`plugins.md`](plugins.md) for the SDK contract.
+
+```sh
+anpu plugin init --dir mycheck
+anpu plugin list
+anpu plugin run --plugin mycheck/mycheck.yaml https://target.example
+anpu plugin run --name example-generator-meta https://target.example --format json
+```
+
 ## `anpu drift`
 
 Compare a current report against an authorized baseline with parser-pin verification (exit 1 on new findings or pin drift).

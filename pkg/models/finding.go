@@ -134,6 +134,10 @@ const (
 	SourceZAP         Source = "zap"
 	SourceCustom      Source = "custom-analyzer"
 	SourceAggregation Source = "anpu-dedup" // set after merging multiple sources
+	// SourcePlugin marks findings produced by user-supplied plugins
+	// (pkg/plugins): YAML checks or Go Plugin implementations run via
+	// `anpu plugin run`. Never set by built-in engines.
+	SourcePlugin Source = "plugin"
 )
 
 // Evidence captures the concrete, observed proof behind a finding.

@@ -69,6 +69,7 @@ authorized to test.`,
 	root.AddCommand(newWordlistsCmd())
 	root.AddCommand(newDriftCmd())
 	root.AddCommand(newBenchCmd())
+	root.AddCommand(newPluginCmd())
 
 	// Group commands by what they do for you, so the list reads
 	// clearly for first-time and non-technical users.
@@ -89,6 +90,7 @@ authorized to test.`,
 		"query":  "results", "import": "results", "drift": "results",
 		"bench": "results",
 		"tools": "setup", "search": "setup", "feeds": "setup",
+		"plugin":    "setup",
 		"wordlists": "setup", "completion": "setup", "help": "setup",
 	}
 	for _, c := range root.Commands() {

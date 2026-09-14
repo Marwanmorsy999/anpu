@@ -297,6 +297,21 @@ out the same diff (`--webhook-on always|change|finding`, default
 `change`). For a pinned baseline that fails CI on drift, use
 [`anpu drift`](#anpu-drift) instead.
 
+## `anpu serve`
+
+Browse scan history in a local read-only dashboard: scan list, per-scan
+findings with evidence, and scan diffs (`/`, `/scan?id=`,
+`/finding?scan=&finding=`, `/diff?from=&to=`).
+
+```sh
+anpu serve                                  # http://127.0.0.1:8080
+anpu serve --addr 127.0.0.1:9000 --limit 20
+```
+
+Localhost-only by design: non-loopback `--addr` is refused (use an SSH
+tunnel for remote access), and only GET routes exist, so history can
+never be modified over HTTP.
+
 ## `anpu drift`
 
 Compare a current report against an authorized baseline with parser-pin verification (exit 1 on new findings or pin drift).

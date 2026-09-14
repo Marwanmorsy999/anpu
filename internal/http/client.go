@@ -824,6 +824,48 @@ type Response struct {
 // Get issues a GET request against rawURL with the shared safety
 // settings and returns the captured response.
 func (c *Client) Get(ctx context.Context, rawURL string) (*Response, error) {
+	req, err := c.newGetRequest(ctx, rawURL)
+	if err != nil {
+		return nil, err
+	}
+	start := time.Now()
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	return c.captureResponse(req, resp, start)
+}
+
+// GetNoRedirect issues a GET without following redirects, returning
+// the first response (typically 3xx with a Location header) exactly as
+// received. Transport, timeouts, guards, UA, stealth headers, and jar
+// handling are identical to Get; only redirect following is disabled.
+// Rules that observe redirect responses themselves (open-redirect
+// probes) must use this instead of Get: Get follows the chain, so a
+// 3xx+Location signal never survives to the caller.
+func (c *Client) GetNoRedirect(ctx context.Context, rawURL string) (*Response, error) {
+	req, err := c.newGetRequest(ctx, rawURL)
+	if err != nil {
+		return nil, err
+	}
+	noFollow := &stdhttp.Client{
+		Transport: c.http.Transport,
+		Timeout:   c.http.Timeout,
+		CheckRedirect: func(_ *stdhttp.Request, _ []*stdhttp.Request) error {
+			return stdhttp.ErrUseLastResponse
+		},
+	}
+	start := time.Now()
+	resp, err := noFollow.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	return c.captureResponse(req, resp, start)
+}
+
+// newGetRequest builds a GET request through the shared client settings
+// (rate limiter, jitter, UA, stealth headers, cookie jar).
+func (c *Client) newGetRequest(ctx context.Context, rawURL string) (*stdhttp.Request, error) {
 	if c.limiter != nil {
 		if err := c.limiter.Wait(ctx); err != nil {
 			return nil, err
@@ -840,12 +882,11 @@ func (c *Client) Get(ctx context.Context, rawURL string) (*Response, error) {
 	c.applyStealthHeaders(req)
 	req.Header.Set("Accept", "*/*")
 	c.applyJar(req)
+	return req, nil
+}
 
-	start := time.Now()
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
+// captureResponse drains a response into ANPU's Response shape.
+func (c *Client) captureResponse(req *stdhttp.Request, resp *stdhttp.Response, start time.Time) (*Response, error) {
 	defer func() { _ = resp.Body.Close() }()
 	c.saveJar(req, resp)
 

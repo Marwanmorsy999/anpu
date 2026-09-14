@@ -64,7 +64,10 @@ func (r *openRedirectRule) Test(ctx context.Context, client *anpuhttp.Client, v 
 		if err != nil {
 			continue
 		}
-		resp, err := client.Get(ctx, injected)
+		// No-follow: the finding IS the 3xx+Location response. The
+		// following client would chase the canary domain (unresolvable
+		// by design) and the signal would never survive to this code.
+		resp, err := client.GetNoRedirect(ctx, injected)
 		result.RequestsMade++
 		if err != nil {
 			continue

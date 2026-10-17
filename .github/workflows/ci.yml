@@ -149,6 +149,33 @@ jobs:
       - name: Test
         run: go test ./...
 
+  # Live verification on each release OS: a safe-profile scan against a
+  # local fixture confirms HTML/JSON/SARIF output, history storage, diff,
+  # and the --fail-on gate actually work on the platform being released.
+  verify:
+    name: live verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Run live verification
+        run: bash scripts/verify.sh
+
   # Relative markdown link check: every [text](target) whose target is not
   # an external URL or pure anchor must resolve to a file/dir in the repo.
   links:

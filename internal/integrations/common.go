@@ -115,12 +115,18 @@ func goToolDirs() []string {
 	return goToolDirsCache
 }
 
+// versionProbeTimeout bounds a single `--version`/`-version` probe.
+// Generous because some tools (notably nuclei) do template/engine work
+// before printing a version on a cold cache, and a false "missing" makes
+// `anpu tools`/`doctor` under-report a tool that is actually installed.
+const versionProbeTimeout = 15 * time.Second
+
 // versionCheck reports whether path executes and answers a version flag.
 // It tries --version first (Rust/clap tools like dalfox) then -version
 // (ProjectDiscovery Go tools, nuclei).
 func versionCheck(ctx context.Context, path string) bool {
 	for _, flag := range []string{"--version", "-version"} {
-		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		checkCtx, cancel := context.WithTimeout(ctx, versionProbeTimeout)
 		err := exec.CommandContext(checkCtx, path, flag).Run() // #nosec G204 -- ANPU orchestrates operator-installed security tools by resolved path with bounded read-only flags.
 		cancel()
 		if err == nil {
@@ -139,7 +145,7 @@ func ToolVersion(ctx context.Context, binary string) string {
 		return ""
 	}
 	for _, flag := range []string{"--version", "-version"} {
-		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		checkCtx, cancel := context.WithTimeout(ctx, versionProbeTimeout)
 		out, err := exec.CommandContext(checkCtx, path, flag).Output() // #nosec G204 -- operator-installed tool, bounded read-only flag.
 		cancel()
 		if err != nil {

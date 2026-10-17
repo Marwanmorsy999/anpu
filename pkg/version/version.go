@@ -7,8 +7,12 @@ package version
 
 import "strings"
 
-// Version is the release version. GoReleaser overrides it at build time.
-var Version = "0.3.1"
+// Version is the release version. GoReleaser overrides it at build time
+// with the release tag, so a v0.4.0 tag produces a binary reporting
+// 0.4.0. This default is what a source build (`go build ./cmd/anpu`)
+// reports, and is kept in step with the latest release so a source build
+// never claims to be an older version than what is published.
+var Version = "0.4.0"
 
 // Commit is the source commit used to build the binary. GoReleaser
 // overrides it at build time.
@@ -26,7 +30,7 @@ const unknown = "unknown"
 // "anpu version ") so the two forms can never drift apart.
 //
 // Source builds render as just the version; release builds append the
-// commit and build date, e.g. "0.3.1 (commit 1a2b3c4, built
+// commit and build date, e.g. "0.4.0 (commit 1a2b3c4, built
 // 2026-10-18T09:00:00Z)".
 func Full() string {
 	var meta []string

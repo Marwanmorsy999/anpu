@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -119,7 +120,7 @@ func goToolDirs() []string {
 // Generous because some tools (notably nuclei) do template/engine work
 // before printing a version on a cold cache, and a false "missing" makes
 // `anpu tools`/`doctor` under-report a tool that is actually installed.
-const versionProbeTimeout = 15 * time.Second
+const versionProbeTimeout = 5 * time.Second
 
 // versionCheck reports whether path executes and answers a version flag.
 // It tries --version first (Rust/clap tools like dalfox) then -version
@@ -137,8 +138,9 @@ func versionCheck(ctx context.Context, path string) bool {
 }
 
 // ToolVersion returns the first line of the tool's --version/-version
-// output, or "" when the binary is missing or does not answer. Used by
-// `anpu doctor` to report the installed Nuclei version.
+// output that contains a semantic version, or "" when the binary is missing
+// or does not answer. Nuclei prints its version to stderr, so the combined
+// output is used and ANSI escapes are stripped before matching.
 func ToolVersion(ctx context.Context, binary string) string {
 	path, err := findExecutable(binary)
 	if err != nil {
@@ -146,18 +148,25 @@ func ToolVersion(ctx context.Context, binary string) string {
 	}
 	for _, flag := range []string{"--version", "-version"} {
 		checkCtx, cancel := context.WithTimeout(ctx, versionProbeTimeout)
-		out, err := exec.CommandContext(checkCtx, path, flag).Output() // #nosec G204 -- operator-installed tool, bounded read-only flag.
+		out, _ := exec.CommandContext(checkCtx, path, flag).CombinedOutput() // #nosec G204 -- operator-installed tool, bounded read-only flag.
 		cancel()
-		if err != nil {
-			continue
-		}
-		fields := strings.Fields(string(out))
-		if len(fields) > 0 {
-			return strings.Join(fields, " ")
+		text := ansiCSIRe.ReplaceAllString(string(out), "")
+		for _, line := range strings.Split(text, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			if semverRe.MatchString(line) {
+				return line
+			}
 		}
 	}
 	return ""
 }
+
+// semverRe matches a semantic version (with optional pre-release/build
+// metadata) embedded in a version banner.
+var semverRe = regexp.MustCompile(`\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?`)
 
 // runCapture executes the tool and returns its stdout. Stderr is captured
 // for diagnostics; over-long output is trimmed to 500 runes. Stderr is

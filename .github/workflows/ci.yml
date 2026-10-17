@@ -264,8 +264,11 @@ jobs:
           # Default (nuclei-free) image: version + doctor must both run.
           docker run --rm anpu:ci version
           docker run --rm anpu:ci doctor
-          # Nuclei variant: doctor must run and resolve the bundled nuclei.
-          docker run --rm anpu:ci-nuclei doctor
+           # Nuclei variant: doctor must run and resolve the bundled nuclei
+           # with an actual (non-empty) Nuclei version.
+           docker run --rm anpu:ci-nuclei doctor | tee /tmp/nuclei-doctor.txt
+           grep -Eq 'version[[:space:]]*:' /tmp/nuclei-doctor.txt
+           if grep -q 'no version response' /tmp/nuclei-doctor.txt; then echo "::error::nuclei doctor did not report a version"; exit 1; fi
 
   # GoReleaser config validity + a real snapshot build. This is the local
   # equivalent of `goreleaser check && goreleaser release --snapshot`, so
@@ -312,15 +315,144 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          # 3 OS x 2 arch = 6 archives: tar.gz for linux/darwin, zip for windows.
-          tgz=$(ls anpu_*_linux_*.tar.gz anpu_*_darwin_*.tar.gz 2>/dev/null | wc -l)
-          zip=$(ls anpu_*_windows_*.zip 2>/dev/null | wc -l)
-          sbom=$(ls *.sbom.cyclonedx.json 2>/dev/null | wc -l)
-          echo "tar.gz=$tgz zip=$zip sbom=$sbom"
-          echo "--- dist listing ---"
-          ls -1
-          test "$tgz" -eq 4 || { echo "::error::expected 4 tar.gz archives, got $tgz"; exit 1; }
-          test "$zip" -eq 2 || { echo "::error::expected 2 windows zip archives, got $zip"; exit 1; }
-          test "$sbom" -ge 6 || { echo "::error::expected >=6 CycloneDX SBOMs, got $sbom"; exit 1; }
+           # 2 archive ids x 3 OS x 2 arch: tar.gz for linux/darwin, zip for windows.
+           tgz=$(ls anpu_*_linux_*.tar.gz anpu_*_darwin_*.tar.gz 2>/dev/null | wc -l)
+           zip=$(ls anpu_*_windows_*.zip 2>/dev/null | wc -l)
+           sbom=$(ls *.sbom.cyclonedx.json 2>/dev/null | wc -l)
+           echo "tar.gz=$tgz zip=$zip sbom=$sbom"
+           echo "--- dist listing ---"
+           ls -1
+           test "$tgz" -eq 8 || { echo "::error::expected 8 tar.gz archives, got $tgz"; exit 1; }
+           test "$zip" -eq 4 || { echo "::error::expected 4 windows zip archives, got $zip"; exit 1; }
+           test "$sbom" -ge 12 || { echo "::error::expected >=12 CycloneDX SBOMs, got $sbom"; exit 1; }
           test -f checksums.txt || { echo "::error::checksums.txt missing"; exit 1; }
           echo "snapshot artifacts OK"
+  shellcheck:
+    name: shellcheck (install.sh)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install shellcheck
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck
+        run: shellcheck install.sh
+
+  installer:
+    name: installer (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu:latest
+            setup: apt-get update && apt-get install -y git curl tar coreutils
+          - image: debian:latest
+            setup: apt-get update && apt-get install -y git curl tar coreutils
+          - image: fedora:latest
+            setup: dnf install -y git curl tar coreutils
+          - image: alpine:latest
+            setup: apk add --no-cache git wget tar coreutils openssl
+          - image: archlinux:latest
+            setup: pacman -Sy --noconfirm git curl tar coreutils
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - name: Install prerequisites
+        run: ${{ matrix.setup }}
+
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Run installer (pinned release)
+        env:
+          ANPU_VERSION: v0.4.0
+        run: sh ./install.sh
+
+      - name: Verify installed binary
+        run: anpu version && anpu doctor
+
+  installer-macos:
+    name: installer (macos-latest)
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Run installer
+        env:
+          ANPU_VERSION: v0.4.0
+        run: sh ./install.sh
+
+      - name: Verify installed binary
+        run: anpu version && anpu doctor
+
+  installer-windows:
+    name: installer (windows-latest)
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Run installer
+        env:
+          ANPU_VERSION: v0.4.0
+        run: ./install.ps1
+
+      - name: Verify installed binary
+        run: |
+          $env:Path = "$env:LOCALAPPDATA\anpu\bin;$env:Path"
+          anpu version
+          anpu doctor
+
+  tamper:
+    name: installer tamper test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Prepare tampered archive
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/tamper/v0.4.0
+          curl -fsSL https://github.com/Marwanmorsy999/anpu/releases/download/v0.4.0/anpu_0.4.0_linux_amd64.tar.gz -o /tmp/tamper/v0.4.0/anpu_0.4.0_linux_amd64.tar.gz
+          curl -fsSL https://github.com/Marwanmorsy999/anpu/releases/download/v0.4.0/checksums.txt -o /tmp/tamper/v0.4.0/checksums.txt
+          printf x >> /tmp/tamper/v0.4.0/anpu_0.4.0_linux_amd64.tar.gz
+          cd /tmp/tamper
+          python3 -m http.server 8123 >/tmp/tamper/http.log 2>&1 &
+          echo $! > /tmp/tamper/http.pid
+          sleep 1
+
+      - name: Run installer against tampered archive
+        env:
+          ANPU_VERSION: v0.4.0
+          ANPU_BASE_URL: http://127.0.0.1:8123
+        run: |
+          set +e
+          sh ./install.sh
+          rc=$?
+          kill "$(cat /tmp/tamper/http.pid)" 2>/dev/null || true
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::tampered archive did not abort the installer"
+            exit 1
+          fi
+          echo "installer aborted as expected (exit $rc)"

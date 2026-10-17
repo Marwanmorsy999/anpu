@@ -42,7 +42,7 @@ Each release also publishes `.deb`, `.rpm`, `.apk`, and Arch Linux
 ```sh
 sudo apt install ./anpu_<version>_linux_amd64.deb
 sudo dnf install ./anpu_<version>_linux_amd64.rpm
-sudo apk add ./anpu_<version>_linux_amd64.apk
+sudo apk add --allow-untrusted ./anpu_<version>_linux_amd64.apk
 sudo pacman -U ./anpu_<version>_linux_amd64.pkg.tar.zst
 ```
 
@@ -63,11 +63,13 @@ Current release targets are:
 | Windows | amd64, arm64 |
 | macOS (darwin) | amd64, arm64 |
 
-The archive name follows:
+The archive name follows (versioned names are published for every release; stable, version-less names are also published so `releases/latest/download/...` URLs stay valid):
 
 ```text
-anpu_<version>_<os>_<arch>.tar.gz   # linux, darwin
-anpu_<version>_windows_<arch>.zip   # windows
+anpu_<version>_<os>_<arch>.tar.gz   # linux, darwin (versioned)
+anpu_<version>_windows_<arch>.zip   # windows (versioned)
+anpu_<os>_<arch>.tar.gz             # linux, darwin (stable)
+anpu_windows_<arch>.zip             # windows (stable)
 ```
 
 Windows archives contain the `anpu.exe` binary; Linux/macOS archives
@@ -114,6 +116,13 @@ fallback). For full Nuclei template coverage on `advanced`/`ultra`
 ```sh
 docker build --target anpu-nuclei -t anpu:nuclei .
 docker run --rm -v "$(pwd)/reports:/reports" anpu:nuclei scan https://example.com --profile advanced --output /reports
+```
+
+Published images are available from GHCR (multi-arch, amd64 + arm64):
+
+```sh
+docker run --rm ghcr.io/marwanmorsy999/anpu:latest scan https://example.com
+docker run --rm ghcr.io/marwanmorsy999/anpu:nuclei scan https://example.com --profile advanced
 ```
 
 Only scan systems you own or are explicitly authorized to test.

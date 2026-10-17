@@ -3,11 +3,8 @@
 #   irm https://raw.githubusercontent.com/Marwanmorsy999/anpu/main/install.ps1 | iex
 #
 # Env knobs (set before running):
-#   $env:ANPU_VERSION     release tag, e.g. v0.3.1 (default: latest)
+#   $env:ANPU_VERSION     release tag, e.g. v0.4.1 (default: latest)
 #   $env:ANPU_INSTALL_DIR install directory (default: $env:LOCALAPPDATA\anpu\bin)
-#   $env:ANPU_WITH_TOOLS  when "1", pre-install all advanced-level external
-#                         tools via the binary itself (needs Go toolchain for
-#                         go-based tools; failures are reported, never fatal)
 $ErrorActionPreference = "Stop"
 
 $Repo = "Marwanmorsy999/anpu"
@@ -22,14 +19,22 @@ switch (([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture).To
   default { Write-Error "anpu installer: unsupported architecture: $_"; exit 1 }
 }
 
+$BaseRoot = "https://github.com/$Repo/releases/download"
 if ($Version -eq "latest") {
   Write-Host "anpu installer: resolving latest release..."
-  $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
-  $Version = $rel.tag_name
+  try {
+    $resp = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" -MaximumRedirection 0 -ErrorAction Stop
+    $loc = $resp.Headers.Location
+  } catch {
+    $loc = $_.Exception.Response.Headers.Location
+  }
+  if ($loc -is [System.Uri]) { $loc = $loc.AbsoluteUri }
+  if ([string]::IsNullOrWhiteSpace($loc)) { Write-Error "anpu installer: could not resolve latest release"; exit 1 }
+  $Version = ([regex]::Match($loc, '/tag/(.+)$')).Groups[1].Value
   if ([string]::IsNullOrWhiteSpace($Version)) { Write-Error "anpu installer: could not resolve latest release"; exit 1 }
 }
 
-$Base = "https://github.com/$Repo/releases/download/$Version"
+$Base = "$BaseRoot/$Version"
 $ZipName = "anpu_$($Version.TrimStart('v'))_windows_$Arch.zip"
 $Tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("anpu-install-" + [System.Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $Tmp | Out-Null
@@ -45,16 +50,13 @@ try {
   $got = (Get-FileHash -Path (Join-Path $Tmp $ZipName) -Algorithm SHA256).Hash.ToLower()
   if ($got -ne $want.ToLower()) { Write-Error "anpu installer: checksum mismatch (want $want, got $got)"; exit 1 }
 
-  # Cosign signature over checksums.txt (Sigstore keyless, published per
-  # release as checksums.txt.sigstore.json). Verified when cosign is
-  # available; otherwise the SHA-256 check above is the verification.
   if (Get-Command cosign -ErrorAction SilentlyContinue) {
     Write-Host "anpu installer: verifying cosign signature..."
     Invoke-WebRequest -Uri "$Base/checksums.txt.sigstore.json" -OutFile (Join-Path $Tmp "checksums.txt.sigstore.json")
     & cosign verify-blob --bundle (Join-Path $Tmp "checksums.txt.sigstore.json") --certificate-identity-regexp "^https://github.com/$Repo/\.github/workflows/release\.yml@refs/tags/.*$" --certificate-oidc-issuer "https://token.actions.githubusercontent.com" (Join-Path $Tmp "checksums.txt")
     if ($LASTEXITCODE -ne 0) { Write-Error "anpu installer: cosign signature verification failed"; exit 1 }
   } else {
-    Write-Host "anpu installer: cosign not found, skipping signature verification (checksum verified; install cosign from https://docs.sigstore.dev for full verification)"
+    Write-Host "anpu installer: cosign not found, skipping signature verification"
   }
 
   Expand-Archive -Path (Join-Path $Tmp $ZipName) -DestinationPath (Join-Path $Tmp "out") -Force
@@ -64,20 +66,13 @@ try {
   New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
   Copy-Item -Path $bin.FullName -Destination (Join-Path $InstallDir "anpu.exe") -Force
 
-  # Add to user PATH if missing.
   $path = [Environment]::GetEnvironmentVariable("Path", "User")
   if ($path -notlike "*$InstallDir*") {
     [Environment]::SetEnvironmentVariable("Path", "$path;$InstallDir", "User")
     Write-Host "anpu installer: added $InstallDir to your user PATH (restart the terminal to pick it up)"
   }
   Write-Host "anpu installer: installed to $(Join-Path $InstallDir 'anpu.exe')"
-  if ($env:ANPU_WITH_TOOLS -eq "1") {
-    Write-Host "anpu installer: pre-installing advanced external tools (ANPU_WITH_TOOLS=1)..."
-    & (Join-Path $InstallDir "anpu.exe") tools install --all --level advanced --yes
-    if ($LASTEXITCODE -ne 0) { Write-Host "anpu installer: some tools failed (see above); scans warn-and-skip missing ones" }
-  }
-  Write-Host "anpu installer: run 'anpu scan https://example.com' for a first safe scan (only against targets you own or are authorized to test)"
-  Write-Host "anpu installer: tip: 'anpu scan --auto-install' self-provisions missing tools on first use"
+  & (Join-Path $InstallDir "anpu.exe") version
 }
 finally {
   Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue

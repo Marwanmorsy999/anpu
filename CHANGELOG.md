@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1
+
+- **Nuclei version detection**: `anpu doctor` now reports the installed Nuclei version. Nuclei prints its version to stderr, so version detection reads combined output, strips ANSI, and selects the first line containing a semantic version. The version probe timeout returns to 5s.
+- **One-command installers**: `install.sh` (POSIX sh) and `install.ps1` (Windows) resolve the latest release, verify SHA-256 checksums, optionally verify the cosign signature, and install with no prerequisites beyond the OS.
+- **Stable asset names**: release archives are published under version-less names (`anpu_linux_amd64.tar.gz`, etc.) in addition to the versioned names, so `releases/latest/download/...` URLs stay stable.
+- **Container images**: multi-arch images are published to `ghcr.io/marwanmorsy999/anpu` (`:latest`, `:<version>`, and the `:nuclei` variant).
+- **Native packages**: `.deb`, `.rpm`, `.apk`, and Arch (`.pkg.tar.zst`) packages for amd64 and arm64.
+
+
 ## Unreleased — engine quality series (Phases 0–6)
 
 - **Phase 0 safety net**: hermetic unit tests + fixtures (soft-404 shells, WAF block, Burp/ZAP/HAR/Nuclei samples) for DedupKey, scoring, diff/drift, import parsers, RiskGrade/CSV/MD, soft404 Jaccard, and wrapper host/parser helpers — `go test ./...` is no longer vacuous.

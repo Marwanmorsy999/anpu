@@ -26,7 +26,7 @@ Print the version and build metadata. `anpu --version` and `anpu version`
 print exactly the same line:
 
 ```sh
-anpu version 0.3.1                          # source build
+anpu version 0.4.1                          # source build
 anpu version 0.3.1 (commit 1a2b3c4, built 2026-10-18T09:00:00Z)   # release build
 ```
 

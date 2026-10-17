@@ -10,6 +10,30 @@
 
 [![Build Status](https://img.shields.io/github/actions/workflow/status/Marwanmorsy999/anpu/ci.yml?branch=main&style=flat-square)](https://github.com/Marwanmorsy999/anpu/actions) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Marwanmorsy999/anpu/badge)](https://scorecard.dev/viewer/?uri=github.com/Marwanmorsy999/anpu) [![Coverage](https://codecov.io/github.com/Marwanmorsy999/anpu/graph/badge.svg)](https://codecov.io/github.com/Marwanmorsy999/anpu) [![Go Version](https://img.shields.io/badge/Go-1.27.2+00ADD8?style=flat-square&logo=go)](https://go.dev/) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](https://github.com/Marwanmorsy999/anpu/blob/main/LICENSE) [![SARIF](https://img.shields.io/badge/SARIF-Supported-success?style=flat-square)](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?style=flat-square&logo=Docker)](https://docs.docker.com/)
 
+## Install
+
+Linux/macOS:
+```sh
+curl -fsSL https://raw.githubusercontent.com/Marwanmorsy999/anpu/main/install.sh | sh
+```
+
+Windows:
+```powershell
+irm https://raw.githubusercontent.com/Marwanmorsy999/anpu/main/install.ps1 | iex
+```
+
+Docker:
+```sh
+docker run --rm ghcr.io/marwanmorsy999/anpu scan https://example.com
+```
+
+<details>
+<summary>Other methods</summary>
+
+Packages, Docker nuclei variant, manual download with checksum and cosign verification, and build from source: see [docs/releases.md](docs/releases.md).
+
+</details>
+
 ## Why ANPU
 
 - **Evidence-backed findings only.** No finding without observed evidence — unverifiable checks render as "unavailable", and [miss rates are published](docs/benchmark.md), not buried.

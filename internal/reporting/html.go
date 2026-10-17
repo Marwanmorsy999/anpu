@@ -383,6 +383,7 @@ func WriteHTML(summary *models.ScanSummary, path string) error {
 		NucleiCorr:         nucleiCorrGroups(summary),
 	}
 
+	ensureParentDir(path)
 	f, err := os.Create(path) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).
 	if err != nil {
 		return fmt.Errorf("creating HTML report file %s: %w", path, err)

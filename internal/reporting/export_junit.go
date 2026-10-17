@@ -84,5 +84,6 @@ func WriteJUnit(summary *models.ScanSummary, path string) error {
 		return err
 	}
 	data = append([]byte(xml.Header), data...)
+	ensureParentDir(path)
 	return os.WriteFile(path, data, 0o600) // #nosec G304 -- CLI reads operator-specified paths (reports, wordlists, checkpoints, code dir).
 }

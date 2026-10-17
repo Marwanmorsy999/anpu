@@ -8,10 +8,21 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 	"github.com/Marwanmorsy999/anpu/pkg/version"
 )
+
+// ensureParentDir creates the parent directory of path (0750) so report
+// writers succeed even when the caller has not created the output directory
+// yet (e.g. `anpu show --export`, `anpu serve`, `anpu bench`). The scan
+// path pre-creates its output dir; this makes every writer robust on its
+// own. Best-effort: a later write still surfaces a real error if the
+// filesystem rejects the directory.
+func ensureParentDir(path string) {
+	_ = os.MkdirAll(filepath.Dir(path), 0o750)
+}
 
 // WriteJSON marshals the full scan summary to indented JSON at path.
 func WriteJSON(summary *models.ScanSummary, path string) error {
@@ -19,6 +30,7 @@ func WriteJSON(summary *models.ScanSummary, path string) error {
 	if err != nil {
 		return fmt.Errorf("marshaling JSON report: %w", err)
 	}
+	ensureParentDir(path)
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("writing JSON report to %s: %w", path, err)
 	}
@@ -205,6 +217,7 @@ func WriteSARIF(summary *models.ScanSummary, path string) error {
 	if err != nil {
 		return fmt.Errorf("marshaling SARIF report: %w", err)
 	}
+	ensureParentDir(path)
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("writing SARIF report to %s: %w", path, err)
 	}

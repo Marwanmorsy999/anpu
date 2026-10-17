@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/Marwanmorsy999/anpu/internal/feeds"
 	"github.com/Marwanmorsy999/anpu/internal/integrations"
 	"github.com/Marwanmorsy999/anpu/internal/reporting"
 	"github.com/Marwanmorsy999/anpu/pkg/version"
@@ -20,6 +21,7 @@ import (
 var (
 	flagConfigPath string
 	flagVerbose    bool
+	flagDataDir    string
 )
 
 func newRootCmd() *cobra.Command {
@@ -51,6 +53,14 @@ authorized to test.`,
 
 	root.PersistentFlags().StringVar(&flagConfigPath, "config", "", "path to a YAML config file (default: anpu.yaml in the current directory, if present)")
 	root.PersistentFlags().BoolVar(&flagVerbose, "verbose", false, "show per-stage finding and warning counts")
+	root.PersistentFlags().StringVar(&flagDataDir, "data-dir", "", "data directory for the scan-history DB and caches (default: os.UserConfigDir()/anpu; override with the ANPU_HOME environment variable)")
+
+	// Resolve the data directory once per process so the feeds cache follows
+	// the same location as the scan-history DB.
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		feeds.SetDataDir(resolveDataDir())
+		return nil
+	}
 
 	root.AddCommand(newScanCmd())
 	root.AddCommand(newSafeCmd())
@@ -545,18 +555,36 @@ func dispatch(cmd *cobra.Command, name string, args ...string) error {
 	return root.ExecuteContext(cmd.Context())
 }
 
-func defaultDataDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ".anpu"
+// resolveDataDir returns ANPU's data directory. Precedence:
+//  1. --data-dir flag (explicit operator choice)
+//  2. ANPU_HOME environment variable
+//  3. os.UserConfigDir()/anpu (XDG_CONFIG_HOME on Linux, %AppData% on
+//     Windows, ~/Library/Application Support on macOS)
+//  4. ~/.anpu, then a relative .anpu fallback when no home is discoverable
+func resolveDataDir() string {
+	if flagDataDir != "" {
+		return flagDataDir
 	}
-	return filepath.Join(home, ".anpu")
+	if home := strings.TrimSpace(os.Getenv("ANPU_HOME")); home != "" {
+		return home
+	}
+	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
+		return filepath.Join(dir, "anpu")
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return filepath.Join(home, ".anpu")
+	}
+	return ".anpu"
+}
+
+func defaultDataDir() string {
+	dir := resolveDataDir()
+	_ = os.MkdirAll(dir, 0o750)
+	return dir
 }
 
 func defaultDBPath() string {
-	dir := defaultDataDir()
-	_ = os.MkdirAll(dir, 0o750)
-	return filepath.Join(dir, "anpu.db")
+	return filepath.Join(defaultDataDir(), "anpu.db")
 }
 
 func resolveConfigPath() string {

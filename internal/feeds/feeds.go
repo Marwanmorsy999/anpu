@@ -45,16 +45,28 @@ type kevCatalog struct {
 	} `json:"vulnerabilities"`
 }
 
-// CacheDir returns the feeds cache directory (~/.anpu/feeds).
+// SetDataDir points the feeds cache under dir (the resolved data
+// directory). Called once at startup so the cache follows --data-dir /
+// ANPU_HOME / UserConfigDir exactly like the scan-history DB. Tests set
+// cacheDirOverride directly instead.
+func SetDataDir(dir string) {
+	if dir != "" {
+		cacheDirOverride = filepath.Join(dir, "feeds")
+	}
+}
+
+// CacheDir returns the feeds cache directory (<data-dir>/feeds).
 func CacheDir() string {
 	if cacheDirOverride != "" {
 		return cacheDirOverride
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ".anpu-feeds"
+	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
+		return filepath.Join(dir, "anpu", "feeds")
 	}
-	return filepath.Join(home, ".anpu", "feeds")
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return filepath.Join(home, ".anpu", "feeds")
+	}
+	return ".anpu-feeds"
 }
 
 // cacheDirOverride redirects the cache in tests.

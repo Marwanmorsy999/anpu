@@ -39,6 +39,14 @@ const tagline = `G U A R D I A N  │  Web Security Intelligence Engine`
 
 var ansiSeq = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
+// vtEnabled records whether the terminal can render ANSI color at all. On
+// Unix the terminal interprets SGR sequences natively, so this is always
+// true. On Windows it is true only when virtual-terminal processing was
+// successfully enabled on the stdout console handle (see winsterm.go); when
+// it is false — a pipe, redirect, or a console without VT support — callers
+// fall back to plain ASCII output.
+var vtEnabled = enableColor()
+
 // stripANSI removes ANSI color sequences for Plain / non-color terminals.
 func stripANSI(s string) string {
 	return ansiSeq.ReplaceAllString(s, "")
@@ -93,6 +101,9 @@ func SupportsColor() bool {
 		return false
 	}
 	if strings.ToLower(os.Getenv("TERM")) == "dumb" {
+		return false
+	}
+	if !vtEnabled {
 		return false
 	}
 	return IsTerminal()

@@ -69,7 +69,7 @@ func runDoctor(cmd *cobra.Command) error {
 		}
 	} else {
 		fmt.Fprintln(out, "  found     : not installed")
-		fmt.Fprintln(out, "              standard/deep profiles use the embedded fallback until installed")
+		fmt.Fprintln(out, "              advanced/ultra (standard/deep alias) profiles use the embedded fallback until installed")
 	}
 	fmt.Fprintln(out)
 

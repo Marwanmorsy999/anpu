@@ -227,7 +227,7 @@ docs/                   CLI, configuration, scanner, development, release, scori
 |---|:---:|:---:|:---:|---|
 | `safe` (default) | ✅ | Limited (API/AuthZ anonymous probing as designed) | ❌ by default | Low-impact baseline |
 | `advanced` (`standard` alias) | ✅ | ✅ corroborated differentials (High needs baseline + control + second signal) | ✅ when available | Broader security assessment |
-| `ultra` (`deep` alias) | ✅ | ✅ advanced + exclusive confirmations (XSS second tag family → High confidence; cmdi second metachar family clears review; blind-timing delay scaling → High/High) + wider discovery (ports/ZAP/extra wrappers) | ✅ when available | Deepest high-signal assessment |
+| `ultra` (`deep` alias) | ✅ | ✅ advanced + exclusive confirmations (XSS second tag family → High confidence; cmdi second metachar family clears review; blind-timing delay scaling → High/High) + wider discovery (ports; ZAP via Docker zap-full-scan or local zap.sh/zap.bat on ultra; extra wrappers) | ✅ when available | Deepest high-signal assessment |
 | `adversarial` (`--adversarial --confirm-authorized` on authorized ultra) | ✅ | ✅ hazardous stateful (header/body/WS, JWT/mass-assign/race/smuggling/proto-pollute, sqli boolean differential + bundle, alias flood) | ✅ when available | Max + volume → Grade F 9.0, Benign/LowImpact only, no data destruction |
 | `ghost` (`--ghost --proxy-pool pool.txt --oob-host <private> --rate-limit 2` with ultra + adversarial) | ✅ | ✅ low-visibility for contracted tests (Chrome 131 JA3, Pareto jitter, no-anpu canary, proxy rotation, 40-UA pool) | ✅ when available | Max power + volume → Grade F 9.0, authorized targets only |
 
@@ -297,7 +297,13 @@ Nuclei is optional. If a `nuclei` executable is available on `PATH`, ANPU can in
 
 ### OWASP ZAP
 
-ZAP is implemented via Docker/zap.sh when present, with an embedded passive fallback (clickjacking, robots, mixed content, error pages) otherwise. Check `anpu tools` for status.
+ZAP is implemented and runs on the `ultra` profile. Two modes: Docker
+(`docker run ghcr.io/zaproxy/zaproxy zap-full-scan.py`, active) or a local
+`zap.sh`/`zap.bat`/`zaproxy` binary. ZAP is an active DAST scanner, so the
+authorization warning applies and the local-network guard is enforced — only
+scan targets you own or are explicitly authorized to test. When ZAP is
+unavailable, ANPU uses an embedded passive fallback (clickjacking, robots,
+mixed content, error pages). Check `anpu tools` for status.
 
 ## 10. Development
 

@@ -236,7 +236,7 @@ are explicitly authorized to test.`,
 	cmd.Flags().IntVar(&ghostWorkersFlag, "ghost-workers", 4, "parallel ghost workers for sharded active scanning (0 = sequential)")
 	cmd.Flags().StringVar(&proxyPoolFlag, "proxy-pool", "", "path to file with proxy URLs (one per line, http/https/socks5) for RoundRobin per-request rotation with healthcheck")
 	cmd.Flags().BoolVar(&noTakeover, "no-takeover", false, "disable subdomain takeover detection (Phase 11B)")
-	cmd.Flags().BoolVar(&noZAP, "no-zap", false, "disable the OWASP ZAP integration for this scan (ZAP requires Docker or a local zap.sh installation; enabled by default on --profile deep)")
+	cmd.Flags().BoolVar(&noZAP, "no-zap", false, "disable the OWASP ZAP integration for this scan (ZAP requires Docker or a local zap.sh installation; enabled by default on --profile ultra, deep alias)")
 	cmd.Flags().StringVar(&failOn, "fail-on", "none", "return a non-zero exit status when findings meet/exceed this severity: none, low, medium, high, critical")
 	cmd.Flags().BoolVar(&skipPreCheck, "skip-pre-check", false, "skip the initial connectivity check (scan runs even if host appears down)")
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "suppress info-severity findings from terminal output (they still appear in reports)")

@@ -234,6 +234,37 @@ git push origin v0.2.0
 7. The workflow then attests every file in `checksums.txt` (SLSA provenance), signs `checksums.txt` with keyless cosign, and uploads `checksums.txt.sigstore.json` to the release.
 8. The release workflow downloads the published Linux amd64 archive and runs `anpu --version` and `anpu --help` as a post-publish smoke test, then re-verifies the checksum, the cosign bundle, and the SLSA attestation against the published files.
 
+**First-release example (v0.1.0):**
+
+```sh
+# 1. Confirm main is green in CI, then tag and push.
+git tag v0.1.0
+git push origin v0.1.0
+
+# 2. Wait for .github/workflows/release.yml to finish: it builds the
+#    5-target matrix (linux/darwin/windows × amd64/arm64), publishes
+#    checksums.txt, attests SLSA provenance, signs with cosign, and runs
+#    a post-publish smoke test.
+
+# 3. Verify the published artifacts against checksums.txt.
+gh release download v0.1.0 --pattern "anpu_*_linux_amd64.tar.gz" --dir /tmp/anpu-rel
+sha256sum -c <(grep "  anpu_0.1.0_linux_amd64.tar.gz$" /tmp/anpu-rel/checksums.txt)
+
+# 4. Verify the cosign signature bundle (keyless, Sigstore Fulcio/Rekor).
+cosign verify-blob --bundle /tmp/anpu-rel/checksums.txt.sigstore.json \
+  --certificate-identity-regexp "^https://github.com/Marwanmorsy999/anpu/.github/workflows/release.yml@refs/tags/.*$" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  /tmp/anpu-rel/checksums.txt
+
+# 5. Verify SLSA build provenance.
+gh attestation verify /tmp/anpu-rel/anpu_0.1.0_linux_amd64.tar.gz --repo Marwanmorsy999/anpu
+
+# 6. Smoke-test the published binary.
+tar -xzf /tmp/anpu-rel/anpu_0.1.0_linux_amd64.tar.gz -C /tmp/anpu-bin
+/tmp/anpu-bin/anpu --version
+/tmp/anpu-bin/anpu --help >/dev/null
+```
+
 Do not publish a release from a failing or unreviewed `main` branch.
 
 ### Monthly cadence

@@ -41,7 +41,7 @@ See `README.md` → "Architecture" for the full module layout. In short:
 
 - `internal/scanner` — the `Scanner` interface, target validation, and pipeline orchestrator. This is the only package that should know how to sequence stages; it should never import a specific analyzer package.
 - `internal/<analyzer>` (headers, tls, technology, recon, endpoints, and additional engines) — built-in analyzers. Each implements the scanner interface.
-- `internal/integrations` — wrappers around external tools (Nuclei, and the prepared ZAP interface). These invoke real external binaries/APIs; they must never simulate results.
+- `internal/integrations` — wrappers around external tools (Nuclei and OWASP ZAP). These invoke real external binaries/APIs; they must never simulate results.
 - `internal/findings` — deduplication/merging.
 - `internal/scoring` — the transparent risk-scoring engine.
 - `internal/reporting` — JSON/SARIF/HTML report generation and terminal UI helpers.

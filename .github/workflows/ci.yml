@@ -149,6 +149,45 @@ jobs:
       - name: Test
         run: go test ./...
 
+  # Relative markdown link check: every [text](target) whose target is not
+  # an external URL or pure anchor must resolve to a file/dir in the repo.
+  links:
+    name: markdown link check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Verify relative markdown links
+        run: |
+          set -uo pipefail
+          broken_links=$(
+            while IFS= read -r md; do
+              dir=$(dirname "$md")
+              while IFS= read -r link; do
+                case "$link" in
+                  http://*|https://*|'#'*) continue ;;
+                esac
+                target="${link%%#*}"
+                [ -z "$target" ] && continue
+                if [ ! -e "$dir/$target" ]; then
+                  echo "$md -> $link"
+                fi
+              done < <(grep -oE '\]\([^)]+\)' "$md" 2>/dev/null | sed -E 's/^\]\(//; s/\)$//')
+            done < <(find . -name '*.md' -not -path './.git/*' -print0 | tr '\0' '\n')
+          )
+          if [ -n "$broken_links" ]; then
+            echo "Broken markdown links:"
+            echo "$broken_links"
+            exit 1
+          fi
+          echo "All relative markdown links resolve."
+
   docker:
     runs-on: ubuntu-latest
     needs: build-test

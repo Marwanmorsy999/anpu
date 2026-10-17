@@ -316,8 +316,8 @@ jobs:
           set -euo pipefail
           cd dist
            # 2 archive ids x 3 OS x 2 arch: tar.gz for linux/darwin, zip for windows.
-           tgz=$(ls anpu_*_linux_*.tar.gz anpu_*_darwin_*.tar.gz 2>/dev/null | wc -l)
-           zip=$(ls anpu_*_windows_*.zip 2>/dev/null | wc -l)
+           tgz=$(ls *.tar.gz 2>/dev/null | wc -l)
+           zip=$(ls *.zip 2>/dev/null | wc -l)
            sbom=$(ls *.sbom.cyclonedx.json 2>/dev/null | wc -l)
            echo "tar.gz=$tgz zip=$zip sbom=$sbom"
            echo "--- dist listing ---"

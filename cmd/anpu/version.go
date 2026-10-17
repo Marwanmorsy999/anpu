@@ -23,8 +23,9 @@ with the commit and date shown as "unknown".`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Routed through cmd.OutOrStdout() (not bare fmt.Printf) so the
-			// output is capturable and testable.
-			fmt.Fprintln(cmd.OutOrStdout(), "anpu version "+version.Full())
+			// output is capturable and testable. A write failure must not
+			// become a non-zero exit for a version query.
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "anpu version "+version.Full())
 			return nil
 		},
 	}

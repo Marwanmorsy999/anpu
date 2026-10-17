@@ -43,14 +43,14 @@ func ssiPayloadsForScan() ([]string, []string) {
 	}
 	payload, signal := SSICanary()
 	return []string{
-			`<!--#echo var="DATE_LOCAL" -->`,
-			payload,
-			`<!--#include virtual="/etc/passwd" -->`,
-		}, []string{
-			signal,
-			"ssi",
-			"server-side include",
-		}
+		`<!--#echo var="DATE_LOCAL" -->`,
+		payload,
+		`<!--#include virtual="/etc/passwd" -->`,
+	}, []string{
+		signal,
+		"ssi",
+		"server-side include",
+	}
 }
 
 func (r *ssiRule) Test(ctx context.Context, client *anpuhttp.Client, v models.InputVector) (models.ActiveRuleResult, error) {

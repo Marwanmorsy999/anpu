@@ -260,8 +260,12 @@ jobs:
 
       - name: Smoke test images
         run: |
+          set -euo pipefail
+          # Default (nuclei-free) image: version + doctor must both run.
           docker run --rm anpu:ci version
           docker run --rm anpu:ci doctor
+          # Nuclei variant: doctor must run and resolve the bundled nuclei.
+          docker run --rm anpu:ci-nuclei doctor
 
   # GoReleaser config validity + a real snapshot build. This is the local
   # equivalent of `goreleaser check && goreleaser release --snapshot`, so

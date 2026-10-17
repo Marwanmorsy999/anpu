@@ -286,7 +286,7 @@ func (n *NucleiScanner) runEmbedded(ctx context.Context, sc *scanner.ScanContext
 	// We probe a handful of high-value paths via the shared client if
 	// available in context, but to keep import cycle clean we just
 	// return a single informational finding noting embedded mode.
-	return scanner.StageResult{
+	result := scanner.StageResult{
 		Findings: []models.Finding{{
 			ID:              "nuclei-embedded-info",
 			Title:           "Nuclei embedded mode — built-in exposure check",
@@ -299,5 +299,16 @@ func (n *NucleiScanner) runEmbedded(ctx context.Context, sc *scanner.ScanContext
 			Source:          models.SourceNuclei,
 			DetectionMethod: "embedded nuclei fallback (built-in)",
 		}},
-	}, nil
+	}
+	// On the deeper profiles the Nuclei template set is a meaningful part
+	// of the assessment, so say the binary is missing instead of degrading
+	// silently. The scan still succeeds (embedded fallback) — this is a
+	// warning, never a failure.
+	switch sc.Config.Profile {
+	case models.ProfileAdvanced, models.ProfileUltra:
+		result.Warnings = append(result.Warnings, fmt.Sprintf(
+			"nuclei not found on PATH or Go bin directories — running the embedded fallback for the %q profile; install nuclei for full template coverage (go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest)",
+			string(sc.Config.Profile)))
+	}
+	return result, nil
 }

@@ -109,9 +109,26 @@ jobs:
           echo "govulncheck: only waived GO-2026-5932 present"
 
       - name: gosec
+        # gosec v2.29.0 (latest release) vendors x/tools v0.49.0, which
+        # cannot decode Go 1.27.2 export data. It then reports
+        # "package has type errors, skipping SSA analysis, no ssa result"
+        # for most packages and exits non-zero while effectively finding
+        # nothing. Rebuild it against x/tools v0.52.0 (pinned) so SSA
+        # analysis genuinely runs on the pinned toolchain. Versions are
+        # pinned exactly for reproducibility.
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
-          gosec ./...
+          set -euo pipefail
+          (
+            tmp="$(mktemp -d)"
+            cd "$tmp"
+            go mod init gosec-build >/dev/null 2>&1
+            printf 'package tools\n\nimport _ "github.com/securego/gosec/v2/cmd/gosec"\n' > tools.go
+            go mod tidy
+            go get github.com/securego/gosec/v2@v2.29.0
+            go get golang.org/x/tools@v0.52.0
+            go build -o "$RUNNER_TEMP/gosec" github.com/securego/gosec/v2/cmd/gosec
+          )
+          "$RUNNER_TEMP/gosec" ./...
 
   # Cross-platform matrix: the core gates (gofmt, build, vet, test) run on
   # all three release targets so a platform-specific break fails CI, not a

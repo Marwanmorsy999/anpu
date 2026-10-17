@@ -35,53 +35,53 @@ func runDoctor(cmd *cobra.Command) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
 	defer cancel()
 
-	fmt.Fprintln(out, "ANPU doctor")
-	fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "ANPU doctor")
+	_, _ = fmt.Fprintln(out)
 
-	fmt.Fprintln(out, "Build:")
-	fmt.Fprintf(out, "  version   : %s\n", version.Version)
-	fmt.Fprintf(out, "  commit    : %s\n", version.Commit)
-	fmt.Fprintf(out, "  go        : %s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	_, _ = fmt.Fprintln(out, "Build:")
+	_, _ = fmt.Fprintf(out, "  version   : %s\n", version.Version)
+	_, _ = fmt.Fprintf(out, "  commit    : %s\n", version.Commit)
+	_, _ = fmt.Fprintf(out, "  go        : %s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" {
-		fmt.Fprintf(out, "  module    : %s %s\n", bi.Main.Path, bi.Main.Version)
+		_, _ = fmt.Fprintf(out, "  module    : %s %s\n", bi.Main.Path, bi.Main.Version)
 	}
-	fmt.Fprintf(out, "  data-dir  : %s\n", resolveDataDir())
-	fmt.Fprintln(out)
+	_, _ = fmt.Fprintf(out, "  data-dir  : %s\n", resolveDataDir())
+	_, _ = fmt.Fprintln(out)
 
-	fmt.Fprintln(out, "Data:")
+	_, _ = fmt.Fprintln(out, "Data:")
 	dbPath := defaultDBPath()
-	fmt.Fprintf(out, "  db        : %s", dbPath)
+	_, _ = fmt.Fprintf(out, "  db        : %s", dbPath)
 	if info, err := os.Stat(dbPath); err == nil {
-		fmt.Fprintf(out, " (present, %d bytes)\n", info.Size())
+		_, _ = fmt.Fprintf(out, " (present, %d bytes)\n", info.Size())
 	} else {
-		fmt.Fprintln(out, " (not created yet — written on first scan)")
+		_, _ = fmt.Fprintln(out, " (not created yet — written on first scan)")
 	}
-	fmt.Fprintf(out, "  feeds     : %s\n", feeds.CacheDir())
-	fmt.Fprintln(out)
+	_, _ = fmt.Fprintf(out, "  feeds     : %s\n", feeds.CacheDir())
+	_, _ = fmt.Fprintln(out)
 
-	fmt.Fprintln(out, "Nuclei:")
+	_, _ = fmt.Fprintln(out, "Nuclei:")
 	if path, ok := integrations.LookupBinary("nuclei"); ok {
-		fmt.Fprintf(out, "  found     : %s\n", path)
+		_, _ = fmt.Fprintf(out, "  found     : %s\n", path)
 		if v := integrations.ToolVersion(ctx, "nuclei"); v != "" {
-			fmt.Fprintf(out, "  version   : %s\n", v)
+			_, _ = fmt.Fprintf(out, "  version   : %s\n", v)
 		} else {
-			fmt.Fprintln(out, "  version   : (no version response)")
+			_, _ = fmt.Fprintln(out, "  version   : (no version response)")
 		}
 	} else {
-		fmt.Fprintln(out, "  found     : not installed")
-		fmt.Fprintln(out, "              advanced/ultra (standard/deep alias) profiles use the embedded fallback until installed")
+		_, _ = fmt.Fprintln(out, "  found     : not installed")
+		_, _ = fmt.Fprintln(out, "              advanced/ultra (standard/deep alias) profiles use the embedded fallback until installed")
 	}
-	fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out)
 
-	fmt.Fprintln(out, "Reports:")
+	_, _ = fmt.Fprintln(out, "Reports:")
 	reportDir, err := filepath.Abs("./reports")
 	if err != nil {
 		reportDir = "./reports"
 	}
 	if err := os.MkdirAll(reportDir, 0o750); err == nil {
-		fmt.Fprintf(out, "  output    : %s (writable)\n", reportDir)
+		_, _ = fmt.Fprintf(out, "  output    : %s (writable)\n", reportDir)
 	} else {
-		fmt.Fprintf(out, "  output    : %s (NOT writable: %v)\n", reportDir, err)
+		_, _ = fmt.Fprintf(out, "  output    : %s (NOT writable: %v)\n", reportDir, err)
 	}
 	return nil
 }

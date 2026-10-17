@@ -24,7 +24,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version-file: go.mod
+          # Pinned rather than read from go.mod: govulncheck flags reachable
+          # stdlib advisories (net/http, net/http/internal/http2, crypto/tls,
+          # mime/multipart) that are fixed in Go 1.27.2+.
+          go-version: '1.27.2'
 
       - name: Verify gofmt
         run: |
@@ -80,7 +83,11 @@ jobs:
         with:
           # v2 line (v1 binaries refuse go1.25+ targets at load).
           # Pinned exact; tree verified clean against this version.
-          version: v2.13.2
+          # Must be built with Go >= 1.27.2 to match the pinned toolchain:
+          # v2.13.x is built with go1.27.1 and cannot decode go1.27.2
+          # export data ("export data version 5 is greater than maximum
+          # supported version 4"), which fails the lint job outright.
+          version: v2.15.0
 
       - name: govulncheck
         run: |
@@ -129,7 +136,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          # Pinned rather than read from go.mod: govulncheck flags reachable
+          # stdlib advisories (net/http, net/http/internal/http2, crypto/tls,
+          # mime/multipart) that are fixed in Go 1.27.2+.
+          go-version: '1.27.2'
 
       - name: Verify gofmt
         run: |
@@ -171,7 +181,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          # Pinned rather than read from go.mod: govulncheck flags reachable
+          # stdlib advisories (net/http, net/http/internal/http2, crypto/tls,
+          # mime/multipart) that are fixed in Go 1.27.2+.
+          go-version: '1.27.2'
 
       - name: Run live verification
         run: bash scripts/verify.sh
@@ -251,7 +264,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version-file: go.mod
+          # Pinned rather than read from go.mod: govulncheck flags reachable
+          # stdlib advisories (net/http, net/http/internal/http2, crypto/tls,
+          # mime/multipart) that are fixed in Go 1.27.2+.
+          go-version: '1.27.2'
 
       - name: Install syft (SBOM generator)
         # Pinned; required on PATH for GoReleaser's sboms pipe.

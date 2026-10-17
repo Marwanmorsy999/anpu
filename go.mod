@@ -2,7 +2,13 @@ module github.com/Marwanmorsy999/anpu
 
 go 1.26.0
 
-toolchain go1.26.8
+// Minimum toolchain for building and for the govulncheck CI gate.
+// Go 1.27.1 and earlier carry stdlib advisories in net/http,
+// net/http/internal/http2, crypto/tls and mime/multipart that affect
+// reachable code; those are fixed in 1.27.2. The `go` directive above is
+// deliberately left lower so the module stays buildable by a broader
+// toolchain range; CI pins this exact version via setup-go.
+toolchain go1.27.2
 
 require (
 	github.com/refraction-networking/utls v1.8.2
@@ -135,11 +141,11 @@ require (
 	go.uber.org/zap/exp v0.3.0 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	goftp.io/server/v2 v2.0.1 // indirect
-	golang.org/x/crypto v0.55.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b // indirect
 	golang.org/x/oauth2 v0.31.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	gopkg.in/corvus-ch/zbase32.v1 v1.0.0 // indirect
 	modernc.org/libc v1.75.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
@@ -149,7 +155,7 @@ require (
 require (
 	github.com/miekg/dns v1.1.73
 	github.com/projectdiscovery/interactsh v1.3.1
-	golang.org/x/net v0.58.0
+	golang.org/x/net v0.60.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.46.0
 	gopkg.in/yaml.v3 v3.0.1

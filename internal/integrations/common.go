@@ -130,6 +130,29 @@ func versionCheck(ctx context.Context, path string) bool {
 	return false
 }
 
+// ToolVersion returns the first line of the tool's --version/-version
+// output, or "" when the binary is missing or does not answer. Used by
+// `anpu doctor` to report the installed Nuclei version.
+func ToolVersion(ctx context.Context, binary string) string {
+	path, err := findExecutable(binary)
+	if err != nil {
+		return ""
+	}
+	for _, flag := range []string{"--version", "-version"} {
+		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		out, err := exec.CommandContext(checkCtx, path, flag).Output() // #nosec G204 -- operator-installed tool, bounded read-only flag.
+		cancel()
+		if err != nil {
+			continue
+		}
+		fields := strings.Fields(string(out))
+		if len(fields) > 0 {
+			return strings.Join(fields, " ")
+		}
+	}
+	return ""
+}
+
 // runCapture executes the tool and returns its stdout. Stderr is captured
 // for diagnostics; over-long output is trimmed to 500 runes. Stderr is
 // sanitized to valid UTF-8 first — Go toolchains can emit raw non-UTF-8

@@ -157,6 +157,15 @@ docker build -t anpu .
 docker run --rm -v "$(pwd)/reports:/reports" anpu scan https://example.com --output /reports
 ```
 
+The default `anpu` image is nuclei-free (the Nuclei stage uses its embedded
+fallback). For full Nuclei template coverage on `advanced`/`ultra`
+(`standard`/`deep`) profiles, build the `anpu:nuclei` variant:
+
+```sh
+docker build --target anpu-nuclei -t anpu:nuclei .
+docker run --rm -v "$(pwd)/reports:/reports" anpu:nuclei scan https://example.com --profile advanced --output /reports
+```
+
 ## 4. Quick start
 
 ```sh

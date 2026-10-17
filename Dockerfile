@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# --- build stage ---
+# --- build stage: the anpu binary (pure Go, no C toolchain) ---
 FROM golang:1.26-bookworm AS build
 WORKDIR /src
 
@@ -11,15 +11,18 @@ COPY . .
 # Pure-Go SQLite (modernc.org/sqlite) means no C toolchain is required.
 RUN CGO_ENABLED=0 go build -trimpath -o /out/anpu ./cmd/anpu
 
-# --- runtime stage ---
-FROM debian:bookworm-slim
+# --- nuclei stage: only built for the anpu:nuclei target ---
+# `go install` compiles the real nuclei binary so standard/deep profiles get
+# full template coverage in-container. Skipped entirely for the default
+# anpu target (it is not in that target's dependency graph).
+FROM golang:1.26-bookworm AS nuclei
+RUN CGO_ENABLED=0 go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+
+# --- shared runtime base ---
+FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-
-# Optional: install nuclei if you want the Nuclei integration available
-# inside the container. Left out by default to keep the image small and
-# because ANPU works fully without it (see internal/integrations/nuclei.go).
 
 RUN useradd -m -u 10001 anpu
 USER anpu
@@ -29,3 +32,18 @@ COPY --from=build /out/anpu /usr/local/bin/anpu
 
 ENTRYPOINT ["anpu"]
 CMD ["--help"]
+
+# --- optional target: anpu:nuclei ---
+# Build with: docker build --target anpu-nuclei -t anpu:nuclei .
+# Adds the real nuclei binary so advanced/ultra (standard/deep) profiles run
+# their full template set instead of the embedded fallback.
+FROM runtime AS anpu-nuclei
+USER root
+COPY --from=nuclei /go/bin/nuclei /usr/local/bin/nuclei
+USER anpu
+
+# --- default target: anpu (no nuclei) ---
+# This is the last stage, so `docker build -t anpu .` produces the small
+# nuclei-free image. ANPU works fully without nuclei; the embedded fallback
+# covers the Nuclei stage with a warning.
+FROM runtime AS anpu

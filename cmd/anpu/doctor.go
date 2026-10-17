@@ -41,6 +41,7 @@ func runDoctor(cmd *cobra.Command) error {
 	fmt.Fprintln(out, "Build:")
 	fmt.Fprintf(out, "  version   : %s\n", version.Version)
 	fmt.Fprintf(out, "  commit    : %s\n", version.Commit)
+	fmt.Fprintf(out, "  built     : %s\n", version.Date)
 	fmt.Fprintf(out, "  go        : %s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" {
 		fmt.Fprintf(out, "  module    : %s %s\n", bi.Main.Path, bi.Main.Version)

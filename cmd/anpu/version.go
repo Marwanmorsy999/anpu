@@ -13,15 +13,18 @@ func newVersionCmd() *cobra.Command {
 		Short: "Print the ANPU version",
 		Long: `Print the ANPU version and build metadata.
 
-The version is injected at release time by GoReleaser (pkg/version).
-Source builds report the version default; the commit is "unknown"
-unless set via ldflags.`,
+This prints exactly the same line as ` + "`anpu --version`" + ` — the two
+forms are identical by construction, both rendering
+version.Full() from pkg/version.
+
+The version, commit, and build date are injected at release time by
+GoReleaser (see .goreleaser.yaml). Source builds report the version only,
+with the commit and date shown as "unknown".`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Printf("anpu version %s\n", version.Version)
-			if version.Commit != "" && version.Commit != "unknown" {
-				fmt.Printf("commit %s\n", version.Commit)
-			}
+			// Routed through cmd.OutOrStdout() (not bare fmt.Printf) so the
+			// output is capturable and testable.
+			fmt.Fprintln(cmd.OutOrStdout(), "anpu version "+version.Full())
 			return nil
 		},
 	}

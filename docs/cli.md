@@ -1,6 +1,9 @@
 # CLI Reference
 
-ANPU exposes 13 commands: `scan`, `safe`, `advanced`, `ultra`, `history`, `show`, `diff`, `verify`, `watch`, `tools`, `search`, `completion`, and `help`.
+ANPU exposes 23 commands: `scan`, `safe`, `advanced`, `ultra`, `watch`,
+`bench`, `diff`, `drift`, `history`, `import`, `query`, `serve`, `show`,
+`verify`, `completion`, `doctor`, `feeds`, `help`, `plugin`, `search`,
+`tools`, `version`, and `wordlists`.
 
 Shorthand: `anpu <target> [flags]` rewrites to `anpu scan <target> [flags]`,
 so the most common invocation needs no subcommand. Canonical profiles are
@@ -14,8 +17,23 @@ Global flags are available on every command.
 |---|---|---|
 | `--config <path>` | `anpu.yaml` if present | Use a specific YAML configuration file. |
 | `--verbose` | `false` | Show per-stage finding and warning counts. |
-| `--version` | — | Print the ANPU version. |
+| `--version` | — | Print the ANPU version. Identical output to `anpu version`. |
 | `--help` | — | Show command help. |
+
+## `anpu version`
+
+Print the version and build metadata. `anpu --version` and `anpu version`
+print exactly the same line:
+
+```sh
+anpu version 0.3.1                          # source build
+anpu version 0.3.1 (commit 1a2b3c4, built 2026-10-18T09:00:00Z)   # release build
+```
+
+The version, commit, and build date are injected by GoReleaser at release
+time (`-ldflags -X`, see `.goreleaser.yaml`); source builds report the
+version only. `anpu doctor` prints the same build metadata alongside the
+DB path, Nuclei status, and report-directory writability.
 
 ANPU stores scan history locally in `~/.anpu/anpu.db` by default. The database is created automatically when a command needs it.
 

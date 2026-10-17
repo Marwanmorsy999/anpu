@@ -183,6 +183,13 @@ docker run --rm -v "$(pwd)/reports:/reports" anpu:nuclei scan https://example.co
 
 # Compare two historical scans
 ./anpu diff scan-old scan-new
+
+# Version (--version and the version subcommand print the same line)
+./anpu --version
+./anpu version
+
+# Environment check: build info, DB path, Nuclei, report dir
+./anpu doctor
 ```
 
 `safe` is the default and is designed for passive/low-impact analysis (API/AuthZ anonymous probing as designed). `advanced` and `ultra` enable more active checks (aliases: `standard`→`advanced`, `deep`→`ultra`). Only use ANPU against systems you own or are explicitly authorized to test.

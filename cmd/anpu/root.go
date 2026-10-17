@@ -26,9 +26,11 @@ var (
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:     "anpu",
-		Short:   "ANPU — Guard what you build. Open-source web security intelligence.",
-		Version: version.Version,
+		Use:   "anpu",
+		Short: "ANPU — Guard what you build. Open-source web security intelligence.",
+		// Renders identically to `anpu version` — both come from
+		// version.Full(), so the two forms cannot drift apart.
+		Version: version.Full(),
 		Long: `ANPU is an authorized web security analysis and attack-surface
 intelligence tool. It orchestrates existing security tools (Nuclei,
 OWASP ZAP) alongside its own passive analyzers, and
@@ -152,6 +154,8 @@ func captureHelp(cmd *cobra.Command) string {
 		cmd.SetErr(prevErr)
 		cmd.SetHelpFunc(nil)
 		root.SetHelpFunc(printColorHelp)
+		// Match `anpu version`'s "anpu version <Full>" line byte for byte.
+		root.SetVersionTemplate("anpu version {{.Version}}\n")
 	}()
 	_ = cmd.Help()
 	return buf.String()

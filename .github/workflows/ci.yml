@@ -224,3 +224,66 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t anpu:ci .
+
+      - name: Build Nuclei variant image
+        run: docker build --target anpu-nuclei -t anpu:ci-nuclei .
+
+      - name: Smoke test images
+        run: |
+          docker run --rm anpu:ci version
+          docker run --rm anpu:ci doctor
+
+  # GoReleaser config validity + a real snapshot build. This is the local
+  # equivalent of `goreleaser check && goreleaser release --snapshot`, so
+  # a broken .goreleaser.yaml or a missing archive/SBOM fails CI rather
+  # than only surfacing during a release tag.
+  goreleaser-snapshot:
+    name: goreleaser check + snapshot
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+
+      - name: Install syft (SBOM generator)
+        # Pinned; required on PATH for GoReleaser's sboms pipe.
+        run: curl -sSfL https://get.anchore.io/syft | sh -s -- -b /usr/local/bin v1.40.0
+
+      - name: Validate goreleaser config
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+        with:
+          distribution: goreleaser
+          version: v2.17.1
+          args: check
+
+      - name: Snapshot build
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+        with:
+          distribution: goreleaser
+          version: v2.17.1
+          args: release --snapshot --clean
+
+      - name: Verify snapshot artifacts
+        run: |
+          set -euo pipefail
+          cd dist
+          # 3 OS x 2 arch = 6 archives: tar.gz for linux/darwin, zip for windows.
+          tgz=$(ls anpu_*_linux_*.tar.gz anpu_*_darwin_*.tar.gz 2>/dev/null | wc -l)
+          zip=$(ls anpu_*_windows_*.zip 2>/dev/null | wc -l)
+          sbom=$(ls *.sbom.cyclonedx.json 2>/dev/null | wc -l)
+          echo "tar.gz=$tgz zip=$zip sbom=$sbom"
+          echo "--- dist listing ---"
+          ls -1
+          test "$tgz" -eq 4 || { echo "::error::expected 4 tar.gz archives, got $tgz"; exit 1; }
+          test "$zip" -eq 2 || { echo "::error::expected 2 windows zip archives, got $zip"; exit 1; }
+          test "$sbom" -ge 6 || { echo "::error::expected >=6 CycloneDX SBOMs, got $sbom"; exit 1; }
+          test -f checksums.txt || { echo "::error::checksums.txt missing"; exit 1; }
+          echo "snapshot artifacts OK"

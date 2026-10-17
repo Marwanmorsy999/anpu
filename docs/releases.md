@@ -66,10 +66,12 @@ Current release targets are:
 The archive name follows:
 
 ```text
-anpu_<version>_<os>_<arch>.tar.gz
+anpu_<version>_<os>_<arch>.tar.gz   # linux, darwin
+anpu_<version>_windows_<arch>.zip   # windows
 ```
 
-Windows archives also contain the `anpu.exe` binary.
+Windows archives contain the `anpu.exe` binary; Linux/macOS archives
+contain the `anpu` binary.
 
 ### Build from source
 
@@ -129,12 +131,18 @@ On Linux/macOS:
 sha256sum anpu_<version>_linux_amd64.tar.gz
 ```
 
+Or verify every artifact in one step (recommended):
+
+```sh
+sha256sum -c checksums.txt
+```
+
 Compare the resulting SHA-256 digest with the corresponding entry in `checksums.txt`.
 
 On PowerShell:
 
 ```powershell
-Get-FileHash .\anpu_<version>_windows_amd64.tar.gz -Algorithm SHA256
+Get-FileHash .\anpu_<version>_windows_amd64.zip -Algorithm SHA256
 ```
 
 The reported digest must match the release checksum.
@@ -177,8 +185,13 @@ After extracting the archive:
 
 ```sh
 ./anpu --version
+./anpu version          # identical output to --version
+./anpu doctor           # build info, DB path, Nuclei, report dir
 ./anpu scan https://example.com
 ```
+
+Release builds report version, commit, and build date injected by
+GoReleaser; source builds report the version only.
 
 The default profile is `safe`. For a broader authorized assessment:
 

@@ -425,7 +425,7 @@ jobs:
 
       - name: Run installer (pinned release)
         env:
-          ANPU_VERSION: v0.5.1
+          ANPU_VERSION: v0.5.2
         run: sh ./install.sh
 
       - name: Verify installed binary
@@ -442,7 +442,7 @@ jobs:
 
       - name: Run installer
         env:
-          ANPU_VERSION: v0.5.1
+          ANPU_VERSION: v0.5.2
         run: sh ./install.sh
 
       - name: Verify installed binary
@@ -466,7 +466,7 @@ jobs:
 
       - name: Run installer
         env:
-          ANPU_VERSION: v0.5.1
+          ANPU_VERSION: v0.5.2
         run: ./install.ps1
 
       - name: Verify installed binary
@@ -507,10 +507,10 @@ jobs:
       - name: Prepare tampered archive
         run: |
           set -euo pipefail
-          mkdir -p /tmp/tamper/v0.5.1
-          curl -fsSL https://github.com/Marwanmorsy999/anpu/releases/download/v0.5.1/anpu_0.5.1_linux_amd64.tar.gz -o /tmp/tamper/v0.5.1/anpu_0.5.1_linux_amd64.tar.gz
-          curl -fsSL https://github.com/Marwanmorsy999/anpu/releases/download/v0.5.1/checksums.txt -o /tmp/tamper/v0.5.1/checksums.txt
-          printf x >> /tmp/tamper/v0.5.1/anpu_0.5.1_linux_amd64.tar.gz
+          mkdir -p /tmp/tamper/v0.5.2
+          curl -fsSL https://github.com/Marwanmorsy999/anpu/releases/download/v0.5.2/anpu_0.5.2_linux_amd64.tar.gz -o /tmp/tamper/v0.5.2/anpu_0.5.2_linux_amd64.tar.gz
+          curl -fsSL https://github.com/Marwanmorsy999/anpu/releases/download/v0.5.2/checksums.txt -o /tmp/tamper/v0.5.2/checksums.txt
+          printf x >> /tmp/tamper/v0.5.2/anpu_0.5.2_linux_amd64.tar.gz
           cd /tmp/tamper
           python3 -m http.server 8123 >/tmp/tamper/http.log 2>&1 &
           echo $! > /tmp/tamper/http.pid
@@ -518,7 +518,7 @@ jobs:
 
       - name: Run installer against tampered archive
         env:
-          ANPU_VERSION: v0.5.1
+          ANPU_VERSION: v0.5.2
           ANPU_BASE_URL: http://127.0.0.1:8123
         run: |
           set +e
@@ -575,7 +575,7 @@ jobs:
         run: |
           set -euo pipefail
           cosign version
-          out=$(ANPU_VERSION=v0.5.1 ANPU_INSTALL_DIR=/tmp/cosign-bin sh ./install.sh 2>&1)
+          out=$(ANPU_VERSION=v0.5.2 ANPU_INSTALL_DIR=/tmp/cosign-bin sh ./install.sh 2>&1)
           echo "$out"
           echo "$out" | grep -q "installed to /tmp/cosign-bin/anpu"
           if [ "${{ matrix.cosign }}" = "v2.4.1" ]; then

@@ -49,4 +49,5 @@ PY
 )
 if [ "$S1" != "$S2" ]; then echo "FAIL: non-deterministic score $S1 vs $S2"; exit 1; fi
 echo "deterministic score: $S1"
+$PY tests/validation/metrics.py tests/validation/ground-truth.yml "$J1"
 echo "VALIDATION OK"

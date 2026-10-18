@@ -1,0 +1,19 @@
+target: purpose-built local fixture
+profile: safe
+expected:
+  - "Security headers posture"
+  - 'Cookie "session" missing HttpOnly'
+  - 'Cookie "session" has weak or missing SameSite'
+  - "Plain HTTP is not redirected to HTTPS"
+  - "HTTPS not available on standard port"
+  - "Clickjacking defense missing"
+  - "robots.txt found"
+  - "Server header discloses version"
+  - "Strict-Transport-Security not applicable"
+  - "URL corpus"
+  - "DNS resolution"
+unexpected:
+  - "SQL injection"
+  - "Cross-site scripting"
+  - "Path traversal"
+  - "Command injection"

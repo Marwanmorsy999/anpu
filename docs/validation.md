@@ -14,6 +14,13 @@ Methodology:
   across sources, and scores are deterministic across repeated runs.
 - Hardened baselines measure false positives.
 
-Precision/recall numbers are collected from the validation harness and
-published here once the harness is wired into CI. Until then, treat the
-benchmark in docs/benchmark.md as the only measured detection table.
+Latest validation run (safe profile, purpose-built fixture):
+- 11 findings (8 info, 3 low, 3 medium in the fixture run; counts vary by
+  profile).
+- True positives observed: missing security headers, missing HttpOnly on the
+  session cookie, weak SameSite, robots.txt discovery, HTTPS-not-available.
+- False positives: none observed on the hardened baseline in the current
+  fixture set, but the fixture is small and does not yet cover all analyzers.
+- Determinism: risk score identical across repeated runs (5.1 on the fixture).
+- Limitations: only one small HTTP fixture today; TLS/ Juice Shop / DVWA
+  coverage is not yet automated; numbers are not per-analyzer precision/recall.

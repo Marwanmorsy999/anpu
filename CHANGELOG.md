@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+- **Validation depth**: ground-truth YAML, per-analyzer precision/recall, docker-compose targets, metrics script.
+- **CI**: validation job green with 0 skipped.
+
+
 ## 0.5.0
 
 - **Validation harness**: local fixture validation with guard-off-by-default assertion, true-positive checks, and deterministic score.

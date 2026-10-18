@@ -12,7 +12,7 @@ import "strings"
 // 0.4.0. This default is what a source build (`go build ./cmd/anpu`)
 // reports, and is kept in step with the latest release so a source build
 // never claims to be an older version than what is published.
-var Version = "0.5.0"
+var Version = "0.5.1"
 
 // Commit is the source commit used to build the binary. GoReleaser
 // overrides it at build time.

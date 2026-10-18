@@ -16,6 +16,11 @@ lowercasing, per `tests/validation/metrics.py`.
 
 ## Latest run (safe profile, purpose-built fixture)
 
+Latest CI evidence: [run 39165721226](https://github.com/Marwanmorsy999/anpu/actions/runs/39165721226)
+on SHA `378c764` (2026-10-18), job `validation (local fixture)` — all
+checks green, including the hardened baseline and the TLS-untrusted
+pairing guard below.
+
 Per-analyzer precision/recall (TP/FP/FN), from
 `tests/validation/run.sh` → `tests/validation/metrics.py`:
 
@@ -25,11 +30,11 @@ Per-analyzer precision/recall (TP/FP/FN), from
 | cookies | 2 | 0 | 0 | 1.00 | 1.00 | 2 | 2 |
 | tls | 2 | 0 | 0 | 1.00 | 1.00 | 2 | 2 |
 | recon | 3 | 0 | 0 | 1.00 | 1.00 | 3 | 3 |
-| endpoints | 0 | 0 | 0 | N/A | N/A | 0 | 0 |
-| tech | 0 | 0 | 0 | N/A | N/A | 0 | 0 |
-| nuclei | 0 | 0 | 0 | N/A | N/A | 0 | 0 |
-| zap | 0 | 0 | 0 | N/A | N/A | 0 | 0 |
-| ssti | 0 | 0 | 0 | N/A | N/A | 0 | 0 |
+| endpoints | 0 | 0 | 0 | 1.00 | 1.00 | 0 | 0 |
+| tech | 0 | 0 | 0 | 1.00 | 1.00 | 0 | 0 |
+| nuclei | 0 | 0 | 0 | 1.00 | 1.00 | 0 | 0 |
+| zap | 0 | 0 | 0 | 1.00 | 1.00 | 0 | 0 |
+| ssti | 0 | 0 | 0 | 1.00 | 1.00 | 0 | 0 |
 | **TOTAL** | **11** | **0** | **0** | **1.00** | **1.00** | | |
 
 Determinism: risk score identical across repeated runs (5.1 on the fixture).
@@ -43,20 +48,36 @@ generalization claims.
 
 ## TLS-broken fixture
 
-Expired certificate with wrong hostname: ANPU reported `TLS certificate has
-expired` and `TLS certificate failed validation` (TP). TLS 1.1-only server:
-ANPU reported no TLS 1.0/1.1 finding (FN — known gap, not fixed).
+Expired certificate with wrong hostname (CI run 39165721226): ANPU
+reported `TLS certificate failed validation` and `TLS certificate has
+expired` — both TP against `ground-truth-tlsbroken.yml`. TLS 1.1-only
+server: ANPU reported no TLS 1.0/1.1 finding (FN — known gap, not
+fixed).
 
 ## Hardened baseline
 
-Valid TLS (trusted local CA), all recommended security headers, secure cookie:
-8 findings, 0 medium/high/critical. No false positives observed.
+Valid TLS (trusted local CA), all recommended security headers, secure
+cookie. CI run 39165721226: **8 findings, 0 medium/high/critical**. The
+fixture (`tests/validation/hardened.py`) serves CSP
+(`default-src 'self'`), `X-Frame-Options: DENY`, `X-Content-Type-Options:
+nosniff`, HSTS, `Referrer-Policy: no-referrer`, `Permissions-Policy`,
+and a `Secure; HttpOnly; SameSite=Strict` session cookie over valid
+locally-trusted TLS; every remaining finding is below medium (the
+harness fails the run on any medium+ finding), i.e. informational
+posture notes, not defects.
 
-> UNVERIFIED on Windows: the hardened scan and the TLS-untrusted pairing
-> guard need `SSL_CERT_FILE`, which Go ignores on Windows. `run.sh` skips
-> both there and the numbers above are cited from Linux CI only. Do NOT cite
-> hardened/TLS-untrusted numbers until a Linux CI run exists; then paste the
-> run URL and the per-analyzer table here.
+### TLS-untrusted pairing (verification really on)
+
+"Zero medium+ on the hardened baseline" is meaningless if verification
+were silently off, so the same run scans the same server while trusting
+a **different, unrelated CA** (well-formed chain, not in the trust
+store). CI run 39165721226: **verification-failure surfaced: True,
+crawl-stage findings: 0** — ANPU fails the crawl with a TLS
+verification error instead of quietly serving results.
+
+> Both checks need `SSL_CERT_FILE` (Go ignores it on Windows), so
+> `run.sh` skips them there; the numbers above are from Linux CI only,
+> with the run URL cited above.
 
 ## DVWA validation (ground truth + findings)
 

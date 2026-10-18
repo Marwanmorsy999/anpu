@@ -30,7 +30,19 @@ printf '<html><head><title>t</title></head><body>home <a href="/requirements.txt
 printf 'Django==3.2.0\n' > "$FIX/requirements.txt"
 ANPU_ALLOW_LOCAL_NETWORK=1 "$PY" -m http.server "$PORT" --bind 127.0.0.1 --directory "$FIX" >/dev/null 2>&1 &
 SRV_PID=$!
-sleep 2
+# Readiness gate: wait until the server actually accepts connections. A
+# fixed `sleep 2` flaked on loaded runners (interpreter start > 2s made
+# the first scan fail with "could not connect"). Hard-fail if the server
+# never comes up, so a dead fixture can never pass as a flake.
+ready() {
+  "$PY" -c 'import socket,sys;s=socket.socket();s.settimeout(1);sys.exit(0 if s.connect_ex(("127.0.0.1",int(sys.argv[1])))==0 else 1)' "$1" 2>/dev/null
+}
+for _ in {1..30}; do
+  ready "$PORT" && break
+  sleep 1
+done
+ready "$PORT" || { echo "FAIL: fixture server did not accept connections on port $PORT"; exit 1; }
+echo "  fixture server ready on 127.0.0.1:$PORT"
 
 export ANPU_ALLOW_LOCAL_NETWORK=1
 TARGET="http://127.0.0.1:$PORT/"

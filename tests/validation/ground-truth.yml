@@ -1,19 +1,54 @@
+# Ground truth derived from the fixture's known configuration, NOT from ANPU output.
+# Fixture configuration:
+#   - No security headers (no CSP, X-Frame-Options, X-Content-Type-Options, HSTS, etc.)
+#   - Set-Cookie: session=abc  (no HttpOnly, no Secure, no SameSite)
+#   - Server header disclosed by the Python HTTP server
+#   - Plain HTTP on 127.0.0.1, no HTTPS redirect
+#   - robots.txt present at /robots.txt
+#   - sitemap.xml present at /sitemap.xml
+#   - One same-host link in the index body
+
 target: purpose-built local fixture
 profile: safe
-expected:
-  - "Security headers posture"
-  - 'Cookie "session" missing HttpOnly'
-  - 'Cookie "session" has weak or missing SameSite'
-  - "Plain HTTP is not redirected to HTTPS"
-  - "HTTPS not available on standard port"
-  - "Clickjacking defense missing"
-  - "robots.txt found"
-  - "Server header discloses version"
-  - "Strict-Transport-Security not applicable"
-  - "URL corpus"
-  - "DNS resolution"
-unexpected:
-  - "SQL injection"
-  - "Cross-site scripting"
-  - "Path traversal"
-  - "Command injection"
+
+analyzers:
+  headers:
+    expected:
+      - "Security headers posture"
+      - "Clickjacking defense missing"
+      - "Strict-Transport-Security not applicable"
+      - "Server header discloses version information"
+    unexpected:
+      - "Content-Security-Policy present"
+      - "X-Frame-Options present"
+  cookies:
+    expected:
+      - 'Cookie "session" missing HttpOnly'
+      - 'Cookie "session" has weak or missing SameSite'
+    unexpected:
+      - "Secure flag present"
+  tls:
+    expected:
+      - "HTTPS not available on standard port"
+      - "Plain HTTP is not redirected to HTTPS"
+    unexpected:
+      - "Valid TLS certificate"
+  recon:
+    expected:
+      - "DNS resolution"
+      - "URL corpus"
+      - "robots.txt found"
+    unexpected:
+      - "External link"
+  endpoints:
+    expected: []
+    unexpected: []
+  tech:
+    expected: []
+    unexpected: []
+  nuclei:
+    expected: []
+    unexpected: []
+  zap:
+    expected: []
+    unexpected: []

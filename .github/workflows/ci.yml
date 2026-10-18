@@ -375,7 +375,7 @@ jobs:
 
       - name: Run installer (pinned release)
         env:
-          ANPU_VERSION: v0.4.1
+          ANPU_VERSION: v0.5.1
         run: sh ./install.sh
 
       - name: Verify installed binary
@@ -392,7 +392,7 @@ jobs:
 
       - name: Run installer
         env:
-          ANPU_VERSION: v0.4.1
+          ANPU_VERSION: v0.5.1
         run: sh ./install.sh
 
       - name: Verify installed binary
@@ -412,7 +412,7 @@ jobs:
 
       - name: Run installer
         env:
-          ANPU_VERSION: v0.4.1
+          ANPU_VERSION: v0.5.1
         run: ./install.ps1
 
       - name: Verify installed binary
@@ -433,10 +433,10 @@ jobs:
       - name: Prepare tampered archive
         run: |
           set -euo pipefail
-          mkdir -p /tmp/tamper/v0.4.1
-          curl -fsSL https://github.com/Marwanmorsy999/anpu/releases/download/v0.4.1/anpu_0.4.1_linux_amd64.tar.gz -o /tmp/tamper/v0.4.1/anpu_0.4.1_linux_amd64.tar.gz
-          curl -fsSL https://github.com/Marwanmorsy999/anpu/releases/download/v0.4.1/checksums.txt -o /tmp/tamper/v0.4.1/checksums.txt
-          printf x >> /tmp/tamper/v0.4.1/anpu_0.4.1_linux_amd64.tar.gz
+          mkdir -p /tmp/tamper/v0.5.1
+          curl -fsSL https://github.com/Marwanmorsy999/anpu/releases/download/v0.5.1/anpu_0.5.1_linux_amd64.tar.gz -o /tmp/tamper/v0.5.1/anpu_0.5.1_linux_amd64.tar.gz
+          curl -fsSL https://github.com/Marwanmorsy999/anpu/releases/download/v0.5.1/checksums.txt -o /tmp/tamper/v0.5.1/checksums.txt
+          printf x >> /tmp/tamper/v0.5.1/anpu_0.5.1_linux_amd64.tar.gz
           cd /tmp/tamper
           python3 -m http.server 8123 >/tmp/tamper/http.log 2>&1 &
           echo $! > /tmp/tamper/http.pid
@@ -444,7 +444,7 @@ jobs:
 
       - name: Run installer against tampered archive
         env:
-          ANPU_VERSION: v0.4.1
+          ANPU_VERSION: v0.5.1
           ANPU_BASE_URL: http://127.0.0.1:8123
         run: |
           set +e
@@ -474,3 +474,14 @@ jobs:
         env:
           ANPU_ALLOW_LOCAL_NETWORK: "1"
         run: bash tests/validation/run.sh
+  ghcr-anon:
+    name: ghcr anonymous pull
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Pull image anonymously
+        run: |
+          set -euo pipefail
+          docker logout ghcr.io 2>/dev/null || true
+          docker run --rm ghcr.io/marwanmorsy999/anpu version

@@ -166,6 +166,8 @@ d=json.load(open(sys.argv[1]))
 findings=d.get("findings",[])
 bad=[f for f in findings if f.get("severity") in ("medium","high","critical")]
 print("  hardened findings:", len(findings), "medium+:", len(bad))
+for f in findings:
+    print("   -", f.get("severity","?"), "|", f.get("title",""))
 if bad:
     print("FAIL: hardened baseline produced medium+ findings")
     for f in bad: print("   ", f.get("title"))

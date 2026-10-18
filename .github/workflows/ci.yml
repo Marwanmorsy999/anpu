@@ -491,6 +491,9 @@ jobs:
           $out = & ./install.ps1 2>&1; $rc = $LASTEXITCODE
           if ($rc -eq 0) { Write-Error "v0.3.1 pin should have failed"; exit 1 }
           if ("$out" -notmatch "supports v0.4.0 and newer") { Write-Error "missing version-floor message: $out"; exit 1 }
+          # The runner wrapper ends with `exit $LASTEXITCODE`; the pin is
+          # *supposed* to exit 1, so reset the stale code once assertions pass.
+          exit 0
 
   tamper:
     name: installer tamper test

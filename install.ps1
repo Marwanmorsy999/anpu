@@ -41,10 +41,20 @@ if ($Uninstall) {
   exit 0
 }
 
+# User-facing failure: emit a capturable error record, then exit 1.
+# The script runs with $ErrorActionPreference = "Stop"; a raw Write-Error
+# would throw before `exit 1`, handing callers an exception instead of a
+# clean exit code (callers do `$out = & ./install.ps1 2>&1; $LASTEXITCODE`).
+function Fail([string]$Message) {
+  $ErrorActionPreference = "Continue"
+  Write-Error $Message
+  exit 1
+}
+
 switch (([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture).ToString()) {
   "X64"   { $Arch = "amd64" }
   "Arm64" { $Arch = "arm64" }
-  default { Write-Error "anpu installer: unsupported architecture: $_"; exit 1 }
+  default { Fail "anpu installer: unsupported architecture: $_" }
 }
 
 $BaseRoot = "https://github.com/$Repo/releases/download"
@@ -106,7 +116,7 @@ function Resolve-LatestRelease([string]$Repository) {
 if ($Version -eq "latest") {
   Write-Host "anpu installer: resolving latest release..."
   $Version = Resolve-LatestRelease $Repo
-  if ([string]::IsNullOrWhiteSpace($Version)) { Write-Error "anpu installer: could not resolve latest release"; exit 1 }
+  if ([string]::IsNullOrWhiteSpace($Version)) { Fail "anpu installer: could not resolve latest release" }
 }
 
 function Test-WindowsReleaseSupported([string]$v) {
@@ -121,8 +131,7 @@ function Test-WindowsReleaseSupported([string]$v) {
   return ($min -ge 4)
 }
 if (-not (Test-WindowsReleaseSupported $Version)) {
-  Write-Error "anpu installer: Windows installer supports v0.4.0 and newer (requested $Version). v0.3.1 and earlier shipped Windows as .tar.gz; install manually from the release page."
-  exit 1
+  Fail "anpu installer: Windows installer supports v0.4.0 and newer (requested $Version). v0.3.1 and earlier shipped Windows as .tar.gz; install manually from the release page."
 }
 
 $Base = "$BaseRoot/$Version"
@@ -136,22 +145,22 @@ try {
 
   Write-Host "anpu installer: verifying checksum..."
   $line = Select-String -Path (Join-Path $Tmp "checksums.txt") -Pattern ([regex]::Escape($ZipName) + "$") | Select-Object -First 1
-  if ($null -eq $line) { Write-Error "anpu installer: checksum entry for $ZipName not found"; exit 1 }
+  if ($null -eq $line) { Fail "anpu installer: checksum entry for $ZipName not found" }
   $want = ($line.Line -split '\s+')[0]
   $got = (Get-FileHash -Path (Join-Path $Tmp $ZipName) -Algorithm SHA256).Hash.ToLower()
-  if ($got -ne $want.ToLower()) { Write-Error "anpu installer: checksum mismatch (want $want, got $got)"; exit 1 }
+  if ($got -ne $want.ToLower()) { Fail "anpu installer: checksum mismatch (want $want, got $got)" }
 
   if (Get-Command cosign -ErrorAction SilentlyContinue) {
     $cv = Get-CosignVersion
     if (-not (Test-CosignVersionOk $cv $CosignMin)) {
       $found = "unknown"
       if (-not [string]::IsNullOrWhiteSpace($cv)) { $found = "v$cv" }
-      Write-Host "anpu installer: WARNING: cosign $found found, but signature verification requires cosign >= v$CosignMin — skipping signature verification (SHA-256 verification already passed)"
+      Write-Host "anpu installer: WARNING: cosign $found found, but signature verification requires cosign >= v$CosignMin - skipping signature verification (SHA-256 verification already passed)"
     } else {
       Write-Host "anpu installer: verifying cosign signature..."
       Invoke-WebRequest -Uri "$Base/checksums.txt.sigstore.json" -OutFile (Join-Path $Tmp "checksums.txt.sigstore.json")
       & cosign verify-blob --bundle (Join-Path $Tmp "checksums.txt.sigstore.json") --certificate-identity-regexp "^https://github.com/$Repo/\.github/workflows/release\.yml@refs/tags/.*$" --certificate-oidc-issuer "https://token.actions.githubusercontent.com" (Join-Path $Tmp "checksums.txt")
-      if ($LASTEXITCODE -ne 0) { Write-Error "anpu installer: cosign signature verification failed"; exit 1 }
+      if ($LASTEXITCODE -ne 0) { Fail "anpu installer: cosign signature verification failed" }
     }
   } else {
     Write-Host "anpu installer: cosign not found, skipping signature verification (signature verification requires cosign >= v$CosignMin)"
@@ -159,7 +168,7 @@ try {
 
   Expand-Archive -Path (Join-Path $Tmp $ZipName) -DestinationPath (Join-Path $Tmp "out") -Force
   $bin = Get-ChildItem -Path (Join-Path $Tmp "out") -Filter "anpu.exe" -Recurse | Select-Object -First 1
-  if ($null -eq $bin) { Write-Error "anpu installer: archive did not contain anpu.exe"; exit 1 }
+  if ($null -eq $bin) { Fail "anpu installer: archive did not contain anpu.exe" }
 
   New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
   Copy-Item -Path $bin.FullName -Destination (Join-Path $InstallDir "anpu.exe") -Force

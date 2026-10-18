@@ -1,4 +1,4 @@
-# smoke.ps1 — live verification for ANPU using only running code.
+# smoke.ps1 - live verification for ANPU using only running code.
 #
 # No test framework, no network beyond localhost: builds the binary,
 # serves local fixtures, and asserts real stage behavior end to end.

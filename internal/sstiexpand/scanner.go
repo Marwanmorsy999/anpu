@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -86,7 +87,21 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			continue
 		}
 		_ = get(target) // baseline warms connection; detection is control-gated
+		baseline := get(target)
 		control := get(withParam(target, param, "anpu9x8z7"))
+		// Reference for chrome subtraction: the control if it arrived,
+		// else the baseline. If neither (flaky target under load), we
+		// cannot tell static-page "49" from evaluation — skip the target
+		// rather than guess. This determinism matters: an errored control
+		// used to silently disable the guard and FP on any page whose
+		// static HTML contains "49" (observed on DVWA under scan load).
+		ref := control
+		if ref == "" {
+			ref = baseline
+		}
+		if ref == "" {
+			continue
+		}
 		for _, p := range sstiPayloads {
 			if made >= maxRequests {
 				break
@@ -99,11 +114,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			if strings.Contains(body, p.payload) {
 				continue
 			}
-			if !strings.Contains(body, "49") {
-				continue
-			}
-			if strings.Contains(control, "49") {
-				continue // control already contains 49 — ambiguous
+			if !evalsTo49(body, ref) {
+				continue // no payload-attributable evaluation signal
 			}
 			findings = append(findings, models.Finding{
 				ID: "sstiexpand-evaluated", Title: fmt.Sprintf("SSTI evaluated (%s) via %s", p.engine, param),
@@ -121,6 +133,48 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		}
 	}
 	return scanner.StageResult{Findings: findings}, nil
+}
+
+// volatileRun matches long hex runs — CSRF tokens, session nonces, cache
+// busters — whose random content contains "49" by chance (~12% per 32-char
+// hex token). Comparing raw bodies made the evaluation signal luck-dependent:
+// observed on DVWA, where a random user_token flipped the finding's engine
+// label run-to-run. Strip these before any "49" comparison so the signal is
+// deterministic; a real evaluation renders 49 in page context, never inside
+// a ≥16-char hex run.
+var volatileRun = regexp.MustCompile(`[0-9a-fA-F]{16,}`)
+
+// stripVolatile removes random-token content from a response body before
+// evaluation-signal comparison.
+func stripVolatile(s string) string {
+	return volatileRun.ReplaceAllString(s, " ")
+}
+
+// evalsTo49 reports whether the payload response contains an evaluation
+// signal for "49" that the reference (control, or baseline when the control
+// errored) does not already explain. A bare substring check false-positives
+// on pages whose static HTML already contains "49" (e.g. a DOCTYPE URL) or
+// whose random tokens luck into "49": the signal only counts when the
+// reference lacks "49" entirely, or when the payload response contains
+// strictly more volatile-stripped "49" occurrences than the reference.
+// Verbatim payload reflection is excluded before this is called.
+func evalsTo49(body, ref string) bool {
+	body, ref = stripVolatile(body), stripVolatile(ref)
+	if !strings.Contains(body, "49") {
+		return false
+	}
+	if !strings.Contains(ref, "49") {
+		return true
+	}
+	return controlGains49(body, ref)
+}
+
+// controlGains49 reports whether body contains more "49" occurrences than
+// the reference. Callers must strip volatile tokens first. Static-page
+// "49"s (DOCTYPE, version strings) appear in both; a real evaluation adds
+// at least one more.
+func controlGains49(body, ref string) bool {
+	return strings.Count(body, "49") > strings.Count(ref, "49")
 }
 
 func pickTargets(sc *scanner.ScanContext) []string {

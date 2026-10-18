@@ -140,16 +140,23 @@ openssl x509 -req -in "$WORK/hard.csr" -CA "$WORK/ca.pem" -CAkey "$WORK/ca.key" 
   -CAcreateserial -out "$WORK/hard.pem" -days 365 \
   -extfile <(printf "subjectAltName=DNS:localhost") >/dev/null 2>&1
 cat "$WORK/hard.key" "$WORK/hard.pem" "$WORK/ca.pem" > "$WORK/hardfull.pem"
-# trust the CA
-if command -v update-ca-certificates >/dev/null 2>&1; then
-  SUDO=""; command -v sudo >/dev/null 2>&1 && SUDO="sudo"
-  $SUDO cp "$WORK/ca.pem" /usr/local/share/ca-certificates/anpu-test-ca.crt
-  $SUDO update-ca-certificates >/dev/null 2>&1 || true
-fi
+# Trust the harness CA WITHOUT touching the system store: on Linux/macOS Go
+# honors SSL_CERT_FILE, so the scan below validates the chain exactly the way
+# a user with a real trusted CA would see it — no skip-verify anywhere.
+# Windows ignores SSL_CERT_FILE, so the hardened scan is skipped there
+# (documented in docs/validation.md; hardened numbers come from Linux CI).
+HARDENED_SKIP=""
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*|Windows_NT) HARDENED_SKIP="1" ;;
+esac
 "$PY" "$FIX/hardened.py" "$HARDPORT" "$WORK/hardfull.pem" >/dev/null 2>&1 &
 HARD_PID=$!
 sleep 2
-"$ROOT/anpu" scan "https://localhost:$HARDPORT/" --profile safe --json --output "$WORK/hard" >"$WORK/hard.out" 2>&1 || true
+if [ -z "$HARDENED_SKIP" ]; then
+  SSL_CERT_FILE="$WORK/ca.pem" "$ROOT/anpu" scan "https://localhost:$HARDPORT/" --profile safe --json --output "$WORK/hard" >"$WORK/hard.out" 2>&1 || true
+else
+  echo "  SKIP: hardened TLS scan needs SSL_CERT_FILE (Linux/macOS only)"
+fi
 if [ -s "$WORK/hard.out" ]; then echo "  hardened scan output: $(tail -1 "$WORK/hard.out")"; fi
 HJSON=$(find "$WORK/hard" -name '*.json' | head -n1 || true)
 if [ -n "$HJSON" ]; then
@@ -164,8 +171,46 @@ if bad:
     for f in bad: print("   ", f.get("title"))
     sys.exit(1)
 PY
+elif [ -z "$HARDENED_SKIP" ]; then
+  echo "FAIL: no hardened report produced"
+  exit 1
+fi
+
+echo "== TLS-untrusted pairing (same server, different CA) =="
+# Pairing guard: "no findings on the hardened baseline" must not be
+# achievable by silently turning verification off. Scan the same hardened
+# server while trusting a DIFFERENT CA: the chain is well-formed but not
+# in the trust store, so ANPU must fail the crawl with a verification
+# error instead of quietly serving it. Linux/macOS only, same as the
+# hardened scan (SSL_CERT_FILE is ignored by Go on Windows).
+if [ -z "$HARDENED_SKIP" ]; then
+  openssl req -x509 -newkey rsa:2048 -keyout "$WORK/otherca.key" -out "$WORK/otherca.pem" -days 365 -nodes \
+    -subj "/CN=ANPU Unrelated CA" -addext "basicConstraints=critical,CA:TRUE" >/dev/null 2>&1
+  SSL_CERT_FILE="$WORK/otherca.pem" "$ROOT/anpu" scan "https://localhost:$HARDPORT/" --profile safe --json --output "$WORK/untrust" >/dev/null 2>&1 || true
+  UJSON=$(find "$WORK/untrust" -name '*.json' | head -n1 || true)
+  if [ -z "$UJSON" ]; then
+    echo "FAIL: no report produced for untrusted-chain scan"
+    exit 1
+  fi
+  $PY - "$UJSON" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1]))
+warns=" ".join(d.get("warnings",[])).lower()
+crawled=[f.get("title") for f in d.get("findings",[])
+         if f.get("source") in ("headers-analyzer","cookie-analyzer")]
+verified=any(k in warns for k in ("x509","certificate","tls","verify","authority"))
+print("  verification-failure surfaced:", verified, "| crawl-stage findings:", len(crawled))
+if not verified:
+    print("FAIL: no TLS verification failure surfaced for an untrusted chain")
+    print("      (the clean hardened result above would be meaningless if")
+    print("       verification were silently off)")
+    sys.exit(1)
+if crawled:
+    print("FAIL: untrusted chain was served content anyway:", crawled[:3])
+    sys.exit(1)
+PY
 else
-  echo "  WARN: no hardened report produced"
+  echo "  SKIP: TLS-untrusted pairing needs SSL_CERT_FILE (Linux/macOS only)"
 fi
 
 echo "VALIDATION OK"

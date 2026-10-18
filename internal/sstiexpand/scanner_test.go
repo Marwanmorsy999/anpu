@@ -147,7 +147,7 @@ func TestControlTransportErrorFallsBackToBaseline(t *testing.T) {
 				t.Errorf("hijack: %v", err)
 				return
 			}
-			conn.Close()
+			_ = conn.Close() // close error irrelevant: the connection is deliberately killed
 			return
 		}
 		// Static chrome contains "49"; nothing ever evaluates.

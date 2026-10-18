@@ -262,7 +262,7 @@ jobs:
                   echo "$md -> $link"
                 fi
               done < <(grep -oE '\]\([^)]+\)' "$md" 2>/dev/null | sed -E 's/^\]\(//; s/\)$//')
-            printf '%s\n' "$bad" | tr '\0' '\n'
+            done < <(find . -name '*.md' -not -path './.git/*' -print0 | tr '\0' '\n')
           )
           if [ -n "$broken_links" ]; then
             echo "Broken markdown links:"
@@ -544,7 +544,7 @@ jobs:
       - name: Uninstall with purge (exit 0, success message, data dir gone)
         run: |
           set -euo pipefail
-          out=$(ANPU_UNINSTALL=1 ANPU_PURGE=1 ANPU_INSTALL_DIR=/tmp/fakebin HOME=/tmp/fakehome sh ./install.sh 2>&1 </dev/null)
+          out=$(ANPU_UNINSTALL=1 ANPU_PURGE=1 ANPU_INSTALL_DIR=/tmp/fakebin HOME=/tmp/fakehome XDG_CONFIG_HOME=/tmp/fakehome/.config sh ./install.sh 2>&1 </dev/null)
           echo "$out"
           echo "$out" | grep -q "removed anpu binary"
           echo "$out" | grep -q "removed data directory"

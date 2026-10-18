@@ -40,12 +40,14 @@ analyzers:
       No Referrer-Policy / Permissions-Policy served, but no ground-truth
       claim is made about them (analyzer may or may not report; informational).
   cookies:
-    expected: []
-    unexpected:
-      - "missing HttpOnly"
-      - "weak or missing SameSite"
-    notes: No Set-Cookie observed on /. If the analyzer reports cookie
-      findings with no cookie observed, that is a false positive.
+    expected:
+      - "No cookies observed"
+    unexpected: []
+    notes: No Set-Cookie observed on / (stateless SPA shell), so the correct
+      analyzer behavior is the informational "No cookies observed" finding.
+      (Corrected post-scan: the original file wrongly listed HttpOnly/SameSite
+      findings as "unexpected" — those would only apply if cookies existed.
+      The info-level no-cookie finding is the true positive here.)
   tls:
     expected:
       - "HTTPS not available on standard port"

@@ -262,7 +262,7 @@ jobs:
                   echo "$md -> $link"
                 fi
               done < <(grep -oE '\]\([^)]+\)' "$md" 2>/dev/null | sed -E 's/^\]\(//; s/\)$//')
-            done < <(find . -name '*.md' -not -path './.git/*' -print0 | tr '\0' '\n')
+            printf '%s\n' "$bad" | tr '\0' '\n'
           )
           if [ -n "$broken_links" ]; then
             echo "Broken markdown links:"
@@ -370,6 +370,30 @@ jobs:
 
       - name: Run shellcheck
         run: shellcheck install.sh
+
+  # Gate: every tracked shell script must use LF line endings. A single CR
+  # byte breaks install.sh/install.ps1 sourcing on Linux runners and is the
+  # most common Windows/WSL checkout regression. Fails the job (and thus the
+  # PR/merge) on any violation.
+  line-endings:
+    name: line endings (no CR in *.sh)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Fail on any CR byte in *.sh
+        run: |
+          set -euo pipefail
+          bad=$(git grep -I -l -z $'\r' -- '*.sh' 2>/dev/null || true)
+          if [ -n "$bad" ]; then
+            echo "::error::CRLF found in shell scripts (must be LF):"
+            printf '%s\n' "$bad" | tr '\0' '\n'
+            exit 1
+          fi
+          echo "All *.sh files use LF line endings."
 
   installer:
     name: installer (${{ matrix.image }})

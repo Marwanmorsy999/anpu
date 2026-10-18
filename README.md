@@ -381,3 +381,6 @@ Recent engine-quality work (see CHANGELOG "Unreleased — engine quality series"
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE).
+## FAQ
+
+- **SmartScreen / Gatekeeper:** manually downloaded `.exe` files can trigger SmartScreen on Windows (and Gatekeeper on macOS). The `irm ... | iex` and `curl ... | sh` installers above usually avoid it because they install a signed release binary into a normal bin directory.

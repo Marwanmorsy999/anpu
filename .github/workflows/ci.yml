@@ -456,3 +456,21 @@ jobs:
             exit 1
           fi
           echo "installer aborted as expected (exit $rc)"
+  validation:
+    name: validation (local fixture)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.2'
+
+      - name: Run validation harness
+        env:
+          ANPU_ALLOW_LOCAL_NETWORK: "1"
+        run: bash tests/validation/run.sh

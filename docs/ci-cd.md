@@ -53,7 +53,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - id: anpu
-        uses: Marwanmorsy999/anpu/action@v0.5.2
+        uses: Marwanmorsy999/anpu/action@v0.5.1
         with:
           target: https://staging.example.com
           profile: advanced

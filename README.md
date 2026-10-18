@@ -288,7 +288,7 @@ See [docs/ci-cd.md](docs/ci-cd.md) for a complete GitHub Actions example and [do
 ### GitHub Action
 
 ```yaml
-- uses: Marwanmorsy999/anpu/action@v0.5.2
+- uses: Marwanmorsy999/anpu/action@v0.5.1
   with:
     target: https://staging.example.com
     profile: advanced

@@ -142,7 +142,7 @@ openssl x509 -req -in "$WORK/hard.csr" -CA "$WORK/ca.pem" -CAkey "$WORK/ca.key" 
 cat "$WORK/hard.key" "$WORK/hard.pem" "$WORK/ca.pem" > "$WORK/hardfull.pem"
 # trust the CA
 if command -v update-ca-certificates >/dev/null 2>&1; then
-  SUDO=""; command -v sudo >/dev/null 2>&1 || SUDO=""
+  SUDO=""; command -v sudo >/dev/null 2>&1 && SUDO="sudo"
   $SUDO cp "$WORK/ca.pem" /usr/local/share/ca-certificates/anpu-test-ca.crt
   $SUDO update-ca-certificates >/dev/null 2>&1 || true
 fi

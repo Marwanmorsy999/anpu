@@ -10,6 +10,8 @@
 #   ANPU_BASE_URL    override the release download base URL (testing)
 set -eu
 
+say() { printf '%s\n' "$*" >&2; }
+
 UNINSTALL=0
 for arg in "$@"; do
   case "$arg" in
@@ -61,8 +63,6 @@ fi
 VERSION="${ANPU_VERSION:-latest}"
 INSTALL_DIR="${ANPU_INSTALL_DIR:-}"
 BASE_URL="${ANPU_BASE_URL:-https://github.com/$REPO/releases/download}"
-
-say() { printf '%s\n' "$*" >&2; }
 
 # --- fetch tool selection ---------------------------------------------------
 if command -v curl >/dev/null 2>&1; then
@@ -199,16 +199,41 @@ else
   exit 1
 fi
 
-# --- cosign (optional) -----------------------------------------------------
+# --- cosign (signature over checksums.txt; needs cosign >= 2.5.0) ------------
+# Bundles are sigstore bundle v0.3, which cosign only learned to read in
+# v2.5.0. Older cosign hard-fails with "bundle does not contain cert for
+# verification" — so treat missing/old cosign as skip-with-warning, and
+# abort only when a new-enough cosign reports a real verification failure.
+# SHA-256 verification above stays mandatory in every case.
+COSIGN_MIN="2.5.0"
+# Portable major.minor.patch compare: returns 0 when $1 >= $2.
+ver_ge() {
+  a=${1#v}; b=${2#v}
+  a1=${a%%.*}; rest=${a#*.}; a2=${rest%%.*}; a3=${rest#*.}; a3=${a3%%[^0-9]*}
+  b1=${b%%.*}; rest=${b#*.}; b2=${rest%%.*}; b3=${rest#*.}; b3=${b3%%[^0-9]*}
+  [ "${a1:-0}" -gt "${b1:-0}" ] && return 0
+  [ "${a1:-0}" -lt "${b1:-0}" ] && return 1
+  [ "${a2:-0}" -gt "${b2:-0}" ] && return 0
+  [ "${a2:-0}" -lt "${b2:-0}" ] && return 1
+  [ "${a3:-0}" -ge "${b3:-0}" ]
+}
 if command -v cosign >/dev/null 2>&1; then
-  say "anpu installer: verifying cosign signature..."
-  fetch "$BASE/checksums.txt.sigstore.json" "$TMPDIR/checksums.txt.sigstore.json"
-  cosign verify-blob --bundle "$TMPDIR/checksums.txt.sigstore.json" \
-    --certificate-identity-regexp '^https://github.com/Marwanmorsy999/anpu/\.github/workflows/release\.yml@refs/tags/.*$' \
-    --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-    "$TMPDIR/checksums.txt"
+  COSIGN_VER=$(cosign version 2>/dev/null | sed -n 's/.*GitVersion:[[:space:]]*\(v[0-9][0-9.]*\).*/\1/p' | head -n 1)
+  if [ -z "$COSIGN_VER" ]; then
+    COSIGN_VER=$(cosign version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+  fi
+  if [ -z "$COSIGN_VER" ] || ! ver_ge "$COSIGN_VER" "$COSIGN_MIN"; then
+    say "anpu installer: WARNING: cosign ${COSIGN_VER:-unknown} found, but signature verification requires cosign >= v2.5.0 — skipping signature verification (SHA-256 verification already passed)"
+  else
+    say "anpu installer: verifying cosign signature..."
+    fetch "$BASE/checksums.txt.sigstore.json" "$TMPDIR/checksums.txt.sigstore.json"
+    cosign verify-blob --bundle "$TMPDIR/checksums.txt.sigstore.json" \
+      --certificate-identity-regexp '^https://github.com/Marwanmorsy999/anpu/\.github/workflows/release\.yml@refs/tags/.*$' \
+      --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+      "$TMPDIR/checksums.txt"
+  fi
 else
-  say "anpu installer: cosign not found, skipping signature verification"
+  say "anpu installer: cosign not found, skipping signature verification (signature verification requires cosign >= v2.5.0)"
 fi
 
 # --- extract and install ----------------------------------------------------

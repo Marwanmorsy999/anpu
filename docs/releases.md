@@ -159,7 +159,10 @@ Get-FileHash .\anpu_<version>_windows_amd64.zip -Algorithm SHA256
 
 The reported digest must match the release checksum.
 
-### 2b. Cosign signature (recommended, needs `cosign`)
+SHA-256 verification is mandatory: both installers abort on a missing
+entry or a digest mismatch.
+
+### 2b. Cosign signature (recommended, needs `cosign >= v2.5.0`)
 
 `checksums.txt` is signed keyless via Sigstore (Fulcio + Rekor) under
 the release workflow's identity, and the bundle is published as
@@ -174,9 +177,14 @@ cosign verify-blob --bundle checksums.txt.sigstore.json \
   checksums.txt
 ```
 
-Install cosign from https://docs.sigstore.dev/. The `install.sh` /
-`install.ps1` scripts run this check automatically when `cosign` is on
-`PATH` and fail closed if the signature is invalid.
+Install cosign v2.5.0 or newer from https://docs.sigstore.dev/ (the
+release bundles are sigstore bundle v0.3, which cosign only learned to
+read in v2.5.0). The `install.sh` / `install.ps1` scripts run this check
+automatically when `cosign` is on `PATH`: missing or older cosign prints
+a one-line warning naming the required version and skips signature
+verification (SHA-256 verification still runs and still aborts on
+mismatch); a new-enough cosign that reports a verification failure
+aborts the install.
 
 ### 2c. SLSA build provenance (strongest, needs `gh`)
 
@@ -239,6 +247,13 @@ It lists every component in that archive — inspect it with any
 CycloneDX tooling, e.g. `grype sbom:<file>` for a vulnerability pass.
 SBOM files are listed in `checksums.txt`, so they are covered by the
 release signature and provenance checks in section 2.
+
+Releases also publish stable, version-less archive aliases
+(`anpu_linux_amd64.tar.gz`, `anpu_windows_arm64.zip`, …) holding the same
+bytes as the versioned archives, so `releases/latest/download/...` URLs
+stay valid. They roughly double the per-release binary payload (each
+binary ships twice, once versioned and once aliased) — a deliberate
+bandwidth tradeoff for stable URLs.
 
 ## 5. Release process for maintainers
 

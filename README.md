@@ -30,7 +30,9 @@ docker run --rm ghcr.io/marwanmorsy999/anpu scan https://example.com
 <details>
 <summary>Other methods</summary>
 
-Packages, Docker nuclei variant, manual download with checksum and cosign verification, and build from source: see [docs/releases.md](docs/releases.md).
+Packages, Docker nuclei variant, manual download with checksum (required)
+and cosign verification (needs cosign >= v2.5.0), and build from source:
+see [docs/releases.md](docs/releases.md).
 
 </details>
 
@@ -286,7 +288,7 @@ See [docs/ci-cd.md](docs/ci-cd.md) for a complete GitHub Actions example and [do
 ### GitHub Action
 
 ```yaml
-- uses: Marwanmorsy999/anpu/action@v1
+- uses: Marwanmorsy999/anpu/action@v0.5.2
   with:
     target: https://staging.example.com
     profile: advanced

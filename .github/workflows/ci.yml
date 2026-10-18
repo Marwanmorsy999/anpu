@@ -108,6 +108,32 @@ jobs:
           if [ -n "$OTHER" ]; then echo "UNWAIVED advisories: $OTHER"; cat /tmp/vuln.txt; exit 1; fi
           echo "govulncheck: only waived GO-2026-5932 present"
 
+  action-ref-check:
+    name: action ref check (docs pin real tags)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Fail on unresolvable action refs in docs
+        run: |
+          set -euo pipefail
+          refs=$(grep -rhoE 'Marwanmorsy999/anpu/action@[A-Za-z0-9._/-]+' README.md docs action --include='*.md' | sed -E 's/.*action@//' | sort -u)
+          echo "action refs found: $refs"
+          fail=0
+          for ref in $refs; do
+            if git rev-parse --verify --quiet "refs/tags/$ref" >/dev/null; then
+              echo "OK: tag $ref exists"
+            else
+              echo "::error::docs reference Marwanmorsy999/anpu/action@$ref but tag $ref does not exist"
+              fail=1
+            fi
+          done
+          exit $fail
+
       - name: gosec
         # gosec v2.29.0 (latest release) vendors x/tools v0.49.0, which
         # cannot decode Go 1.27.2 export data. It then reports
@@ -403,9 +429,13 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [pwsh, powershell]
     defaults:
       run:
-        shell: pwsh
+        shell: ${{ matrix.shell }}
     steps:
       - name: Check out code
         uses: actions/checkout@v7
@@ -420,6 +450,23 @@ jobs:
           $env:Path = "$env:LOCALAPPDATA\anpu\bin;$env:Path"
           anpu version
           anpu doctor
+
+      - name: Uninstall check (exit 0, binary removed)
+        env:
+          ANPU_UNINSTALL: "1"
+          ANPU_PURGE: "1"
+        run: |
+          $env:Path = "$env:LOCALAPPDATA\anpu\bin;$env:Path"
+          ./install.ps1
+          if (Test-Path "$env:LOCALAPPDATA\anpu\bin\anpu.exe") { Write-Error "uninstall left the binary behind"; exit 1 }
+
+      - name: Pre-v0.4.0 pin prints a clear error
+        env:
+          ANPU_VERSION: v0.3.1
+        run: |
+          $out = & ./install.ps1 2>&1; $rc = $LASTEXITCODE
+          if ($rc -eq 0) { Write-Error "v0.3.1 pin should have failed"; exit 1 }
+          if ("$out" -notmatch "supports v0.4.0 and newer") { Write-Error "missing version-floor message: $out"; exit 1 }
 
   tamper:
     name: installer tamper test
@@ -456,6 +503,61 @@ jobs:
             exit 1
           fi
           echo "installer aborted as expected (exit $rc)"
+
+  installer-uninstall:
+    name: installer uninstall + purge (ubuntu)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Fake HOME with binary + data dir
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/fakehome/.config/anpu /tmp/fakebin
+          touch /tmp/fakehome/.config/anpu/anpu.db /tmp/fakebin/anpu
+      - name: Uninstall with purge (exit 0, success message, data dir gone)
+        run: |
+          set -euo pipefail
+          out=$(ANPU_UNINSTALL=1 ANPU_PURGE=1 ANPU_INSTALL_DIR=/tmp/fakebin HOME=/tmp/fakehome sh ./install.sh 2>&1 </dev/null)
+          echo "$out"
+          echo "$out" | grep -q "removed anpu binary"
+          echo "$out" | grep -q "removed data directory"
+          test ! -e /tmp/fakebin/anpu
+          test ! -e /tmp/fakehome/.config/anpu/anpu.db
+          test ! -d /tmp/fakehome/.config/anpu
+
+  installer-cosign-matrix:
+    name: installer cosign matrix (${{ matrix.cosign }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        cosign: [v2.4.1, v2.6.1]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Install pinned cosign
+        uses: sigstore/cosign-installer@v4.1.2
+        with:
+          cosign-release: ${{ matrix.cosign }}
+      - name: Install with pinned cosign (SHA-256 mandatory, sigstore conditional)
+        run: |
+          set -euo pipefail
+          cosign version
+          out=$(ANPU_VERSION=v0.5.1 ANPU_INSTALL_DIR=/tmp/cosign-bin sh ./install.sh 2>&1)
+          echo "$out"
+          echo "$out" | grep -q "installed to /tmp/cosign-bin/anpu"
+          if [ "${{ matrix.cosign }}" = "v2.4.1" ]; then
+            echo "$out" | grep -q "requires cosign >= v2.5.0"
+          else
+            echo "$out" | grep -q "verifying cosign signature"
+          fi
+          /tmp/cosign-bin/anpu version
+
   validation:
     name: validation (local fixture)
     runs-on: ubuntu-latest

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.2
+
+- **Validation depth**: committed pre-scan ground truth for Juice Shop, DVWA,
+  hardened, and TLS-broken fixtures (from fixture config, not from scan output),
+  plus per-analyzer TP/FP/FN precision/recall across safe/advanced/ultra.
+- **SSTI false-positive fix**: the `49` math-eval signal now subtracts static
+  page chrome and long random hex tokens (CSRF/session nonces) before
+  comparison, so a lucky `49` inside a token or DOCTYPE string no longer
+  flips the verdict. Covered by a regression test; DVWA advanced/ultra
+  re-scans confirm the FP is gone with no new FPs and byte-stable determinism.
+- **Release plumbing**: `install.sh` / `install.ps1` gate cosign signature
+  verification on `cosign >= v2.5.0` (sigstore bundle v0.3 needs it); older
+  or missing cosign warns and skips, a real failure on new-enough cosign
+  aborts. SHA-256 verification stays mandatory in every case.
+  PowerShell 5.1 latest-release resolution made more robust (API-first, then
+  redirect chain, then HTML).
+- **CI**: added `action-ref-check` (docs action refs must resolve to real
+  tags), Windows installer matrix (pwsh + powershell), installer uninstall
+  check, and a cosign version matrix.
+
+## 0.5.1
 ## 0.5.1
 
 - **Validation depth**: ground-truth YAML, per-analyzer precision/recall, docker-compose targets, metrics script.

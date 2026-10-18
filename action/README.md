@@ -12,7 +12,7 @@ jobs:
   anpu:
     runs-on: ubuntu-latest
     steps:
-      - uses: Marwanmorsy999/anpu/action@v1
+      - uses: Marwanmorsy999/anpu/action@v0.5.2
         with:
           target: https://staging.example.com
           profile: advanced
@@ -56,4 +56,6 @@ env:
 
 The in-repo metadata (`branding`, inputs/outputs) is published under the
 `security` category by the maintainer (publish step cannot be expressed
-in files). Version tags (`v1`, `v1.x`) are moved on each action release.
+Pin the action to a published release tag (e.g. `@v0.5.2`). There is no
+floating `v1` tag in this repository, so pinning to a real tag is the only
+supported reference.

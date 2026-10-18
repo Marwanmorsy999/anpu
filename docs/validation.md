@@ -14,15 +14,29 @@ dedicated row. This rule is applied to all per-analyzer recounts below
 (DVWA included). Matching itself is substring-based on finding titles after
 lowercasing, per `tests/validation/metrics.py`.
 
+## Ground-truth provenance (pre-scan, verifiable)
+
+Every ground-truth file was committed **before** any scan that produced the
+numbers below. Evidence (`git log` / `git merge-base --is-ancestor`):
+
+| Commit | Date (UTC) | Content | Ancestor of run SHA `378c764`? |
+|---|---|---|---|
+| `253703d` | 2026-10-18 12:13:46Z | local-fixture ground truth + metrics harness | yes |
+| `9a3c015` | 2026-10-18 13:57:49Z | hardened/TLS-broken harness + fixture GT | yes |
+| `2670458` | 2026-10-18 15:18:02Z | Juice Shop, DVWA, hardened, TLS-broken GT files ("from fixture config, pre-scan") | yes |
+| `a379995` | 2026-10-18 18:34:33Z | `ground-truth-ssti.yml` + docs | yes |
+
+The validation run that produced every number cited in this document
+([39165721226](https://github.com/Marwanmorsy999/anpu/actions/runs/39165721226))
+executed at 2026-10-18 20:59Z on SHA `378c764` — after all of the above,
+both in wall-clock time and in the commit graph.
+
 ## Latest run (safe profile, purpose-built fixture)
 
-Latest CI evidence: [run 39165721226](https://github.com/Marwanmorsy999/anpu/actions/runs/39165721226)
-on SHA `378c764` (2026-10-18), job `validation (local fixture)` — all
-checks green, including the hardened baseline and the TLS-untrusted
-pairing guard below.
-
 Per-analyzer precision/recall (TP/FP/FN), from
-`tests/validation/run.sh` → `tests/validation/metrics.py`:
+`tests/validation/run.sh` → `tests/validation/metrics.py`, run
+[39165721226](https://github.com/Marwanmorsy999/anpu/actions/runs/39165721226)
+on SHA `378c764`:
 
 | Analyzer | TP | FP | FN | Precision | Recall | Actual | Expected |
 |---|---|---|---|---|---|---|---|
@@ -30,12 +44,19 @@ Per-analyzer precision/recall (TP/FP/FN), from
 | cookies | 2 | 0 | 0 | 1.00 | 1.00 | 2 | 2 |
 | tls | 2 | 0 | 0 | 1.00 | 1.00 | 2 | 2 |
 | recon | 3 | 0 | 0 | 1.00 | 1.00 | 3 | 3 |
-| endpoints | 0 | 0 | 0 | 1.00 | 1.00 | 0 | 0 |
-| tech | 0 | 0 | 0 | 1.00 | 1.00 | 0 | 0 |
-| nuclei | 0 | 0 | 0 | 1.00 | 1.00 | 0 | 0 |
-| zap | 0 | 0 | 0 | 1.00 | 1.00 | 0 | 0 |
-| ssti | 0 | 0 | 0 | 1.00 | 1.00 | 0 | 0 |
+| endpoints | 0 | 0 | 0 | not measured | not measured | 0 | 0 |
+| tech | 0 | 0 | 0 | not measured | not measured | 0 | 0 |
+| nuclei | 0 | 0 | 0 | not measured | not measured | 0 | 0 |
+| zap | 0 | 0 | 0 | not measured | not measured | 0 | 0 |
+| ssti | 0 | 0 | 0 | not measured | not measured | 0 | 0 |
 | **TOTAL** | **11** | **0** | **0** | **1.00** | **1.00** | | |
+
+"not measured" means the fixture has **no expectations and no findings** for
+that analyzer, so precision/recall are undefined — there is nothing to
+measure. (The harness prints a vacuous `1.00` for such rows; this document
+reports them as "not measured" because vacuous truth is not evidence. The
+threshold gate only grades rows with expectations and never treats these
+rows as passes.)
 
 Determinism: risk score identical across repeated runs (5.1 on the fixture).
 
@@ -48,36 +69,58 @@ generalization claims.
 
 ## TLS-broken fixture
 
-Expired certificate with wrong hostname (CI run 39165721226): ANPU
-reported `TLS certificate failed validation` and `TLS certificate has
-expired` — both TP against `ground-truth-tlsbroken.yml`. TLS 1.1-only
-server: ANPU reported no TLS 1.0/1.1 finding (FN — known gap, not
-fixed).
+Expired certificate with wrong hostname (run 39165721226): ANPU reported
+`TLS certificate failed validation` and `TLS certificate has expired` —
+both TP against `ground-truth-tlsbroken.yml`.
 
 ## Hardened baseline
 
 Valid TLS (trusted local CA), all recommended security headers, secure
-cookie. CI run 39165721226: **8 findings, 0 medium/high/critical**. The
+cookie. Run 39165721226: **8 findings, 0 medium/high/critical**. The
 fixture (`tests/validation/hardened.py`) serves CSP
 (`default-src 'self'`), `X-Frame-Options: DENY`, `X-Content-Type-Options:
-nosniff`, HSTS, `Referrer-Policy: no-referrer`, `Permissions-Policy`,
-and a `Secure; HttpOnly; SameSite=Strict` session cookie over valid
-locally-trusted TLS; every remaining finding is below medium (the
-harness fails the run on any medium+ finding), i.e. informational
-posture notes, not defects.
+nosniff`, HSTS (`max-age=63072000; includeSubDomains`), `Referrer-Policy:
+no-referrer`, `Permissions-Policy: geolocation=()`, and a
+`Secure; HttpOnly; SameSite=Strict` session cookie, via Python's stdlib
+HTTP server over a locally-CA-signed certificate.
+
+All 8 findings listed with justification against the fixture config —
+**all 8 are justified (true positives at low/info); 0 false positives**:
+
+| # | Severity | Finding | Justification (vs fixture config) |
+|---|---|---|---|
+| 1 | low | CSP does not set `base-uri` | fixture CSP is exactly `default-src 'self'` — no `base-uri` directive exists |
+| 2 | low | CSP does not set `object-src 'none'` | fixture CSP has no `object-src`; real (deliberate) gap |
+| 3 | low | Security headers posture — 3 of 8 recommended headers absent | fixture sends 6 of 8; COOP/COEP/CORP-class headers are genuinely absent |
+| 4 | low | Weak TLS cipher suite accepted: CBC (TLS_RSA_WITH_AES_128_CBC_SHA256) | Python `ssl.PROTOCOL_TLS_SERVER` defaults genuinely accept CBC suites — real server-side property |
+| 5 | info | DNS resolution | recon fact: the hostname resolves; expected output for any reachable target |
+| 6 | info | HSTS not preload-ready | fixture HSTS lacks the `preload` token — correct observation |
+| 7 | info | Server header discloses version information | Python's `BaseHTTPRequestHandler` always sends `Server: SimpleHTTP/0.6 Python/3.x` |
+| 8 | info | robots.txt found | the fixture handler answers GET on any path with 200, so `/robots.txt` legitimately returns 200 — the finding correctly records what the server did |
 
 ### TLS-untrusted pairing (verification really on)
 
 "Zero medium+ on the hardened baseline" is meaningless if verification
 were silently off, so the same run scans the same server while trusting
 a **different, unrelated CA** (well-formed chain, not in the trust
-store). CI run 39165721226: **verification-failure surfaced: True,
+store). Run 39165721226: **verification-failure surfaced: True,
 crawl-stage findings: 0** — ANPU fails the crawl with a TLS
 verification error instead of quietly serving results.
 
-> Both checks need `SSL_CERT_FILE` (Go ignores it on Windows), so
-> `run.sh` skips them there; the numbers above are from Linux CI only,
-> with the run URL cited above.
+> The hardened scan and the pairing guard need `SSL_CERT_FILE` (Go
+> ignores it on Windows), so `run.sh` skips both there; both numbers
+> come from the Linux CI run cited above. A Windows-side reproduction
+> (CA in the user root store, same fixture) found the same core
+> low/info posture findings; environment-dependent rows (server cipher
+> set, `/robots.txt` 200) vary with the local TLS stack.
+
+## Known false negatives
+
+- **TLS 1.1-only server**: on the TLS 1.1 fixture (run 39165721226),
+  ANPU reported **no** TLS 1.0/1.1 deprecation finding. A server that
+  accepts only TLS 1.1 should raise a finding; it does not. Known gap,
+  not fixed in v0.5.2.
+
 
 ## DVWA validation (ground truth + findings)
 
@@ -156,8 +199,11 @@ observed` finding is the true positive; the file's earlier HttpOnly/SameSite
 - Single small HTTP fixture plus one TLS-broken server and one hardened
   server. Juice Shop/DVWA targets are defined in `tests/docker-compose.yml`
   but not yet wired into the fast CI job.
-- Nuclei and ZAP analyzers show N/A because they are not installed in the
-  fast CI fixture run. ZAP runs in the scheduled validation workflow.
-- TLS 1.0/1.1 detection is a known false negative.
+- Nuclei and ZAP analyzers show no numbers because they are not installed
+  in the fast CI fixture run ("not measured" rows above). ZAP runs in the
+  scheduled validation workflow.
+- TLS 1.0/1.1 detection is a known false negative (see Known false
+  negatives).
 - 1.00 precision/recall rows are fixture-scoped; do not generalize these
   numbers beyond the fixtures that exercise them (see Scope note above).
+

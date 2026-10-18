@@ -37,6 +37,18 @@ DB path, Nuclei status, and report-directory writability.
 
 ANPU stores scan history locally in `~/.anpu/anpu.db` by default. The database is created automatically when a command needs it.
 
+
+## `anpu update`
+
+Check for and apply the latest ANPU release:
+
+```sh
+anpu update --check
+anpu update
+```
+
+
+
 ## `anpu scan`
 
 Run the scan pipeline against a target URL.

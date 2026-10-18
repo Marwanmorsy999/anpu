@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- **Validation harness**: local fixture validation with guard-off-by-default assertion, true-positive checks, and deterministic score.
+- **ZAP runtime validation**: scheduled workflow runs ultra with ZAP against the local fixture.
+- **Lifecycle commands**: `anpu update` (checksum/cosign, atomic replace, `--check`) and installer `--uninstall`.
+- **Docs/trust**: docs/validation.md, docs/install.md, install FAQ.
+
+
 ## 0.4.1
 
 - **Nuclei version detection**: `anpu doctor` now reports the installed Nuclei version. Nuclei prints its version to stderr, so version detection reads combined output, strips ANSI, and selects the first line containing a semantic version. The version probe timeout returns to 5s.

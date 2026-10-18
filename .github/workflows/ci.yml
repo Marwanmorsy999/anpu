@@ -414,6 +414,8 @@ jobs:
             setup: apk add --no-cache git wget tar coreutils openssl
           - image: archlinux:latest
             setup: pacman -Sy --noconfirm git curl tar coreutils
+          - image: kalilinux/kali-rolling
+            setup: apt-get update && apt-get install -y git curl tar coreutils
     container:
       image: ${{ matrix.image }}
     steps:

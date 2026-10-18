@@ -10,7 +10,54 @@
 #   ANPU_BASE_URL    override the release download base URL (testing)
 set -eu
 
+UNINSTALL=0
+for arg in "$@"; do
+  case "$arg" in
+    --uninstall) UNINSTALL=1 ;;
+  esac
+done
+if [ "${ANPU_UNINSTALL:-0}" = "1" ]; then
+  UNINSTALL=1
+fi
+
 REPO="Marwanmorsy999/anpu"
+
+if [ "$UNINSTALL" = "1" ]; then
+  INSTALL_DIR="${ANPU_INSTALL_DIR:-/usr/local/bin}"
+  if [ ! -w "$INSTALL_DIR" ] && [ -x "$INSTALL_DIR/anpu" ]; then
+    if command -v sudo >/dev/null 2>&1; then
+      sudo rm -f "$INSTALL_DIR/anpu"
+    else
+      rm -f "$INSTALL_DIR/anpu" 2>/dev/null || true
+    fi
+  else
+    rm -f "$INSTALL_DIR/anpu" 2>/dev/null || true
+  fi
+  # also try user bin
+  rm -f "$HOME/.local/bin/anpu" 2>/dev/null || true
+  say "anpu installer: removed anpu binary"
+  if [ "${ANPU_PURGE:-0}" = "1" ]; then
+    rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/anpu" "$HOME/.anpu"
+    say "anpu installer: removed data directory"
+  else
+    if [ -t 0 ]; then
+      printf "Remove data directory too? [y/N] " >&2
+      read -r ans || ans=""
+      case "$ans" in
+        y|Y|yes|YES)
+          rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/anpu" "$HOME/.anpu"
+          say "anpu installer: removed data directory"
+          ;;
+        *)
+          say "anpu installer: kept data directory"
+          ;;
+      esac
+    else
+      say "anpu installer: kept data directory (set ANPU_PURGE=1 to remove)"
+    fi
+  fi
+  exit 0
+fi
 VERSION="${ANPU_VERSION:-latest}"
 INSTALL_DIR="${ANPU_INSTALL_DIR:-}"
 BASE_URL="${ANPU_BASE_URL:-https://github.com/$REPO/releases/download}"

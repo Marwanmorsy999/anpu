@@ -13,6 +13,34 @@ if ([string]::IsNullOrWhiteSpace($Version)) { $Version = "latest" }
 $InstallDir = $env:ANPU_INSTALL_DIR
 if ([string]::IsNullOrWhiteSpace($InstallDir)) { $InstallDir = Join-Path $env:LOCALAPPDATA "anpu\bin" }
 
+$Uninstall = $false
+if ($env:ANPU_UNINSTALL -eq "1") { $Uninstall = $true }
+if ($args -contains "--uninstall") { $Uninstall = $true }
+
+if ($Uninstall) {
+  Remove-Item -Path (Join-Path $InstallDir "anpu.exe") -Force -ErrorAction SilentlyContinue
+  $path = [Environment]::GetEnvironmentVariable("Path", "User")
+  if ($path -like "*$InstallDir*") {
+    $newPath = ($path -split ";" | Where-Object { $_ -ne $InstallDir }) -join ";"
+    [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+  }
+  Write-Host "anpu installer: removed anpu binary"
+  $dataDir = Join-Path $env:APPDATA "anpu"
+  $purge = $false
+  if ($env:ANPU_PURGE -eq "1") { $purge = $true }
+  if (-not $purge -and [Environment]::UserInteractive) {
+    $ans = Read-Host "Remove data directory too? [y/N]"
+    if ($ans -match "^[yY]") { $purge = $true }
+  }
+  if ($purge) {
+    Remove-Item -Recurse -Force $dataDir -ErrorAction SilentlyContinue
+    Write-Host "anpu installer: removed data directory"
+  } else {
+    Write-Host "anpu installer: kept data directory (set ANPU_PURGE=1 to remove)"
+  }
+  exit 0
+}
+
 switch (([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture).ToString()) {
   "X64"   { $Arch = "amd64" }
   "Arm64" { $Arch = "arm64" }

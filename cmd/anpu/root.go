@@ -85,6 +85,7 @@ authorized to test.`,
 	root.AddCommand(newPluginCmd())
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newDoctorCmd())
+	root.AddCommand(newUpdateCmd())
 
 	// Group commands by what they do for you, so the list reads
 	// clearly for first-time and non-technical users.
@@ -107,7 +108,7 @@ authorized to test.`,
 		"tools": "setup", "search": "setup", "feeds": "setup",
 		"plugin":    "setup",
 		"wordlists": "setup", "completion": "setup", "help": "setup",
-		"version": "setup", "doctor": "setup",
+		"version": "setup", "doctor": "setup", "update": "setup",
 	}
 	for _, c := range root.Commands() {
 		if g, ok := groupOf[c.Name()]; ok {

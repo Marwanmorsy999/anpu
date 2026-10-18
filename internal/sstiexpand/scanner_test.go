@@ -184,6 +184,36 @@ func TestCleanEvaluationHits(t *testing.T) {
 	}
 }
 
+// True positive: a Jinja2-style endpoint that actually evaluates {{7*7}} /
+// ${7*7} into 49 (no static "49", no tokens) must be detected by the fixed
+// scanner. This is the detection side of the DVWA FP fix: the chrome/token
+// subtraction must not swallow a real evaluation.
+func TestJinja2TruePositiveDetected(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Query().Get("anpuprobe")
+		body := "<html><body><h1>Hello, guest</h1></body></html>"
+		// Local vulnerable-Jinja2 fixture: evaluates both Jinja2 styles.
+		if p == "{{7*7}}" || p == "${7*7}" {
+			body = "<html><body><h1>Hello, 49</h1></body></html>"
+		}
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	res, err := New(testClient()).Run(context.Background(), testContext(srv.URL))
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	found := false
+	for _, f := range res.Findings {
+		if f.ID == "sstiexpand-evaluated" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("Jinja2 true positive must raise SSTI, got %d findings", len(res.Findings))
+	}
+}
+
 // Verbatim reflection of the payload is input echo, not evaluation.
 func TestEchoGuardStillApplies(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

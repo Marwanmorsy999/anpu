@@ -285,5 +285,3 @@ func unzipFirst(archive, dest, name string) error {
 	}
 	return nil
 }
-
-

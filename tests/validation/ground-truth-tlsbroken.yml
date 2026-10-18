@@ -1,0 +1,55 @@
+# Ground truth for the TLS-broken fixture (tests/validation/run.sh builds it).
+# Derived ONLY from the fixture's KNOWN construction — NOT from ANPU output.
+# No ANPU scan had been run when this file was written.
+#
+# KNOWN construction (run.sh):
+#   - Leaf cert CN=wronghost, SAN=DNS:wronghost, validity 2020-01-01..2021-01-01
+#     (expired), served on https://127.0.0.1:PORT/ via openssl s_server.
+#     The scan target hostname is 127.0.0.1, so the name never matches.
+#   - Serving stack is openssl s_server -www (no app headers/cookies).
+
+target: TLS-broken fixture (https://127.0.0.1:PORT/)
+profiles: [safe]
+
+analyzers:
+  headers:
+    expected: []
+    unexpected: []
+    notes: not measured — s_server emits no app headers; no claim made.
+  cookies:
+    expected: []
+    unexpected: []
+    notes: not measured — no cookies served.
+  tls:
+    expected:
+      - "expired"
+      - "failed validation"
+    unexpected:
+      - "Valid TLS certificate"
+    notes: Expired AND wrong-hostname. Either finding is a true positive;
+      both expected from a working TLS analyzer.
+  recon:
+    expected: []
+    unexpected: []
+    notes: not measured.
+  endpoints:
+    expected: []
+    unexpected: []
+    notes: not measured.
+  tech:
+    expected: []
+    unexpected: []
+    notes: not measured.
+  nuclei:
+    expected: []
+    unexpected: []
+    notes: not measured.
+  zap:
+    expected: []
+    unexpected: []
+    notes: not measured.
+
+known_gap:
+  - TLS 1.0/1.1-only server detection: ANPU reports no finding (false
+    negative, documented in docs/validation.md, not fixed — would require
+    protocol-version probing the TLS analyzer does not implement).

@@ -1,0 +1,84 @@
+# Ground truth for the OWASP Juice Shop target (bkimminich/juice-shop:latest).
+# Derived ONLY from the fixture's KNOWN configuration as observed 2026-10-18
+# via plain HTTP (curl/Invoke-WebRequest) — NOT from any ANPU output.
+# No ANPU scan had been run when this file was written.
+#
+# KNOWN configuration (observed):
+#   - GET / -> 200 text/html (Angular SPA shell), headers observed:
+#       Access-Control-Allow-Origin: *
+#       X-Content-Type-Options: nosniff            (present)
+#       X-Frame-Options: SAMEORIGIN                (present)
+#       Feature-Policy: payment 'self'             (present, legacy name)
+#       X-Recruiting: /#/jobs
+#       Cache-Control: public, max-age=0
+#       NO Content-Security-Policy header
+#       NO Strict-Transport-Security header (plain HTTP target)
+#       NO Referrer-Policy header
+#       NO Permissions-Policy header
+#       Set-Cookie: none observed on / (stateless SPA shell)
+#   - /robots.txt -> "User-agent: *\nDisallow: /ftp" (present)
+#   - Plain HTTP on 127.0.0.1:3000, no HTTPS listener, no redirect to HTTPS
+#   - Server header: NOT observed (Express default X-Powered-By removed/no Server)
+#   - Juice Shop is a deliberately vulnerable app (XSS, SQLi, auth flaws, ...).
+#     Those are REAL vulnerabilities but OUT OF SCOPE for ANPU's passive
+#     analyzers under safe/advanced profiles; they are listed below as
+#     out_of_scope_for_this_analyzer and MUST NOT be counted as false negatives.
+
+target: OWASP Juice Shop (bkimminich/juice-shop:latest, http://127.0.0.1:3000/)
+profiles: [safe, advanced, ultra]
+
+analyzers:
+  headers:
+    expected:
+      - "Content-Security-Policy missing"
+      - "Strict-Transport-Security not applicable"
+    unexpected:
+      - "X-Frame-Options present"
+      - "X-Content-Type-Options present"
+    notes: X-Frame-Options SAMEORIGIN and X-Content-Type-Options nosniff ARE
+      served, so a finding claiming they are missing would be a false positive.
+      No Referrer-Policy / Permissions-Policy served, but no ground-truth
+      claim is made about them (analyzer may or may not report; informational).
+  cookies:
+    expected: []
+    unexpected:
+      - "missing HttpOnly"
+      - "weak or missing SameSite"
+    notes: No Set-Cookie observed on /. If the analyzer reports cookie
+      findings with no cookie observed, that is a false positive.
+  tls:
+    expected:
+      - "HTTPS not available on standard port"
+      - "Plain HTTP is not redirected to HTTPS"
+    unexpected:
+      - "Valid TLS certificate"
+  recon:
+    expected:
+      - "robots.txt found"
+    unexpected: []
+  endpoints:
+    expected: []
+    unexpected: []
+    notes: not measured — no fixture-exercised expectation; unmatched
+      endpoint findings are counted but never auto-labeled false positives.
+  tech:
+    expected: []
+    unexpected: []
+    notes: not measured — no config-derived expectation.
+  nuclei:
+    expected: []
+    unexpected: []
+    notes: measured only on advanced/ultra when a nuclei binary is present;
+      safe profile must not run Nuclei. Juice Shop ships real vulnerable
+      endpoints; any Nuclei hit is corroboration, not ground truth.
+  zap:
+    expected: []
+    unexpected: []
+    notes: measured only on ultra when ZAP is available; otherwise not measured.
+
+out_of_scope_for_this_analyzer:
+  - Reflected/stored XSS in Juice Shop search/feedback (needs active probing)
+  - SQL injection in login/search (needs active probing)
+  - Broken authentication / JWT flaws (needs active probing)
+  - Any Nuclei-template or ZAP-alert finding on app-logic flaws: real vulns,
+    but not detectable by passive header/cookie/TLS/recon analyzers.

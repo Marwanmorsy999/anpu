@@ -1,0 +1,61 @@
+# Ground truth for the hardened baseline (tests/validation/hardened.py).
+# Derived ONLY from the fixture's KNOWN configuration (source read, not run
+# output) — NOT from any ANPU output. No ANPU scan had been run when written.
+#
+# KNOWN configuration (hardened.py source):
+#   - HTTPS with valid cert chain (test CA trusted in harness), CN=localhost
+#   - Response headers: Content-Security-Policy "default-src 'self'",
+#     X-Frame-Options DENY, X-Content-Type-Options nosniff,
+#     Strict-Transport-Security max-age=63072000; includeSubDomains,
+#     Referrer-Policy no-referrer, Permissions-Policy geolocation=()
+#   - Set-Cookie: session=abc; Secure; HttpOnly; SameSite=Strict
+#   - Body: static "ok" page, no links, no robots/sitemap advertised
+
+target: hardened local baseline (https://localhost:PORT/)
+profiles: [safe, advanced, ultra]
+
+analyzers:
+  headers:
+    expected: []
+    unexpected:
+      - "Security headers posture"
+      - "Clickjacking defense missing"
+      - "Content-Security-Policy missing"
+  cookies:
+    expected: []
+    unexpected:
+      - "missing HttpOnly"
+      - "weak or missing SameSite"
+      - "missing Secure"
+  tls:
+    expected: []
+    unexpected:
+      - "expired"
+      - "failed validation"
+      - "not redirected to HTTPS"
+    notes: Valid trusted TLS; any TLS failure finding is a false positive.
+  recon:
+    expected: []
+    unexpected: []
+    notes: not measured — static page, no links/robots/sitemap advertised.
+  endpoints:
+    expected: []
+    unexpected: []
+    notes: not measured.
+  tech:
+    expected: []
+    unexpected: []
+    notes: not measured.
+  nuclei:
+    expected: []
+    unexpected: []
+    notes: not measured on safe; on advanced/ultra any hit against this
+      hardened static page would be investigated, not auto-counted.
+  zap:
+    expected: []
+    unexpected: []
+    notes: not measured unless ZAP runs on ultra.
+
+acceptance:
+  max_medium_high_critical: 0
+  notes: No medium/high/critical findings expected on any profile.

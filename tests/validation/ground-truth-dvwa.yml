@@ -1,0 +1,77 @@
+# Ground truth for the DVWA target (vulnerables/web-dvwa:latest).
+# Derived ONLY from the fixture's KNOWN configuration as observed 2026-10-18
+# via plain HTTP (curl/Invoke-WebRequest) — NOT from any ANPU output.
+# No ANPU scan had been run when this file was written.
+#
+# KNOWN configuration (observed):
+#   - GET / -> 302 to login.php, headers observed:
+#       Server: Apache/2.4.25 (Debian)              (version disclosed)
+#       Set-Cookie: PHPSESSID=<id>; path=/          (no HttpOnly, no Secure,
+#                                                    no SameSite)
+#       Set-Cookie: PHPSESSID=<id>; path=/          (duplicated)
+#       Set-Cookie: security=low                    (no flags at all)
+#       Expires/Cache-Control/Pragma: no-cache
+#       NO X-Frame-Options, NO X-Content-Type-Options,
+#       NO Content-Security-Policy, NO HSTS (plain HTTP),
+#       NO Referrer-Policy, NO Permissions-Policy
+#   - GET /login.php -> 200 text/html login form, same cookie/header posture
+#   - /robots.txt -> "User-agent: *\nDisallow: /" (present)
+#   - Plain HTTP on 127.0.0.1:8080, no HTTPS listener, no redirect to HTTPS
+#   - DVWA is deliberately vulnerable (XSS/SQLi/cmdi/file inclusion...).
+#     Those are REAL vulnerabilities but OUT OF SCOPE for ANPU's passive
+#     analyzers; listed below and MUST NOT be counted as false negatives.
+
+target: DVWA (vulnerables/web-dvwa:latest, http://127.0.0.1:8080/)
+profiles: [safe, advanced, ultra]
+
+analyzers:
+  headers:
+    expected:
+      - "Security headers posture"
+      - "Clickjacking defense missing"
+      - "Strict-Transport-Security not applicable"
+      - "Server header discloses version information"
+    unexpected:
+      - "Content-Security-Policy present"
+      - "X-Frame-Options present"
+      - "X-Content-Type-Options present"
+  cookies:
+    expected:
+      - "missing HttpOnly"
+      - "weak or missing SameSite"
+    unexpected:
+      - "Secure flag present"
+    notes: PHPSESSID and security cookies carry no HttpOnly/Secure/SameSite.
+  tls:
+    expected:
+      - "HTTPS not available on standard port"
+      - "Plain HTTP is not redirected to HTTPS"
+    unexpected:
+      - "Valid TLS certificate"
+  recon:
+    expected:
+      - "robots.txt found"
+    unexpected: []
+  endpoints:
+    expected: []
+    unexpected: []
+    notes: not measured — no fixture-exercised expectation.
+  tech:
+    expected: []
+    unexpected: []
+    notes: not measured — no config-derived expectation.
+  nuclei:
+    expected: []
+    unexpected: []
+    notes: measured only on advanced/ultra when a nuclei binary is present;
+      safe profile must not run Nuclei.
+  zap:
+    expected: []
+    unexpected: []
+    notes: measured only on ultra when ZAP is available; otherwise not measured.
+
+out_of_scope_for_this_analyzer:
+  - Reflected/stored XSS (?page=vulnerabilities/xss_r etc., needs auth+active)
+  - SQL injection (needs auth + active probing)
+  - Command injection / file inclusion / upload (needs auth + active probing)
+  - CSRF/auth bypass (needs auth + active probing)

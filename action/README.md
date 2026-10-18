@@ -12,7 +12,7 @@ jobs:
   anpu:
     runs-on: ubuntu-latest
     steps:
-      - uses: Marwanmorsy999/anpu/action@v0.5.1
+      - uses: Marwanmorsy999/anpu/action@v0.5.2
         with:
           target: https://staging.example.com
           profile: advanced

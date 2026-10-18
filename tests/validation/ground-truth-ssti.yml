@@ -1,0 +1,29 @@
+# Ground truth for the local vulnerable-Jinja2 SSTI fixture.
+# The fixture lives in internal/sstiexpand/scanner_test.go
+# (TestJinja2TruePositiveDetected): an httptest endpoint that renders the
+# query param as a Jinja2 template, so `{{7*7}}` and `${7*7}` evaluate to 49.
+# Baseline response has no static "49" and no random tokens; the ONLY "49"
+# is payload-attributable evaluation. This is the true-positive side of the
+# DVWA false-positive fix (commit 56fb2ec): the chrome/token subtraction
+# must not swallow a real evaluation.
+#
+# Detection rule (scanner.go evalsTo49): 49 present in the payload response,
+# absent (or strictly fewer) in the control/baseline after stripping
+# >=16-char hex runs (CSRF/session nonces). Verbatim payload reflection is
+# echo, not evaluation.
+
+target: local vulnerable-Jinja2 endpoint (httptest, ?anpuprobe=<payload>)
+profile: unit (sstiexpand analyzer, no network beyond loopback)
+
+analyzers:
+  ssti:
+    expected:
+      - "SSTI evaluated"
+      - "49 in response; control clean"
+    unexpected:
+      - "no finding on evaluated response"
+      - "finding on static page with 49 in chrome"
+      - "finding on random hex token containing 49"
+    notes: both `{{7*7}}` and `${7*7}` must raise sstiexpand-evaluated;
+      control/baseline must be clean. Regression companions:
+      TestStaticChrome49IsNotEvaluation, TestRandomHexTokenLuck49IsNotEvaluation.

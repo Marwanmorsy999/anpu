@@ -23,6 +23,8 @@ for m in re.finditer(r"(?ms)^  (\w[\w-]*):\s*\n    expected:\s*\n(.*?)\n    unex
 
 def analyzer_for(dm, src):
     s = ((src or "") + " " + (dm or "")).lower()
+    if "ssti" in s or "template injection" in s:
+        return "ssti"
     if "headers" in s or "custom" in s:
         return "headers"
     if "cookie" in s:
@@ -51,7 +53,7 @@ for f in findings:
 
 rows = []
 tp_all = fp_all = fn_all = 0
-for a in ["headers", "cookies", "tls", "recon", "endpoints", "tech", "nuclei", "zap"]:
+for a in ["headers", "cookies", "tls", "recon", "endpoints", "tech", "nuclei", "zap", "ssti"]:
     expected = analyzers.get(a, [])
     titles = by_analyzer.get(a, [])
     tp = sum(1 for e in expected if any(e.lower() in t.lower() for t in titles))

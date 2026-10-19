@@ -155,15 +155,29 @@ if [ -z "$INSTALL_DIR" ]; then
   fi
 else
   USE_SUDO=0
-  if [ ! -w "$INSTALL_DIR" ]; then
+  if [ ! -e "$INSTALL_DIR" ]; then
+    if ! mkdir -p "$INSTALL_DIR" 2>/dev/null; then
+      if command -v sudo >/dev/null 2>&1; then
+        USE_SUDO=1
+        sudo mkdir -p "$INSTALL_DIR" || {
+          say "anpu installer: $INSTALL_DIR does not exist"
+          exit 1
+        }
+      else
+        say "anpu installer: $INSTALL_DIR does not exist"
+        exit 1
+      fi
+    fi
+  elif [ ! -w "$INSTALL_DIR" ]; then
     if command -v sudo >/dev/null 2>&1; then
       USE_SUDO=1
     else
       say "anpu installer: $INSTALL_DIR is not writable"
       exit 1
     fi
+  else
+    mkdir -p "$INSTALL_DIR"
   fi
-  mkdir -p "$INSTALL_DIR"
 fi
 USE_SUDO=${USE_SUDO:-0}
 

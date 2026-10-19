@@ -97,7 +97,7 @@ func guardAgainstLocalNetwork(host string) error {
 	if lower == "localhost" || strings.HasSuffix(lower, ".localhost") ||
 		lower == "metadata.google.internal" {
 		return &TargetValidationError{
-			fmt.Sprintf("refusing to scan %q: local/internal hostnames are blocked by default (use test fixtures or --allow-local-network for authorized internal testing)", host),
+			Reason: fmt.Sprintf("refusing to scan %q: local/internal hostnames are blocked by default (use test fixtures or ANPU_ALLOW_LOCAL_NETWORK=1 for authorized internal testing)", host),
 		}
 	}
 

@@ -631,6 +631,31 @@ jobs:
           kill "$(cat /tmp/tamper/http.pid)" "$(cat /tmp/tamper-sums/http.pid)" 2>/dev/null || true
           echo "installer aborted as expected (exit $rc), nothing installed"
 
+  installer-tamper-windows:
+    name: installer tamper windows (${{ matrix.shell }})
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Positive control C0 (clean install must succeed)
+        shell: ${{ matrix.shell }}
+        run: ./tests/installers/C0-positive-call.ps1
+      - name: Zip tamper T1 aborts (call path)
+        shell: ${{ matrix.shell }}
+        run: ./tests/installers/T1-ziptamper-call.ps1
+      - name: Checksums tamper T2 aborts (call path)
+        shell: ${{ matrix.shell }}
+        run: ./tests/installers/T2-sumtamper-call.ps1
+      - name: Zip tamper T3 aborts (iex path)
+        shell: ${{ matrix.shell }}
+        run: ./tests/installers/T3-ziptamper-iex.ps1
+
   installer-uninstall:
     name: installer uninstall + purge (ubuntu)
     runs-on: ubuntu-latest

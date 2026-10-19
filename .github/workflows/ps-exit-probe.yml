@@ -1,0 +1,45 @@
+name: ps-exit-probe
+on:
+  push:
+    branches: [ci/ps-exit-probe]
+jobs:
+  red-control:
+    name: red control (${{ matrix.shell }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Deliberately wrong expectation (must go red)
+        shell: ${{ matrix.shell }}
+        run: |
+          Write-Host "RED-CONTROL shell=$($PSVersionTable.PSVersion) edition=$($PSVersionTable.PSEdition)"
+          ./tests/installers/T1-ziptamper-call.ps1
+          $code = $LASTEXITCODE
+          Write-Host "RED-CONTROL tamper-exit=$code (expecting nonzero abort)"
+          if ($code -ne 0) { Write-Error "RED-CONTROL-ASSERTION: tamper case aborted with exit $code as designed; this control deliberately treats that as failure"; exit 1 }
+          Write-Host 'RED-CONTROL-UNEXPECTED: tamper case exited 0 (installer did not abort)'
+          exit 1
+  green-control:
+    name: green control (${{ matrix.shell }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Clean install C0 (abort is failure here)
+        shell: ${{ matrix.shell }}
+        run: |
+          Write-Host "GREEN-CONTROL shell=$($PSVersionTable.PSVersion) edition=$($PSVersionTable.PSEdition)"
+          ./tests/installers/C0-positive-call.ps1
+          $code = $LASTEXITCODE
+          Write-Host "GREEN-CONTROL c0-exit=$code"
+          if ($code -ne 0) { Write-Error "GREEN-CONTROL-ASSERTION: clean install failed with exit $code"; exit 1 }
+          Write-Host 'GREEN-CONTROL C0 passed'
+          exit 0

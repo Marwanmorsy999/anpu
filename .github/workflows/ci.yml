@@ -655,6 +655,31 @@ jobs:
           test ! -e /tmp/fakehome/.config/anpu/anpu.db
           test ! -d /tmp/fakehome/.config/anpu
 
+  installer-missing-dir:
+    name: installer missing ANPU_INSTALL_DIR (ubuntu)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Missing ANPU_INSTALL_DIR is created (not "not writable")
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/missing-parent
+          mkdir -p /tmp/missing-parent
+          MISSING_DIR=/tmp/missing-parent/nested/bin
+          test ! -e "$MISSING_DIR"
+          out=$(ANPU_VERSION=v0.5.2 ANPU_INSTALL_DIR="$MISSING_DIR" sh ./install.sh 2>&1)
+          echo "$out"
+          if echo "$out" | grep -q "is not writable"; then
+            echo "::error::missing dir misreported as not writable: $out"
+            exit 1
+          fi
+          echo "$out" | grep -q "installed to $MISSING_DIR/anpu"
+          test -x "$MISSING_DIR/anpu"
+          "$MISSING_DIR/anpu" version
+
   installer-cosign-matrix:
     name: installer cosign matrix (${{ matrix.cosign }})
     runs-on: ubuntu-latest

@@ -123,6 +123,12 @@ jobs:
           set -euo pipefail
           refs=$(grep -rhoE 'Marwanmorsy999/anpu/action@[A-Za-z0-9._/-]+' README.md docs action --include='*.md' | sed -E 's/.*action@//' | sort -u)
           echo "action refs found: $refs"
+          # Guard: zero refs means the grep pattern stopped matching (docs
+          # renamed/moved), which would make this check vacuously pass.
+          if [ -z "$refs" ]; then
+            echo "::error::no Marwanmorsy999/anpu/action@<ref> references found in docs - the check is not scanning anything"
+            exit 1
+          fi
           fail=0
           for ref in $refs; do
             if git rev-parse --verify --quiet "refs/tags/$ref" >/dev/null; then
@@ -506,32 +512,124 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v7
 
-      - name: Prepare tampered archive
+      # Positive control first: prove the *clean* path really installs. Without
+      # this, a tamper test that aborts for any reason (network, DNS, missing
+      # release) would "pass" while proving nothing.
+      - name: Positive control (clean archive installs)
+        env:
+          ANPU_VERSION: v0.5.2
         run: |
           set -euo pipefail
-          mkdir -p /tmp/tamper/v0.5.2
-          curl -fsSL https://github.com/Marwanmorsy999/anpu/releases/download/v0.5.2/anpu_0.5.2_linux_amd64.tar.gz -o /tmp/tamper/v0.5.2/anpu_0.5.2_linux_amd64.tar.gz
-          curl -fsSL https://github.com/Marwanmorsy999/anpu/releases/download/v0.5.2/checksums.txt -o /tmp/tamper/v0.5.2/checksums.txt
-          printf x >> /tmp/tamper/v0.5.2/anpu_0.5.2_linux_amd64.tar.gz
-          cd /tmp/tamper
-          python3 -m http.server 8123 >/tmp/tamper/http.log 2>&1 &
-          echo $! > /tmp/tamper/http.pid
-          sleep 1
+          rm -rf /tmp/ctrl-bin && mkdir -p /tmp/ctrl-bin
+          out=$(ANPU_INSTALL_DIR=/tmp/ctrl-bin sh ./install.sh 2>&1)
+          echo "$out"
+          echo "$out" | grep -q "installed to /tmp/ctrl-bin/anpu"
+          test -x /tmp/ctrl-bin/anpu
+          /tmp/ctrl-bin/anpu version
 
-      - name: Run installer against tampered archive
+      - name: Prepare tampered fixtures (zip-tamper + sums-tamper)
+        run: |
+          set -euo pipefail
+          TAG=v0.5.2
+          TARBALL="anpu_0.5.2_linux_amd64.tar.gz"
+          rm -rf /tmp/tamper /tmp/tamper-sums
+          mkdir -p "/tmp/tamper/$TAG" "/tmp/tamper-sums/$TAG"
+          curl -fsSL "https://github.com/Marwanmorsy999/anpu/releases/download/$TAG/$TARBALL" -o "/tmp/tamper/$TAG/$TARBALL"
+          curl -fsSL "https://github.com/Marwanmorsy999/anpu/releases/download/$TAG/checksums.txt" -o "/tmp/tamper/$TAG/checksums.txt"
+          cp "/tmp/tamper/$TAG/$TARBALL" "/tmp/tamper-sums/$TAG/$TARBALL"
+          cp "/tmp/tamper/$TAG/checksums.txt" "/tmp/tamper-sums/$TAG/checksums.txt"
+          # Guard: fixtures must be non-empty, or the tamper below is vacuous.
+          test -s "/tmp/tamper/$TAG/$TARBALL" || { echo "::error::tarball fixture empty"; exit 1; }
+          test -s "/tmp/tamper/$TAG/checksums.txt" || { echo "::error::checksums fixture empty"; exit 1; }
+          # Case A: corrupt the archive after download (append 1 byte).
+          before=$(sha256sum "/tmp/tamper/$TAG/$TARBALL" | awk '{print $1}')
+          printf x >> "/tmp/tamper/$TAG/$TARBALL"
+          after=$(sha256sum "/tmp/tamper/$TAG/$TARBALL" | awk '{print $1}')
+          echo "zip-tamper sha-before=$before sha-after=$after"
+          test "$before" != "$after" || { echo "::error::zip tamper was inert"; exit 1; }
+          # Case B: mutate ONE hex char of the tarball's published hash in
+          # checksums.txt. Locate the entry by filename (never by a hardcoded
+          # hash prefix) and confirm the clean archive matches the published
+          # hash FIRST, so we know we compare against the right value.
+          want0=$(awk -v f="$TARBALL" '$2 == f {print $1}' "/tmp/tamper-sums/$TAG/checksums.txt")
+          got_clean=$(sha256sum "/tmp/tamper-sums/$TAG/$TARBALL" | awk '{print $1}')
+          echo "sums-baseline published=$want0 clean=$got_clean"
+          test -n "$want0" || { echo "::error::no published hash for $TARBALL"; exit 1; }
+          test "$want0" = "$got_clean" || { echo "::error::clean fixture does not match published hash"; exit 1; }
+          python3 - "/tmp/tamper-sums/$TAG/checksums.txt" "$TARBALL" <<'PYEOF'
+          import re, sys
+          path, target = sys.argv[1], sys.argv[2]
+          out, changed = [], False
+          for line in open(path, encoding="utf-8").read().splitlines(keepends=True):
+              m = re.match(r"^([0-9a-fA-F]{64})(\s+.*)$", line)
+              if m and not changed and target in line:
+                  h = m.group(1)
+                  line = (("0" if h[0] != "0" else "1") + h[1:]) + m.group(2) + ("\n" if line.endswith("\n") else "")
+                  changed = True
+              out.append(line)
+          assert changed, "no checksum line matched"
+          open(path, "w", encoding="utf-8").write("".join(out))
+          print("sums-tamper: 1 hex char flipped")
+          PYEOF
+          want1=$(awk -v f="$TARBALL" '$2 == f {print $1}' "/tmp/tamper-sums/$TAG/checksums.txt")
+          echo "sums published-before=$want0 published-after=$want1"
+          test "$want0" != "$want1" || { echo "::error::sums tamper was inert"; exit 1; }
+
+      - name: Serve tampered fixtures
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8123 --directory /tmp/tamper >/tmp/tamper/http.log 2>&1 &
+          echo $! > /tmp/tamper/http.pid
+          python3 -m http.server 8124 --directory /tmp/tamper-sums >/tmp/tamper-sums/http.log 2>&1 &
+          echo $! > /tmp/tamper-sums/http.pid
+          # Wait until both ports actually accept connections (no fixed sleep).
+          for port in 8123 8124; do
+            ok=0
+            for _ in $(seq 1 30); do
+              if curl -fsS -o /dev/null "http://127.0.0.1:$port/"; then ok=1; break; fi
+              sleep 1
+            done
+            if [ "$ok" -ne 1 ]; then echo "::error::port $port never became reachable"; exit 1; fi
+          done
+
+      - name: Tampered archive aborts the installer
         env:
           ANPU_VERSION: v0.5.2
           ANPU_BASE_URL: http://127.0.0.1:8123
         run: |
           set +e
-          sh ./install.sh
+          rm -rf /tmp/tamper-bin && mkdir -p /tmp/tamper-bin
+          out=$(ANPU_INSTALL_DIR=/tmp/tamper-bin sh ./install.sh 2>&1)
           rc=$?
-          kill "$(cat /tmp/tamper/http.pid)" 2>/dev/null || true
-          if [ "$rc" -eq 0 ]; then
-            echo "::error::tampered archive did not abort the installer"
-            exit 1
-          fi
-          echo "installer aborted as expected (exit $rc)"
+          set -e
+          echo "$out"
+          echo "installer exit=$rc"
+          # Evidence the installer actually fetched OUR tampered tarball.
+          grep -q "GET /v0.5.2/anpu_0.5.2_linux_amd64.tar.gz" /tmp/tamper/http.log || { echo "::error::installer never fetched the tampered tarball"; exit 1; }
+          echo "$out" | grep -qi "checksum.*mismatch\|: FAILED\|hash.*mismatch" || { echo "::error::no checksum-mismatch message: $out"; exit 1; }
+          if [ "$rc" -eq 0 ]; then echo "::error::tampered archive did not abort the installer"; exit 1; fi
+          test ! -e /tmp/tamper-bin/anpu || { echo "::error::installer installed a binary despite checksum failure"; exit 1; }
+          echo "installer aborted as expected (exit $rc), nothing installed"
+
+      - name: Tampered checksums.txt aborts the installer
+        env:
+          ANPU_VERSION: v0.5.2
+          ANPU_BASE_URL: http://127.0.0.1:8124
+        run: |
+          set +e
+          rm -rf /tmp/tamper-sums-bin && mkdir -p /tmp/tamper-sums-bin
+          out=$(ANPU_INSTALL_DIR=/tmp/tamper-sums-bin sh ./install.sh 2>&1)
+          rc=$?
+          set -e
+          echo "$out"
+          echo "installer exit=$rc"
+          # Evidence the installer actually fetched OUR tampered checksums.txt.
+          grep -q "GET /v0.5.2/checksums.txt" /tmp/tamper-sums/http.log || { echo "::error::installer never fetched the tampered checksums.txt"; exit 1; }
+          echo "$out" | grep -qi "checksum.*mismatch\|: FAILED\|hash.*mismatch" || { echo "::error::no checksum-mismatch message: $out"; exit 1; }
+          if [ "$rc" -eq 0 ]; then echo "::error::tampered checksums.txt did not abort the installer"; exit 1; fi
+          test ! -e /tmp/tamper-sums-bin/anpu || { echo "::error::installer installed a binary despite checksum failure"; exit 1; }
+          kill "$(cat /tmp/tamper/http.pid)" "$(cat /tmp/tamper-sums/http.pid)" 2>/dev/null || true
+          echo "installer aborted as expected (exit $rc), nothing installed"
 
   installer-uninstall:
     name: installer uninstall + purge (ubuntu)

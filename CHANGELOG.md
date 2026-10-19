@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.3
+
+- **Local-network guard message fix**: the refusal message now names the
+  mechanism that actually works, `ANPU_ALLOW_LOCAL_NETWORK=1`, instead of the
+  nonexistent `--allow-local-network` flag. The guard itself is unchanged and
+  stays off by default; a regression test asserts the message names the env
+  var and that the override allows localhost/loopback.
+- **Installer fix**: a missing `ANPU_INSTALL_DIR` is now created with
+  `mkdir -p` (sudo fallback) instead of being misreported as "is not
+  writable". The "does not exist" message is only produced when creation
+  fails; an existing-but-unwritable directory still reports "is not
+  writable". Covered by a new `installer-missing-dir` CI job.
+
 ## 0.5.2
 
 - **Validation depth**: committed pre-scan ground truth for Juice Shop, DVWA,

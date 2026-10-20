@@ -402,7 +402,7 @@ jobs:
           echo "All *.sh files use LF line endings."
 
   installer:
-    name: installer (${{ matrix.image }})
+    name: installer (${{ matrix.image }} ${{ matrix.fetch }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -411,16 +411,25 @@ jobs:
       matrix:
         include:
           - image: ubuntu:latest
+            fetch: curl
             setup: apt-get update && apt-get install -y git curl tar coreutils
           - image: debian:latest
+            fetch: curl
             setup: apt-get update && apt-get install -y git curl tar coreutils
           - image: fedora:latest
+            fetch: curl
             setup: dnf install -y git curl tar coreutils
           - image: alpine:latest
-            setup: apk add --no-cache git wget tar coreutils openssl
+            fetch: curl
+            setup: apk add --no-cache git curl tar coreutils openssl ca-certificates
+          - image: alpine:latest
+            fetch: wget
+            setup: apk add --no-cache git wget tar coreutils openssl ca-certificates
           - image: archlinux:latest
+            fetch: curl
             setup: pacman -Sy --noconfirm git curl tar coreutils
           - image: kalilinux/kali-rolling
+            fetch: curl
             setup: apt-get update && apt-get install -y git curl tar coreutils
     container:
       image: ${{ matrix.image }}
@@ -654,6 +663,120 @@ jobs:
           test ! -e /tmp/fakebin/anpu
           test ! -e /tmp/fakehome/.config/anpu/anpu.db
           test ! -d /tmp/fakehome/.config/anpu
+
+  installer-dl-fail-curl:
+    name: installer download failure curl (ubuntu)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Bad version 404 names URL (curl)
+        run: |
+          set -uo pipefail
+          BADURL="https://github.com/Marwanmorsy999/anpu/releases/download/v0.0.0-does-not-exist"
+          set +e
+          out=$(ANPU_VERSION=v0.0.0-does-not-exist ANPU_INSTALL_DIR=/tmp/dl-curl404 sh ./install.sh 2>&1)
+          rc=$?
+          set -e
+          echo "$out"; echo "exit=$rc"
+          test "$rc" -ne 0 || { echo "::error::exit 0 on 404"; exit 1; }
+          echo "$out" | grep -q "download failed for $BADURL" || { echo "::error::no URL"; exit 1; }
+          echo "$out" | grep -qi "HTTP error" || { echo "::error::no reason"; exit 1; }
+      - name: Unreachable host names URL (curl)
+        run: |
+          set -uo pipefail
+          set +e
+          out=$(ANPU_VERSION=v0.5.2 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_INSTALL_DIR=/tmp/dl-curl9 sh ./install.sh 2>&1)
+          rc=$?
+          set -e
+          echo "$out"; echo "exit=$rc"
+          test "$rc" -ne 0 || { echo "::error::exit 0 on unreachable"; exit 1; }
+          echo "$out" | grep -q "download failed for http://127.0.0.1:9" || { echo "::error::no URL"; exit 1; }
+          echo "$out" | grep -qiE "network error|HTTP error|TLS error" || { echo "::error::no reason"; exit 1; }
+
+  installer-dl-fail-wget:
+    name: installer download failure wget-only (ubuntu)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Bad version 404 names URL (wget, curl hidden)
+        run: |
+          set -uo pipefail
+          CURL_BIN=$(command -v curl)
+          sudo mv "$CURL_BIN" /tmp/curl.hidden
+          trap 'sudo mv /tmp/curl.hidden "$CURL_BIN" 2>/dev/null || true' EXIT
+          if command -v curl >/dev/null 2>&1; then echo "::error::curl still visible"; exit 1; fi
+          BADURL="https://github.com/Marwanmorsy999/anpu/releases/download/v0.0.0-does-not-exist"
+          set +e
+          out=$(ANPU_VERSION=v0.0.0-does-not-exist ANPU_INSTALL_DIR=/tmp/dl-wget404 sh ./install.sh 2>&1)
+          rc=$?
+          set -e
+          echo "$out"; echo "exit=$rc"
+          test "$rc" -ne 0 || { echo "::error::exit 0 on 404"; exit 1; }
+          echo "$out" | grep -q "download failed for $BADURL" || { echo "::error::no URL"; exit 1; }
+          echo "$out" | grep -qi "HTTP error" || { echo "::error::no reason"; exit 1; }
+          sudo mv /tmp/curl.hidden "$CURL_BIN"
+          trap - EXIT
+      - name: Unreachable host names URL (wget, curl hidden)
+        run: |
+          set -uo pipefail
+          CURL_BIN=$(command -v curl)
+          sudo mv "$CURL_BIN" /tmp/curl.hidden
+          trap 'sudo mv /tmp/curl.hidden "$CURL_BIN" 2>/dev/null || true' EXIT
+          if command -v curl >/dev/null 2>&1; then echo "::error::curl still visible"; exit 1; fi
+          set +e
+          out=$(ANPU_VERSION=v0.5.2 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_INSTALL_DIR=/tmp/dl-wget9 sh ./install.sh 2>&1)
+          rc=$?
+          set -e
+          echo "$out"; echo "exit=$rc"
+          test "$rc" -ne 0 || { echo "::error::exit 0 on unreachable"; exit 1; }
+          echo "$out" | grep -q "download failed for http://127.0.0.1:9" || { echo "::error::no URL"; exit 1; }
+          echo "$out" | grep -qiE "network error|HTTP error|TLS error" || { echo "::error::no reason"; exit 1; }
+          sudo mv /tmp/curl.hidden "$CURL_BIN"
+          trap - EXIT
+
+  installer-dl-fail-busybox:
+    name: installer download failure busybox-wget (alpine)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    container:
+      image: alpine:latest
+    steps:
+      - name: Install prerequisites (busybox wget only)
+        run: |
+          apk add --no-cache git tar coreutils openssl ca-certificates
+          if command -v curl >/dev/null 2>&1; then echo "curl must be absent"; exit 1; fi
+          if wget --help 2>&1 | grep -q -- '--no-verbose'; then echo "GNU wget present"; exit 1; fi
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Bad version 404 names URL (busybox wget)
+        run: |
+          set -eu
+          BADURL="https://github.com/Marwanmorsy999/anpu/releases/download/v0.0.0-does-not-exist"
+          set +e
+          out=$(ANPU_VERSION=v0.0.0-does-not-exist ANPU_INSTALL_DIR=/tmp/dl-bb404 sh ./install.sh 2>&1)
+          rc=$?
+          set -e
+          echo "$out"; echo "exit=$rc"
+          test "$rc" -ne 0 || { echo "exit 0 on 404"; exit 1; }
+          echo "$out" | grep -q "download failed for $BADURL" || { echo "no URL"; exit 1; }
+          echo "$out" | grep -qiE "HTTP error|network error|TLS error" || { echo "no reason"; exit 1; }
+      - name: Unreachable host names URL (busybox wget)
+        run: |
+          set -eu
+          set +e
+          out=$(ANPU_VERSION=v0.5.2 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_INSTALL_DIR=/tmp/dl-bb9 sh ./install.sh 2>&1)
+          rc=$?
+          set -e
+          echo "$out"; echo "exit=$rc"
+          test "$rc" -ne 0 || { echo "exit 0 on unreachable"; exit 1; }
+          echo "$out" | grep -q "download failed for http://127.0.0.1:9" || { echo "no URL"; exit 1; }
 
   installer-missing-dir:
     name: installer missing ANPU_INSTALL_DIR (ubuntu)

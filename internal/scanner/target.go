@@ -126,7 +126,7 @@ func checkIPNotPrivate(ip net.IP, host string) error {
 	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
 		ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
 		return &TargetValidationError{
-			fmt.Sprintf("refusing to scan %q: resolves to a loopback/private/link-local address (%s); ANPU does not scan local networks by default", host, ip.String()),
+			fmt.Sprintf("refusing to scan %q: resolves to a loopback/private/link-local address (%s); ANPU does not scan local networks by default (use test fixtures or ANPU_ALLOW_LOCAL_NETWORK=1 for authorized internal testing)", host, ip.String()),
 		}
 	}
 	// Cloud metadata endpoint (169.254.169.254 is already covered by

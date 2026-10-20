@@ -28,6 +28,9 @@ func TestLocalNetworkRefusalNamesWorkingMechanism(t *testing.T) {
 	if err == nil {
 		t.Fatal("loopback IP target must be refused by default")
 	}
+	if !strings.Contains(err.Error(), "ANPU_ALLOW_LOCAL_NETWORK=1") {
+		t.Fatalf("loopback IP refusal must name ANPU_ALLOW_LOCAL_NETWORK=1, got %q", err.Error())
+	}
 	if strings.Contains(err.Error(), "--allow-local-network") {
 		t.Fatalf("refusal must not name nonexistent --allow-local-network flag, got %q", err.Error())
 	}

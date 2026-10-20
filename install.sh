@@ -78,9 +78,73 @@ fetch() {
   url=$1
   dest=$2
   if [ "$FETCH" = "curl" ]; then
-    curl -fsSL --fail -o "$dest" "$url"
+    if out=$(curl -fsSL --fail -o "$dest" "$url" 2>&1); then
+      rc=0
+    else
+      rc=$?
+    fi
+    if [ "$rc" -eq 0 ]; then
+      return 0
+    fi
+    detail=$out
+    case "$detail" in
+      *SSL*|*ssl*|*TLS*|*tls*|*certificate*|*Certificate*|*handshake*|*issuer*|*secure\ connection*)
+        reason="TLS error"
+        ;;
+      *HTTP*|*http*|*404*|*403*|*500*|*returned\ error*|*server\ replied*|*Not\ Found*|*Forbidden*|*Internal\ Server*)
+        reason="HTTP error"
+        ;;
+      *)
+        if [ "$rc" = "22" ]; then
+          reason="HTTP error"
+        else
+          case "$rc" in
+            35|51|53|54|58|59|60|64|66|77|80|82|83|90|91) reason="TLS error" ;;
+            *) reason="network error" ;;
+          esac
+        fi
+        ;;
+    esac
+    rm -f "$dest"
+    say "anpu installer: download failed for $url ($reason, curl exit $rc): $detail"
+    exit 1
   else
-    wget -q -O "$dest" "$url"
+    # BusyBox wget has no -nv/--no-verbose, so probe before using it.
+    if wget --help 2>&1 | grep -q -- '--no-verbose'; then
+      if out=$(wget -nv -O "$dest" "$url" 2>&1); then
+        return 0
+      else
+        rc=$?
+        detail=$out
+      fi
+    else
+      if out=$(wget -O "$dest" "$url" 2>&1); then
+        return 0
+      else
+        rc=$?
+        detail=$out
+      fi
+    fi
+    case "$detail" in
+      *SSL*|*ssl*|*TLS*|*tls*|*certificate*|*Certificate*|*handshake*|*not\ trusted*|*unable\ to\ establish*)
+        reason="TLS error"
+        ;;
+      *ERROR\ 404*|*ERROR\ 403*|*ERROR\ 500*|*404\ Not\ Found*|*403\ Forbidden*|*HTTP\ error*|*server\ returned\ error*|*Server\ error*|*Not\ Found*|*404*)
+        reason="HTTP error"
+        ;;
+      *)
+        if [ "$rc" = "8" ]; then
+          reason="HTTP error"
+        elif [ "$rc" = "5" ]; then
+          reason="TLS error"
+        else
+          reason="network error"
+        fi
+        ;;
+    esac
+    rm -f "$dest"
+    say "anpu installer: download failed for $url ($reason, wget exit $rc): $detail"
+    exit 1
   fi
 }
 

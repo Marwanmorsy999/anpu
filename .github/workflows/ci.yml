@@ -377,6 +377,9 @@ jobs:
       - name: Run shellcheck
         run: shellcheck install.sh
 
+      - name: Run shellcheck (CI helper scripts)
+        run: shellcheck scripts/ci/nocurl-path.sh
+
   # Gate: every tracked shell script must use LF line endings. A single CR
   # byte breaks install.sh/install.ps1 sourcing on Linux runners and is the
   # most common Windows/WSL checkout regression. Fails the job (and thus the
@@ -422,9 +425,11 @@ jobs:
           - image: alpine:latest
             fetch: curl
             setup: apk add --no-cache git curl tar coreutils openssl ca-certificates
+          # BusyBox wget variant: the GNU `wget` package is deliberately NOT
+          # installed, so the installer must fall back to BusyBox's applet.
           - image: alpine:latest
-            fetch: wget
-            setup: apk add --no-cache git wget tar coreutils openssl ca-certificates
+            fetch: busybox-wget
+            setup: apk add --no-cache git tar coreutils openssl ca-certificates
           - image: archlinux:latest
             fetch: curl
             setup: pacman -Sy --noconfirm git curl tar coreutils
@@ -439,6 +444,32 @@ jobs:
 
       - name: Check out code
         uses: actions/checkout@v7
+
+      - name: Assert the expected fetch tool
+        run: |
+          set -euo pipefail
+          echo "curl: $(command -v curl || echo absent)"
+          echo "wget: $(command -v wget || echo absent)"
+          if [ "${{ matrix.fetch }}" = "curl" ]; then
+            if ! command -v curl >/dev/null 2>&1; then
+              echo "::error::the curl variant must have curl, but curl is absent"
+              exit 1
+            fi
+          else
+            if command -v curl >/dev/null 2>&1; then
+              echo "::error::the ${{ matrix.fetch }} variant must have no curl, but curl is present"
+              exit 1
+            fi
+            if ! command -v wget >/dev/null 2>&1; then
+              echo "::error::the ${{ matrix.fetch }} variant must have wget, but wget is absent"
+              exit 1
+            fi
+            if wget --help 2>&1 | grep -q -- '--no-verbose'; then
+              echo "::error::expected BusyBox wget, found GNU wget"
+              exit 1
+            fi
+            echo "BusyBox wget confirmed"
+          fi
 
       - name: Run installer (pinned release)
         env:
@@ -466,14 +497,19 @@ jobs:
         run: anpu version && anpu doctor
 
   installer-windows:
-    name: installer (windows-latest)
+    name: installer (windows-latest, ${{ matrix.shell }})
     runs-on: windows-latest
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        shell: [pwsh, powershell]
+        include:
+          # powershell = Windows PowerShell 5.1 (Desktop), pwsh = PowerShell 7.
+          - shell: pwsh
+            exe: pwsh
+          - shell: powershell
+            exe: powershell
     defaults:
       run:
         shell: ${{ matrix.shell }}
@@ -484,7 +520,7 @@ jobs:
       - name: Run installer
         env:
           ANPU_VERSION: v0.5.2
-        run: ./install.ps1
+        run: "& ${{ matrix.exe }} -File ./install.ps1"
 
       - name: Verify installed binary
         run: |
@@ -498,14 +534,14 @@ jobs:
           ANPU_PURGE: "1"
         run: |
           $env:Path = "$env:LOCALAPPDATA\anpu\bin;$env:Path"
-          ./install.ps1
+          & ${{ matrix.exe }} -File ./install.ps1
           if (Test-Path "$env:LOCALAPPDATA\anpu\bin\anpu.exe") { Write-Error "uninstall left the binary behind"; exit 1 }
 
       - name: Pre-v0.4.0 pin prints a clear error
         env:
           ANPU_VERSION: v0.3.1
         run: |
-          $out = & ./install.ps1 2>&1; $rc = $LASTEXITCODE
+          $out = & ${{ matrix.exe }} -File ./install.ps1 2>&1; $rc = $LASTEXITCODE
           if ($rc -eq 0) { Write-Error "v0.3.1 pin should have failed"; exit 1 }
           if ("$out" -notmatch "supports v0.4.0 and newer") { Write-Error "missing version-floor message: $out"; exit 1 }
           # The runner wrapper ends with `exit $LASTEXITCODE`; the pin is
@@ -672,6 +708,19 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v7
+      - name: Positive control (clean install succeeds with curl)
+        run: |
+          set -euo pipefail
+          echo "fetch tool: curl -> $(command -v curl)"
+          if ! command -v curl >/dev/null 2>&1; then echo "::error::curl must be present in this job"; exit 1; fi
+          rm -rf /tmp/dl-curl-ctrl && mkdir -p /tmp/dl-curl-ctrl
+          out=$(ANPU_VERSION=v0.5.2 ANPU_INSTALL_DIR=/tmp/dl-curl-ctrl sh ./install.sh 2>&1)
+          echo "$out"
+          echo "$out" | grep -q "using curl to download releases" || { echo "::error::installer did not report the fetch tool"; exit 1; }
+          echo "$out" | grep -q "installed to /tmp/dl-curl-ctrl/anpu" || { echo "::error::installer did not report the install dir"; exit 1; }
+          test -x /tmp/dl-curl-ctrl/anpu || { echo "::error::no anpu binary installed"; exit 1; }
+          /tmp/dl-curl-ctrl/anpu version
+          /tmp/dl-curl-ctrl/anpu doctor
       - name: Bad version 404 names URL (curl)
         run: |
           set -uo pipefail
@@ -682,7 +731,9 @@ jobs:
           set -e
           echo "$out"; echo "exit=$rc"
           test "$rc" -ne 0 || { echo "::error::exit 0 on 404"; exit 1; }
-          echo "$out" | grep -q "download failed for $BADURL" || { echo "::error::no URL"; exit 1; }
+          echo "$out" | grep -q "download failed for $BADURL" || { echo "::error::no URL in the failure message"; exit 1; }
+          echo "$out" | grep -q "using curl to download releases" || { echo "::error::no fetch-tool evidence"; exit 1; }
+          echo "$out" | grep -q "curl exit" || { echo "::error::no curl evidence"; exit 1; }
           echo "$out" | grep -qi "HTTP error" || { echo "::error::no reason"; exit 1; }
       - name: Unreachable host names URL (curl)
         run: |
@@ -693,7 +744,9 @@ jobs:
           set -e
           echo "$out"; echo "exit=$rc"
           test "$rc" -ne 0 || { echo "::error::exit 0 on unreachable"; exit 1; }
-          echo "$out" | grep -q "download failed for http://127.0.0.1:9" || { echo "::error::no URL"; exit 1; }
+          echo "$out" | grep -q "download failed for http://127.0.0.1:9" || { echo "::error::no URL in the failure message"; exit 1; }
+          echo "$out" | grep -q "using curl to download releases" || { echo "::error::no fetch-tool evidence"; exit 1; }
+          echo "$out" | grep -q "curl exit" || { echo "::error::no curl evidence"; exit 1; }
           echo "$out" | grep -qiE "network error|HTTP error|TLS error" || { echo "::error::no reason"; exit 1; }
 
   installer-dl-fail-wget:
@@ -704,41 +757,66 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v7
+      - name: Build a curl-free PATH
+        run: |
+          set -euo pipefail
+          NOCURL=$(sh scripts/ci/nocurl-path.sh /tmp/anpu-nocurl-path)
+          echo "NOCURL=$NOCURL"
+          echo "entries: $(find "$NOCURL" -maxdepth 1 -type l | wc -l)"
+          # Guards: this job is only meaningful on a wget-only system.
+          if PATH="$NOCURL" command -v curl >/dev/null 2>&1; then
+            echo "::error::curl is still reachable in $NOCURL"
+            exit 1
+          fi
+          if ! PATH="$NOCURL" command -v wget >/dev/null 2>&1; then
+            echo "::error::wget is missing from $NOCURL"
+            exit 1
+          fi
+          echo "curl hidden, wget present: $(PATH="$NOCURL" command -v wget)"
+      - name: Positive control (clean install succeeds with wget, curl hidden)
+        run: |
+          set -euo pipefail
+          NOCURL=$(sh scripts/ci/nocurl-path.sh /tmp/anpu-nocurl-path)
+          if PATH="$NOCURL" command -v curl >/dev/null 2>&1; then echo "::error::curl is still reachable"; exit 1; fi
+          rm -rf /tmp/dl-wget-ctrl && mkdir -p /tmp/dl-wget-ctrl
+          out=$(PATH="$NOCURL" ANPU_VERSION=v0.5.2 ANPU_INSTALL_DIR=/tmp/dl-wget-ctrl sh ./install.sh 2>&1)
+          echo "$out"
+          echo "$out" | grep -q "curl not found, using wget to download releases" || { echo "::error::installer did not report the wget fallback"; exit 1; }
+          echo "$out" | grep -q "installed to /tmp/dl-wget-ctrl/anpu" || { echo "::error::installer did not report the install dir"; exit 1; }
+          test -x /tmp/dl-wget-ctrl/anpu || { echo "::error::no anpu binary installed"; exit 1; }
+          /tmp/dl-wget-ctrl/anpu version
+          /tmp/dl-wget-ctrl/anpu doctor
       - name: Bad version 404 names URL (wget, curl hidden)
         run: |
           set -uo pipefail
-          CURL_BIN=$(command -v curl)
-          sudo mv "$CURL_BIN" /tmp/curl.hidden
-          trap 'sudo mv /tmp/curl.hidden "$CURL_BIN" 2>/dev/null || true' EXIT
-          if command -v curl >/dev/null 2>&1; then echo "::error::curl still visible"; exit 1; fi
+          NOCURL=$(sh scripts/ci/nocurl-path.sh /tmp/anpu-nocurl-path)
+          if PATH="$NOCURL" command -v curl >/dev/null 2>&1; then echo "::error::curl is still reachable"; exit 1; fi
           BADURL="https://github.com/Marwanmorsy999/anpu/releases/download/v0.0.0-does-not-exist"
           set +e
-          out=$(ANPU_VERSION=v0.0.0-does-not-exist ANPU_INSTALL_DIR=/tmp/dl-wget404 sh ./install.sh 2>&1)
+          out=$(PATH="$NOCURL" ANPU_VERSION=v0.0.0-does-not-exist ANPU_INSTALL_DIR=/tmp/dl-wget404 sh ./install.sh 2>&1)
           rc=$?
           set -e
           echo "$out"; echo "exit=$rc"
           test "$rc" -ne 0 || { echo "::error::exit 0 on 404"; exit 1; }
-          echo "$out" | grep -q "download failed for $BADURL" || { echo "::error::no URL"; exit 1; }
+          echo "$out" | grep -q "download failed for $BADURL" || { echo "::error::no URL in the failure message"; exit 1; }
+          echo "$out" | grep -q "curl not found, using wget to download releases" || { echo "::error::no fetch-tool evidence"; exit 1; }
+          echo "$out" | grep -q "wget exit" || { echo "::error::no wget evidence"; exit 1; }
           echo "$out" | grep -qi "HTTP error" || { echo "::error::no reason"; exit 1; }
-          sudo mv /tmp/curl.hidden "$CURL_BIN"
-          trap - EXIT
       - name: Unreachable host names URL (wget, curl hidden)
         run: |
           set -uo pipefail
-          CURL_BIN=$(command -v curl)
-          sudo mv "$CURL_BIN" /tmp/curl.hidden
-          trap 'sudo mv /tmp/curl.hidden "$CURL_BIN" 2>/dev/null || true' EXIT
-          if command -v curl >/dev/null 2>&1; then echo "::error::curl still visible"; exit 1; fi
+          NOCURL=$(sh scripts/ci/nocurl-path.sh /tmp/anpu-nocurl-path)
+          if PATH="$NOCURL" command -v curl >/dev/null 2>&1; then echo "::error::curl is still reachable"; exit 1; fi
           set +e
-          out=$(ANPU_VERSION=v0.5.2 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_INSTALL_DIR=/tmp/dl-wget9 sh ./install.sh 2>&1)
+          out=$(PATH="$NOCURL" ANPU_VERSION=v0.5.2 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_INSTALL_DIR=/tmp/dl-wget9 sh ./install.sh 2>&1)
           rc=$?
           set -e
           echo "$out"; echo "exit=$rc"
           test "$rc" -ne 0 || { echo "::error::exit 0 on unreachable"; exit 1; }
-          echo "$out" | grep -q "download failed for http://127.0.0.1:9" || { echo "::error::no URL"; exit 1; }
+          echo "$out" | grep -q "download failed for http://127.0.0.1:9" || { echo "::error::no URL in the failure message"; exit 1; }
+          echo "$out" | grep -q "curl not found, using wget to download releases" || { echo "::error::no fetch-tool evidence"; exit 1; }
+          echo "$out" | grep -q "wget exit" || { echo "::error::no wget evidence"; exit 1; }
           echo "$out" | grep -qiE "network error|HTTP error|TLS error" || { echo "::error::no reason"; exit 1; }
-          sudo mv /tmp/curl.hidden "$CURL_BIN"
-          trap - EXIT
 
   installer-dl-fail-busybox:
     name: installer download failure busybox-wget (alpine)
@@ -750,33 +828,55 @@ jobs:
     steps:
       - name: Install prerequisites (busybox wget only)
         run: |
+          set -euo pipefail
           apk add --no-cache git tar coreutils openssl ca-certificates
-          if command -v curl >/dev/null 2>&1; then echo "curl must be absent"; exit 1; fi
-          if wget --help 2>&1 | grep -q -- '--no-verbose'; then echo "GNU wget present"; exit 1; fi
+          if command -v curl >/dev/null 2>&1; then echo "::error::curl must be absent"; exit 1; fi
+          if ! command -v wget >/dev/null 2>&1; then echo "::error::wget must be present"; exit 1; fi
+          if wget --help 2>&1 | grep -q -- '--no-verbose'; then echo "::error::GNU wget present, expected BusyBox wget"; exit 1; fi
+          echo "BusyBox wget confirmed: $(wget --help 2>&1 | head -n 1)"
       - name: Check out code
         uses: actions/checkout@v7
+      - name: Positive control (clean install succeeds with busybox wget)
+        run: |
+          set -euo pipefail
+          if command -v curl >/dev/null 2>&1; then echo "::error::curl must be absent"; exit 1; fi
+          rm -rf /tmp/dl-bb-ctrl && mkdir -p /tmp/dl-bb-ctrl
+          out=$(ANPU_VERSION=v0.5.2 ANPU_INSTALL_DIR=/tmp/dl-bb-ctrl sh ./install.sh 2>&1)
+          echo "$out"
+          echo "$out" | grep -q "curl not found, using wget to download releases" || { echo "::error::installer did not report the wget fallback"; exit 1; }
+          echo "$out" | grep -q "installed to /tmp/dl-bb-ctrl/anpu" || { echo "::error::installer did not report the install dir"; exit 1; }
+          test -x /tmp/dl-bb-ctrl/anpu || { echo "::error::no anpu binary installed"; exit 1; }
+          /tmp/dl-bb-ctrl/anpu version
+          /tmp/dl-bb-ctrl/anpu doctor
       - name: Bad version 404 names URL (busybox wget)
         run: |
-          set -eu
+          set -euo pipefail
+          if command -v curl >/dev/null 2>&1; then echo "::error::curl must be absent"; exit 1; fi
           BADURL="https://github.com/Marwanmorsy999/anpu/releases/download/v0.0.0-does-not-exist"
           set +e
           out=$(ANPU_VERSION=v0.0.0-does-not-exist ANPU_INSTALL_DIR=/tmp/dl-bb404 sh ./install.sh 2>&1)
           rc=$?
           set -e
           echo "$out"; echo "exit=$rc"
-          test "$rc" -ne 0 || { echo "exit 0 on 404"; exit 1; }
-          echo "$out" | grep -q "download failed for $BADURL" || { echo "no URL"; exit 1; }
-          echo "$out" | grep -qiE "HTTP error|network error|TLS error" || { echo "no reason"; exit 1; }
+          test "$rc" -ne 0 || { echo "::error::exit 0 on 404"; exit 1; }
+          echo "$out" | grep -q "download failed for $BADURL" || { echo "::error::no URL in the failure message"; exit 1; }
+          echo "$out" | grep -q "curl not found, using wget to download releases" || { echo "::error::no fetch-tool evidence"; exit 1; }
+          echo "$out" | grep -q "wget exit" || { echo "::error::no wget evidence"; exit 1; }
+          echo "$out" | grep -qi "HTTP error|network error|TLS error" || { echo "::error::no reason"; exit 1; }
       - name: Unreachable host names URL (busybox wget)
         run: |
-          set -eu
+          set -euo pipefail
+          if command -v curl >/dev/null 2>&1; then echo "::error::curl must be absent"; exit 1; fi
           set +e
           out=$(ANPU_VERSION=v0.5.2 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_INSTALL_DIR=/tmp/dl-bb9 sh ./install.sh 2>&1)
           rc=$?
           set -e
           echo "$out"; echo "exit=$rc"
-          test "$rc" -ne 0 || { echo "exit 0 on unreachable"; exit 1; }
-          echo "$out" | grep -q "download failed for http://127.0.0.1:9" || { echo "no URL"; exit 1; }
+          test "$rc" -ne 0 || { echo "::error::exit 0 on unreachable"; exit 1; }
+          echo "$out" | grep -q "download failed for http://127.0.0.1:9" || { echo "::error::no URL in the failure message"; exit 1; }
+          echo "$out" | grep -q "curl not found, using wget to download releases" || { echo "::error::no fetch-tool evidence"; exit 1; }
+          echo "$out" | grep -q "wget exit" || { echo "::error::no wget evidence"; exit 1; }
+          echo "$out" | grep -qiE "network error|HTTP error|TLS error" || { echo "::error::no reason"; exit 1; }
 
   installer-missing-dir:
     name: installer missing ANPU_INSTALL_DIR (ubuntu)

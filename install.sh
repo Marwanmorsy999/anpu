@@ -65,14 +65,50 @@ INSTALL_DIR="${ANPU_INSTALL_DIR:-}"
 BASE_URL="${ANPU_BASE_URL:-https://github.com/$REPO/releases/download}"
 
 # --- fetch tool selection ---------------------------------------------------
+# The selected tool is always logged. A silent tool switch is exactly what
+# made the old `wget -q` path fail without printing a single word.
 if command -v curl >/dev/null 2>&1; then
   FETCH=curl
+  say "anpu installer: using curl to download releases"
 elif command -v wget >/dev/null 2>&1; then
   FETCH=wget
+  say "anpu installer: curl not found, using wget to download releases"
 else
   say "anpu installer: missing required tool: curl or wget"
   exit 1
 fi
+
+# classify_failure <detail> <exit-code>
+# Prints the failure reason for a download: HTTP error, TLS error or
+# network error. Shared by curl and wget so both report the same way.
+#
+# Order matters: a definite HTTP status (404/403/500, "server returned
+# error") wins over TLS-ish wording, because BusyBox wget prints
+# "note: TLS certificate validation not implemented" on *every* HTTPS
+# transfer - that note is stripped first so a plain 404 is not reported
+# as a TLS error.
+classify_failure() {
+  detail=$1
+  rc=$2
+  clean=$(printf '%s\n' "$detail" | grep -v 'note: TLS certificate validation not implemented' || true)
+  case "$clean" in
+    *server\ returned\ error*|*HTTP\ error*|*returned\ error*|*404*|*403*|*500*|*Not\ Found*|*Forbidden*|*Unauthorized*|*Bad\ Request*|*Internal\ Server\ Error*)
+      printf 'HTTP error'
+      return 0
+      ;;
+  esac
+  case "$clean" in
+    *SSL*|*ssl*|*certificate*|*Certificate*|*handshake*|*not\ trusted*|*known\ issuer*|*issuer*|*unable\ to\ establish*|*tlsv1*|*wrong\ version\ number*)
+      printf 'TLS error'
+      return 0
+      ;;
+  esac
+  case "$rc" in
+    22|8) printf 'HTTP error' ;;
+    5|35|51|53|54|58|59|60|64|66|77|80|82|83|90|91) printf 'TLS error' ;;
+    *) printf 'network error' ;;
+  esac
+}
 
 fetch() {
   url=$1
@@ -86,27 +122,9 @@ fetch() {
     if [ "$rc" -eq 0 ]; then
       return 0
     fi
-    detail=$out
-    case "$detail" in
-      *SSL*|*ssl*|*TLS*|*tls*|*certificate*|*Certificate*|*handshake*|*issuer*|*secure\ connection*)
-        reason="TLS error"
-        ;;
-      *HTTP*|*http*|*404*|*403*|*500*|*returned\ error*|*server\ replied*|*Not\ Found*|*Forbidden*|*Internal\ Server*)
-        reason="HTTP error"
-        ;;
-      *)
-        if [ "$rc" = "22" ]; then
-          reason="HTTP error"
-        else
-          case "$rc" in
-            35|51|53|54|58|59|60|64|66|77|80|82|83|90|91) reason="TLS error" ;;
-            *) reason="network error" ;;
-          esac
-        fi
-        ;;
-    esac
+    reason=$(classify_failure "$out" "$rc")
     rm -f "$dest"
-    say "anpu installer: download failed for $url ($reason, curl exit $rc): $detail"
+    say "anpu installer: download failed for $url ($reason, curl exit $rc): $out"
     exit 1
   else
     # BusyBox wget has no -nv/--no-verbose, so probe before using it.
@@ -115,35 +133,17 @@ fetch() {
         return 0
       else
         rc=$?
-        detail=$out
       fi
     else
       if out=$(wget -O "$dest" "$url" 2>&1); then
         return 0
       else
         rc=$?
-        detail=$out
       fi
     fi
-    case "$detail" in
-      *SSL*|*ssl*|*TLS*|*tls*|*certificate*|*Certificate*|*handshake*|*not\ trusted*|*unable\ to\ establish*)
-        reason="TLS error"
-        ;;
-      *ERROR\ 404*|*ERROR\ 403*|*ERROR\ 500*|*404\ Not\ Found*|*403\ Forbidden*|*HTTP\ error*|*server\ returned\ error*|*Server\ error*|*Not\ Found*|*404*)
-        reason="HTTP error"
-        ;;
-      *)
-        if [ "$rc" = "8" ]; then
-          reason="HTTP error"
-        elif [ "$rc" = "5" ]; then
-          reason="TLS error"
-        else
-          reason="network error"
-        fi
-        ;;
-    esac
+    reason=$(classify_failure "$out" "$rc")
     rm -f "$dest"
-    say "anpu installer: download failed for $url ($reason, wget exit $rc): $detail"
+    say "anpu installer: download failed for $url ($reason, wget exit $rc): $out"
     exit 1
   fi
 }

@@ -1,9 +1,15 @@
 package scanner
 
 import (
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 )
+
+// childEnvMarker is set on the re-executed test binary that verifies the
+// environment-variable mechanism end to end.
+const childEnvMarker = "ANPU_LOCALNET_GUARD_TEST_CHILD"
 
 // The local-network refusal must name a mechanism that actually works
 // (ANPU_ALLOW_LOCAL_NETWORK=1), never a nonexistent flag.
@@ -44,5 +50,36 @@ func TestLocalNetworkRefusalNamesWorkingMechanism(t *testing.T) {
 	}
 	if _, err := ValidateTarget("http://127.0.0.1:8080/"); err != nil {
 		t.Fatalf("local-network override must allow loopback IP, got %v", err)
+	}
+}
+
+// TestAllowLocalNetworkEnvVarIsTheNamedMechanism proves that the
+// ANPU_ALLOW_LOCAL_NETWORK=1 named in both refusal messages is a real
+// mechanism and not just a string in an error message: a child process
+// started with that environment variable must have the guard lifted and
+// must accept the very targets that are refused by default.
+func TestAllowLocalNetworkEnvVarIsTheNamedMechanism(t *testing.T) {
+	if os.Getenv(childEnvMarker) == "1" {
+		if !AllowLocalNetwork {
+			t.Fatal("ANPU_ALLOW_LOCAL_NETWORK=1 must enable the local-network override")
+		}
+		for _, target := range []string{"http://localhost:8080/", "http://127.0.0.1:8080/"} {
+			if _, err := ValidateTarget(target); err != nil {
+				t.Fatalf("target %q must be allowed when ANPU_ALLOW_LOCAL_NETWORK=1, got %v", target, err)
+			}
+		}
+		return
+	}
+
+	// Guard against a vacuous pass: the child must really have run with
+	// the environment variable set.
+	cmd := exec.Command(os.Args[0], "-test.run=^TestAllowLocalNetworkEnvVarIsTheNamedMechanism$")
+	cmd.Env = append(os.Environ(), childEnvMarker+"=1", "ANPU_ALLOW_LOCAL_NETWORK=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("child process with ANPU_ALLOW_LOCAL_NETWORK=1 failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "PASS") {
+		t.Fatalf("child test output must show PASS, got:\n%s", out)
 	}
 }

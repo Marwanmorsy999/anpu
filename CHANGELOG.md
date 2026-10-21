@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.5.4
+
+- **Installer: no more silent download failures**: `install.sh` used to
+  download with `wget -q`, so on a wget-only system a failed download
+  exited 8 (HTTP) or 5 (TLS) with no message at all. Every download
+  failure now prints the URL, the reason (`HTTP error` / `TLS error` /
+  `network error`) and the exit code of the tool that was used, then
+  exits non-zero. The installer also logs which tool it picked
+  ("using curl to download releases" / "curl not found, using wget to
+  download releases"), and curl and wget failures are worded and
+  classified identically. A plain 404 is reported as an HTTP error even
+  on BusyBox wget, whose "TLS certificate validation not implemented"
+  note previously masked it as a TLS failure.
+- **Local-network guard message fix**: the IP-target refusal
+  ("resolves to a loopback/private/link-local address") now names the
+  mechanism that actually works, `ANPU_ALLOW_LOCAL_NETWORK=1`, like the
+  hostname refusal already did. There is no `--allow-local-network`
+  flag and none is mentioned. The guard stays off by default, and a
+  regression test now proves in a child process that the named
+  environment variable really lifts the guard for both refusals.
+- **Toolchain**: the build/CI toolchain moves from Go 1.27.2 to Go
+  1.27.3, which fixes the reachable stdlib advisory GO-2026-6809
+  (`crypto/x509`, "distrust compromised intermediate certificates").
+  `govulncheck` again reports only the pre-existing, ID-scoped
+  GO-2026-5932 waiver; no waiver was widened and no gate was disabled.
+- **CI**: the installer matrix now covers ubuntu, debian, fedora,
+  alpine with curl, alpine with BusyBox wget only, archlinux and
+  kalilinux/kali-rolling, macos-latest, and windows-latest with
+  `install.ps1` under both PowerShell 5.1 and pwsh (`-File`). New
+  download-failure jobs assert that a bad version and an unreachable
+  host name the URL and exit non-zero with curl and with curl hidden
+  from PATH, each with a clean-install positive control in the same
+  wget-only environment.
+
 ## 0.5.3
 
 - **Local-network guard message fix**: the refusal message now names the

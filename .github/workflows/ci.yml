@@ -26,8 +26,8 @@ jobs:
         with:
           # Pinned rather than read from go.mod: govulncheck flags reachable
           # stdlib advisories (net/http, net/http/internal/http2, crypto/tls,
-          # mime/multipart) that are fixed in Go 1.27.2+.
-          go-version: '1.27.2'
+          # mime/multipart, crypto/x509) that are fixed in Go 1.27.3+.
+          go-version: '1.27.3'
 
       - name: Verify gofmt
         run: |
@@ -83,8 +83,8 @@ jobs:
         with:
           # v2 line (v1 binaries refuse go1.25+ targets at load).
           # Pinned exact; tree verified clean against this version.
-          # Must be built with Go >= 1.27.2 to match the pinned toolchain:
-          # v2.13.x is built with go1.27.1 and cannot decode go1.27.2
+          # Must be built with Go >= 1.27.3 to match the pinned toolchain:
+          # v2.13.x is built with go1.27.1 and cannot decode go1.27.2+
           # export data ("export data version 5 is greater than maximum
           # supported version 4"), which fails the lint job outright.
           version: v2.15.0
@@ -142,7 +142,7 @@ jobs:
 
       - name: gosec
         # gosec v2.29.0 (latest release) vendors x/tools v0.49.0, which
-        # cannot decode Go 1.27.2 export data. It then reports
+        # cannot decode Go 1.27.3 export data. It then reports
         # "package has type errors, skipping SSA analysis, no ssa result"
         # for most packages and exits non-zero while effectively finding
         # nothing. Rebuild it against x/tools v0.52.0 (pinned) so SSA
@@ -187,8 +187,8 @@ jobs:
         with:
           # Pinned rather than read from go.mod: govulncheck flags reachable
           # stdlib advisories (net/http, net/http/internal/http2, crypto/tls,
-          # mime/multipart) that are fixed in Go 1.27.2+.
-          go-version: '1.27.2'
+          # mime/multipart, crypto/x509) that are fixed in Go 1.27.3+.
+          go-version: '1.27.3'
 
       - name: Verify gofmt
         run: |
@@ -232,8 +232,8 @@ jobs:
         with:
           # Pinned rather than read from go.mod: govulncheck flags reachable
           # stdlib advisories (net/http, net/http/internal/http2, crypto/tls,
-          # mime/multipart) that are fixed in Go 1.27.2+.
-          go-version: '1.27.2'
+          # mime/multipart, crypto/x509) that are fixed in Go 1.27.3+.
+          go-version: '1.27.3'
 
       - name: Run live verification
         run: bash scripts/verify.sh
@@ -322,8 +322,8 @@ jobs:
         with:
           # Pinned rather than read from go.mod: govulncheck flags reachable
           # stdlib advisories (net/http, net/http/internal/http2, crypto/tls,
-          # mime/multipart) that are fixed in Go 1.27.2+.
-          go-version: '1.27.2'
+          # mime/multipart, crypto/x509) that are fixed in Go 1.27.3+.
+          go-version: '1.27.3'
 
       - name: Install syft (SBOM generator)
         # Pinned; required on PATH for GoReleaser's sboms pipe.
@@ -541,7 +541,13 @@ jobs:
         env:
           ANPU_VERSION: v0.3.1
         run: |
-          $out = & ${{ matrix.exe }} -File ./install.ps1 2>&1; $rc = $LASTEXITCODE
+          # Windows PowerShell 5.1 turns a native command's stderr into a
+          # terminating NativeCommandError as soon as it is merged into the
+          # pipeline, which would abort this step before the assertions
+          # run. Continue on error, assert explicitly, then exit 0.
+          $ErrorActionPreference = 'Continue'
+          $out = & ${{ matrix.exe }} -File ./install.ps1 2>&1
+          $rc = $LASTEXITCODE
           if ($rc -eq 0) { Write-Error "v0.3.1 pin should have failed"; exit 1 }
           if ("$out" -notmatch "supports v0.4.0 and newer") { Write-Error "missing version-floor message: $out"; exit 1 }
           # The runner wrapper ends with `exit $LASTEXITCODE`; the pin is
@@ -862,7 +868,7 @@ jobs:
           echo "$out" | grep -q "download failed for $BADURL" || { echo "::error::no URL in the failure message"; exit 1; }
           echo "$out" | grep -q "curl not found, using wget to download releases" || { echo "::error::no fetch-tool evidence"; exit 1; }
           echo "$out" | grep -q "wget exit" || { echo "::error::no wget evidence"; exit 1; }
-          echo "$out" | grep -qi "HTTP error|network error|TLS error" || { echo "::error::no reason"; exit 1; }
+          echo "$out" | grep -qiE "HTTP error|network error|TLS error" || { echo "::error::no reason"; exit 1; }
       - name: Unreachable host names URL (busybox wget)
         run: |
           set -euo pipefail
@@ -945,7 +951,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.27.2'
+          go-version: '1.27.3'
 
       - name: Run validation harness
         env:

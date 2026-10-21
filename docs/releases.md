@@ -87,8 +87,8 @@ go build -o anpu ./cmd/anpu
 ./anpu --help
 ```
 
-ANPU's module declares `go 1.26.0` in `go.mod` and builds with the Go 1.27.2
-toolchain (`toolchain go1.27.2`); earlier toolchains carry reachable stdlib
+ANPU's module declares `go 1.26.0` in `go.mod` and builds with the Go 1.27.3
+toolchain (`toolchain go1.27.3`); earlier toolchains carry reachable stdlib
 advisories that the `govulncheck` CI gate flags. Dependencies are declared in
 `go.mod` and locked by `go.sum`.
 

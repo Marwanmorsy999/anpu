@@ -610,21 +610,32 @@ jobs:
           python3 - "/tmp/tamper-sums/$TAG/checksums.txt" "$TARBALL" <<'PYEOF'
           import re, sys
           path, target = sys.argv[1], sys.argv[2]
-          out, changed = [], False
+          out, changed, before, after = [], False, None, None
           for line in open(path, encoding="utf-8").read().splitlines(keepends=True):
               m = re.match(r"^([0-9a-fA-F]{64})(\s+.*)$", line)
               if m and not changed and target in line:
                   h = m.group(1)
-                  line = (("0" if h[0] != "0" else "1") + h[1:]) + m.group(2) + ("\n" if line.endswith("\n") else "")
+                  # Replace the FIRST hex char with a character that is
+                  # guaranteed to DIFFER from it. A fixed replacement
+                  # character would be a no-op whenever the published hash
+                  # happens to start with it (1 release in 16), which would
+                  # make this case silently vacuous.
+                  repl = "0" if h[0] != "0" else "1"
+                  before = h.lower()
+                  after = (repl + h[1:]).lower()
+                  line = (after + m.group(2)) + ("\n" if line.endswith("\n") else "")
                   changed = True
               out.append(line)
           assert changed, "no checksum line matched"
+          assert before is not None and after is not None, "hash not captured"
+          assert before != after, "checksum mutation was inert"
           open(path, "w", encoding="utf-8").write("".join(out))
-          print("sums-tamper: 1 hex char flipped")
+          print("sums-tamper: before=%s after=%s" % (before, after))
           PYEOF
           want1=$(awk -v f="$TARBALL" '$2 == f {print $1}' "/tmp/tamper-sums/$TAG/checksums.txt")
           echo "sums published-before=$want0 published-after=$want1"
           test "$want0" != "$want1" || { echo "::error::sums tamper was inert"; exit 1; }
+          test "$want1" != "$got_clean" || { echo "::error::mutated published hash still matches the archive"; exit 1; }
 
       - name: Serve tampered fixtures
         run: |
@@ -681,6 +692,75 @@ jobs:
           test ! -e /tmp/tamper-sums-bin/anpu || { echo "::error::installer installed a binary despite checksum failure"; exit 1; }
           kill "$(cat /tmp/tamper/http.pid)" "$(cat /tmp/tamper-sums/http.pid)" 2>/dev/null || true
           echo "installer aborted as expected (exit $rc), nothing installed"
+
+  installer-tamper-windows:
+    name: installer tamper test (${{ matrix.shell }})
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # powershell = Windows PowerShell 5.1, pwsh = PowerShell 7.
+          - shell: pwsh
+            exe: pwsh
+          - shell: powershell
+            exe: powershell
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Download the published release assets
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = 'v0.5.4'
+          $asset = "anpu_$($tag.TrimStart('v'))_windows_amd64.zip"
+          $dir = Join-Path $env:RUNNER_TEMP 'anpu-tamper-fixtures'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $base = "https://github.com/Marwanmorsy999/anpu/releases/download/$tag"
+          Invoke-WebRequest -Uri "$base/$asset" -OutFile (Join-Path $dir $asset) -UseBasicParsing
+          Invoke-WebRequest -Uri "$base/checksums.txt" -OutFile (Join-Path $dir 'checksums.txt') -UseBasicParsing
+          # Guard: empty fixtures would make every case vacuous.
+          foreach ($f in @($asset, 'checksums.txt')) {
+            $len = (Get-Item (Join-Path $dir $f)).Length
+            Write-Host "fixture $f bytes=$len"
+            if ($len -le 0) { Write-Error "fixture $f is empty"; exit 1 }
+          }
+
+      - name: Tamper test install.ps1 (${{ matrix.shell }})
+        run: |
+          # Windows PowerShell 5.1 turns a native command's stderr into a
+          # terminating NativeCommandError as soon as it is merged into the
+          # pipeline, so collect the output explicitly.
+          $ErrorActionPreference = 'Continue'
+          $work = Join-Path $env:RUNNER_TEMP 'anpu-tamper-work'
+          $fixtures = Join-Path $env:RUNNER_TEMP 'anpu-tamper-fixtures'
+          & ${{ matrix.exe }} -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tests/installers/tamper-windows.ps1 -FixtureDir $fixtures -Version v0.5.4 -WorkDir $work -ShellExe ${{ matrix.exe }} -InstallScript "${{ github.workspace }}\install.ps1" -Port 18241 2>&1 | ForEach-Object { $_.ToString() }
+          $rc = $LASTEXITCODE
+          Write-Host "harness exit=$rc"
+          if ($rc -ne 0) { Write-Error "tamper harness failed (exit $rc)"; exit 1 }
+          # Independent assertions on the harness summary, so a harness that
+          # exits 0 without running the cases cannot pass this job.
+          $summary = Join-Path $work 'summary.txt'
+          if (-not (Test-Path $summary)) { Write-Error "no summary written by the harness"; exit 1 }
+          $lines = Get-Content $summary
+          $lines | ForEach-Object { Write-Host "SUMMARY $_" }
+          foreach ($name in @('clean', 'zip-tamper', 'sums-tamper')) {
+            $line = $lines | Where-Object { $_ -like "name=$name *" } | Select-Object -First 1
+            if ($null -eq $line) { Write-Error "case $name missing from the summary"; exit 1 }
+            if ($line -notlike '*verdict=success*') { Write-Error "case $name did not succeed: $line"; exit 1 }
+          }
+          # The deliberately wrong control must have been CONCLUDED as a
+          # failure by the harness; that is the non-vacuity control for the
+          # abort detection itself.
+          $control = $lines | Where-Object { $_ -like 'name=control-wrong *' } | Select-Object -First 1
+          if ($null -eq $control) { Write-Error "control-wrong case missing from the summary"; exit 1 }
+          if ($control -notlike '*verdict=failure*') { Write-Error "control-wrong must conclude failure: $control"; exit 1 }
+          Write-Host "Windows tamper test OK: clean install, tampered archive, tampered checksums.txt; control concluded failure"
 
   installer-uninstall:
     name: installer uninstall + purge (ubuntu)

@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.5.5
+
+- **Windows installer**: `install.ps1` gains an `ANPU_BASE_URL` knob,
+  mirroring the one `install.sh` has had since v0.4.x, so the Windows
+  installer can be pointed at another download base (the CI tamper test
+  serves tampered fixtures from a local HTTP server). SHA-256
+  verification stays mandatory whatever the base URL is, and the
+  signature check is unchanged.
+- **CI**: new `installer-tamper-windows` job gives the Windows installer
+  the same tamper coverage the POSIX installer has - a clean install as
+  positive control, a tampered archive and a tampered `checksums.txt`,
+  each of which must abort non-zero and install nothing - run under
+  Windows PowerShell 5.1 and pwsh with `install.ps1` invoked via
+  `-File`. Every tamper case prints the hash before and after the
+  mutation and fails when they are equal, and a deliberately wrong
+  control (pristine fixtures where an abort is expected) must be
+  concluded as a failure by the harness, which proves the abort
+  detection is not vacuous.
+- **CI**: the Linux tamper job's `checksums.txt` mutation now captures
+  the published hash before and after, asserts inside the script that
+  the two differ, prints both, and additionally asserts that the
+  mutated published hash no longer matches the archive.
+
 ## 0.5.4
 
 - **Installer: no more silent download failures**: `install.sh` used to

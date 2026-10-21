@@ -5,6 +5,7 @@
 # Env knobs (set before running):
 #   $env:ANPU_VERSION     release tag, e.g. v0.4.1 (default: latest)
 #   $env:ANPU_INSTALL_DIR install directory (default: $env:LOCALAPPDATA\anpu\bin)
+#   $env:ANPU_BASE_URL    override the release download base URL (testing)
 $ErrorActionPreference = "Stop"
 
 $Repo = "Marwanmorsy999/anpu"
@@ -58,6 +59,12 @@ switch (([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture).To
 }
 
 $BaseRoot = "https://github.com/$Repo/releases/download"
+# Testing knob, mirroring install.sh's ANPU_BASE_URL: point the download at
+# another base (the CI tamper test serves tampered fixtures from a local
+# HTTP server). SHA-256 verification stays mandatory either way.
+if (-not [string]::IsNullOrWhiteSpace($env:ANPU_BASE_URL)) {
+  $BaseRoot = $env:ANPU_BASE_URL.TrimEnd("/")
+}
 function Get-CosignVersion {
   try {
     $out = & cosign version 2>&1 | Out-String

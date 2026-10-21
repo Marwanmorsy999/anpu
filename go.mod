@@ -3,12 +3,14 @@ module github.com/Marwanmorsy999/anpu
 go 1.26.0
 
 // Minimum toolchain for building and for the govulncheck CI gate.
-// Go 1.27.1 and earlier carry stdlib advisories in net/http,
+// Go 1.27.2 and earlier carry stdlib advisories in net/http,
 // net/http/internal/http2, crypto/tls and mime/multipart that affect
-// reachable code; those are fixed in 1.27.2. The `go` directive above is
-// deliberately left lower so the module stays buildable by a broader
-// toolchain range; CI pins this exact version via setup-go.
-toolchain go1.27.2
+// reachable code, and Go 1.27.2 carries crypto/x509 GO-2026-6809
+// ("distrust compromised intermediate certificates"); those are fixed in
+// 1.27.3. The `go` directive above is deliberately left lower so the
+// module stays buildable by a broader toolchain range; CI pins this exact
+// version via setup-go.
+toolchain go1.27.3
 
 require (
 	github.com/refraction-networking/utls v1.8.2

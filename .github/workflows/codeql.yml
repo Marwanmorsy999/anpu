@@ -46,8 +46,8 @@ jobs:
         with:
           # Pinned rather than read from go.mod: govulncheck flags reachable
           # stdlib advisories (net/http, net/http/internal/http2, crypto/tls,
-          # mime/multipart) that are fixed in Go 1.27.2+.
-          go-version: '1.27.2'
+          # mime/multipart, crypto/x509) that are fixed in Go 1.27.3+.
+          go-version: '1.27.3'
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4

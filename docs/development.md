@@ -4,18 +4,20 @@ This guide covers the local checks that should be run before contributing to ANP
 
 ## Requirements
 
-- Go 1.27.2 or newer to build (see the toolchain note below).
+- Go 1.27.3 or newer to build (see the toolchain note below).
 - Git.
 - Docker for container/integration validation.
 - Nuclei is optional for built-in development; the test suite uses controlled fixtures and fake binaries where appropriate.
 
-The module declares `go 1.26.0` in `go.mod` and a `toolchain go1.27.2`
-directive. Go 1.27.2 is the minimum build toolchain because earlier
+The module declares `go 1.26.0` in `go.mod` and a `toolchain go1.27.3`
+directive. Go 1.27.3 is the minimum build toolchain because earlier
 releases carry reachable stdlib advisories in `net/http`,
 `net/http/internal/http2`, `crypto/tls` and `mime/multipart` that the
-`govulncheck` CI gate reports. With Go 1.21+ installed the `toolchain`
-directive fetches the right version automatically, so `go build ./...`
-just works; CI and the Dockerfile pin 1.27.2 explicitly.
+`govulncheck` CI gate reports, and because Go 1.27.2 still carries
+`crypto/x509` GO-2026-6809 ("distrust compromised intermediate
+certificates"). With Go 1.21+ installed the `toolchain` directive fetches
+the right version automatically, so `go build ./...` just works; CI and
+the Dockerfile pin 1.27.3 explicitly.
 
 ## Clone and build
 

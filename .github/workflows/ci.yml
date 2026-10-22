@@ -473,7 +473,7 @@ jobs:
 
       - name: Run installer (pinned release)
         env:
-          ANPU_VERSION: v0.5.5
+          ANPU_VERSION: v0.5.6
         run: sh ./install.sh
 
       - name: Verify installed binary
@@ -490,7 +490,7 @@ jobs:
 
       - name: Run installer
         env:
-          ANPU_VERSION: v0.5.5
+          ANPU_VERSION: v0.5.6
         run: sh ./install.sh
 
       - name: Verify installed binary
@@ -519,7 +519,7 @@ jobs:
 
       - name: Run installer
         env:
-          ANPU_VERSION: v0.5.5
+          ANPU_VERSION: v0.5.6
         run: "& ${{ matrix.exe }} -File ./install.ps1"
 
       - name: Verify installed binary
@@ -568,7 +568,7 @@ jobs:
       # release) would "pass" while proving nothing.
       - name: Positive control (clean archive installs)
         env:
-          ANPU_VERSION: v0.5.5
+          ANPU_VERSION: v0.5.6
         run: |
           set -euo pipefail
           rm -rf /tmp/ctrl-bin && mkdir -p /tmp/ctrl-bin
@@ -581,8 +581,8 @@ jobs:
       - name: Prepare tampered fixtures (zip-tamper + sums-tamper)
         run: |
           set -euo pipefail
-          TAG=v0.5.5
-          TARBALL="anpu_0.5.5_linux_amd64.tar.gz"
+          TAG=v0.5.6
+          TARBALL="anpu_0.5.6_linux_amd64.tar.gz"
           rm -rf /tmp/tamper /tmp/tamper-sums
           mkdir -p "/tmp/tamper/$TAG" "/tmp/tamper-sums/$TAG"
           curl -fsSL "https://github.com/Marwanmorsy999/anpu/releases/download/$TAG/$TARBALL" -o "/tmp/tamper/$TAG/$TARBALL"
@@ -656,7 +656,7 @@ jobs:
 
       - name: Tampered archive aborts the installer
         env:
-          ANPU_VERSION: v0.5.5
+          ANPU_VERSION: v0.5.6
           ANPU_BASE_URL: http://127.0.0.1:8123
           ANPU_ALLOW_CUSTOM_BASE_URL: "1"
         run: |
@@ -668,7 +668,7 @@ jobs:
           echo "$out"
           echo "installer exit=$rc"
           # Evidence the installer actually fetched OUR tampered tarball.
-          grep -q "GET /v0.5.5/anpu_0.5.5_linux_amd64.tar.gz" /tmp/tamper/http.log || { echo "::error::installer never fetched the tampered tarball"; exit 1; }
+          grep -q "GET /v0.5.6/anpu_0.5.6_linux_amd64.tar.gz" /tmp/tamper/http.log || { echo "::error::installer never fetched the tampered tarball"; exit 1; }
           echo "$out" | grep -qi "checksum.*mismatch\|: FAILED\|hash.*mismatch" || { echo "::error::no checksum-mismatch message: $out"; exit 1; }
           if [ "$rc" -eq 0 ]; then echo "::error::tampered archive did not abort the installer"; exit 1; fi
           test ! -e /tmp/tamper-bin/anpu || { echo "::error::installer installed a binary despite checksum failure"; exit 1; }
@@ -676,7 +676,7 @@ jobs:
 
       - name: Tampered checksums.txt aborts the installer
         env:
-          ANPU_VERSION: v0.5.5
+          ANPU_VERSION: v0.5.6
           ANPU_BASE_URL: http://127.0.0.1:8124
           ANPU_ALLOW_CUSTOM_BASE_URL: "1"
         run: |
@@ -688,7 +688,7 @@ jobs:
           echo "$out"
           echo "installer exit=$rc"
           # Evidence the installer actually fetched OUR tampered checksums.txt.
-          grep -q "GET /v0.5.5/checksums.txt" /tmp/tamper-sums/http.log || { echo "::error::installer never fetched the tampered checksums.txt"; exit 1; }
+          grep -q "GET /v0.5.6/checksums.txt" /tmp/tamper-sums/http.log || { echo "::error::installer never fetched the tampered checksums.txt"; exit 1; }
           echo "$out" | grep -qi "checksum.*mismatch\|: FAILED\|hash.*mismatch" || { echo "::error::no checksum-mismatch message: $out"; exit 1; }
           if [ "$rc" -eq 0 ]; then echo "::error::tampered checksums.txt did not abort the installer"; exit 1; fi
           test ! -e /tmp/tamper-sums-bin/anpu || { echo "::error::installer installed a binary despite checksum failure"; exit 1; }
@@ -719,7 +719,7 @@ jobs:
       - name: Download the published release assets
         run: |
           $ErrorActionPreference = 'Stop'
-          $tag = 'v0.5.5'
+          $tag = 'v0.5.6'
           $asset = "anpu_$($tag.TrimStart('v'))_windows_amd64.zip"
           $dir = Join-Path $env:RUNNER_TEMP 'anpu-tamper-fixtures'
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -741,7 +741,7 @@ jobs:
           $ErrorActionPreference = 'Continue'
           $work = Join-Path $env:RUNNER_TEMP 'anpu-tamper-work'
           $fixtures = Join-Path $env:RUNNER_TEMP 'anpu-tamper-fixtures'
-          & ${{ matrix.exe }} -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tests/installers/tamper-windows.ps1 -FixtureDir $fixtures -Version v0.5.5 -WorkDir $work -ShellExe ${{ matrix.exe }} -InstallScript "${{ github.workspace }}\install.ps1" -Port 18241 2>&1 | ForEach-Object { $_.ToString() }
+          & ${{ matrix.exe }} -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tests/installers/tamper-windows.ps1 -FixtureDir $fixtures -Version v0.5.6 -WorkDir $work -ShellExe ${{ matrix.exe }} -InstallScript "${{ github.workspace }}\install.ps1" -Port 18241 2>&1 | ForEach-Object { $_.ToString() }
           $rc = $LASTEXITCODE
           Write-Host "harness exit=$rc"
           if ($rc -ne 0) { Write-Error "tamper harness failed (exit $rc)"; exit 1 }
@@ -776,7 +776,7 @@ jobs:
       - name: ANPU_BASE_URL guard tests (install.sh)
         run: |
           set -uo pipefail
-          out=$(sh tests/installers/base-url-guard.sh v0.5.5 2>&1)
+          out=$(sh tests/installers/base-url-guard.sh v0.5.6 2>&1)
           rc=$?
           echo "$out"
           echo "guard script exit=$rc"
@@ -817,7 +817,7 @@ jobs:
       - name: Download the published release assets
         run: |
           $ErrorActionPreference = 'Stop'
-          $tag = 'v0.5.5'
+          $tag = 'v0.5.6'
           $asset = "anpu_$($tag.TrimStart('v'))_windows_amd64.zip"
           $dir = Join-Path $env:RUNNER_TEMP 'anpu-tamper-fixtures'
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -839,7 +839,7 @@ jobs:
           $work = Join-Path $env:RUNNER_TEMP 'anpu-guard-work'
           $fixtures = Join-Path $env:RUNNER_TEMP 'anpu-tamper-fixtures'
           $env:GUARD_SHELL_EXE = '${{ matrix.exe }}'
-          $out = & ${{ matrix.exe }} -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tests/installers/base-url-guard.ps1 -InstallScript "${{ github.workspace }}\install.ps1" -FixtureDir $fixtures -Version v0.5.5 -WorkDir $work -Port 18251 2>&1 | Out-String
+          $out = & ${{ matrix.exe }} -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tests/installers/base-url-guard.ps1 -InstallScript "${{ github.workspace }}\install.ps1" -FixtureDir $fixtures -Version v0.5.6 -WorkDir $work -Port 18251 2>&1 | Out-String
           $rc = $LASTEXITCODE
           Write-Host $out
           Write-Host "guard script exit=$rc"
@@ -892,7 +892,7 @@ jobs:
           echo "fetch tool: curl -> $(command -v curl)"
           if ! command -v curl >/dev/null 2>&1; then echo "::error::curl must be present in this job"; exit 1; fi
           rm -rf /tmp/dl-curl-ctrl && mkdir -p /tmp/dl-curl-ctrl
-          out=$(ANPU_VERSION=v0.5.5 ANPU_INSTALL_DIR=/tmp/dl-curl-ctrl sh ./install.sh 2>&1)
+          out=$(ANPU_VERSION=v0.5.6 ANPU_INSTALL_DIR=/tmp/dl-curl-ctrl sh ./install.sh 2>&1)
           echo "$out"
           echo "$out" | grep -q "using curl to download releases" || { echo "::error::installer did not report the fetch tool"; exit 1; }
           echo "$out" | grep -q "installed to /tmp/dl-curl-ctrl/anpu" || { echo "::error::installer did not report the install dir"; exit 1; }
@@ -917,7 +917,7 @@ jobs:
         run: |
           set -uo pipefail
           set +e
-          out=$(ANPU_VERSION=v0.5.5 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_ALLOW_CUSTOM_BASE_URL=1 ANPU_INSTALL_DIR=/tmp/dl-curl9 sh ./install.sh 2>&1)
+          out=$(ANPU_VERSION=v0.5.6 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_ALLOW_CUSTOM_BASE_URL=1 ANPU_INSTALL_DIR=/tmp/dl-curl9 sh ./install.sh 2>&1)
           rc=$?
           set -e
           echo "$out"; echo "exit=$rc"
@@ -957,7 +957,7 @@ jobs:
           NOCURL=$(sh scripts/ci/nocurl-path.sh /tmp/anpu-nocurl-path)
           if PATH="$NOCURL" command -v curl >/dev/null 2>&1; then echo "::error::curl is still reachable"; exit 1; fi
           rm -rf /tmp/dl-wget-ctrl && mkdir -p /tmp/dl-wget-ctrl
-          out=$(PATH="$NOCURL" ANPU_VERSION=v0.5.5 ANPU_INSTALL_DIR=/tmp/dl-wget-ctrl sh ./install.sh 2>&1)
+          out=$(PATH="$NOCURL" ANPU_VERSION=v0.5.6 ANPU_INSTALL_DIR=/tmp/dl-wget-ctrl sh ./install.sh 2>&1)
           echo "$out"
           echo "$out" | grep -q "curl not found, using wget to download releases" || { echo "::error::installer did not report the wget fallback"; exit 1; }
           echo "$out" | grep -q "installed to /tmp/dl-wget-ctrl/anpu" || { echo "::error::installer did not report the install dir"; exit 1; }
@@ -986,7 +986,7 @@ jobs:
           NOCURL=$(sh scripts/ci/nocurl-path.sh /tmp/anpu-nocurl-path)
           if PATH="$NOCURL" command -v curl >/dev/null 2>&1; then echo "::error::curl is still reachable"; exit 1; fi
           set +e
-          out=$(PATH="$NOCURL" ANPU_VERSION=v0.5.5 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_ALLOW_CUSTOM_BASE_URL=1 ANPU_INSTALL_DIR=/tmp/dl-wget9 sh ./install.sh 2>&1)
+          out=$(PATH="$NOCURL" ANPU_VERSION=v0.5.6 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_ALLOW_CUSTOM_BASE_URL=1 ANPU_INSTALL_DIR=/tmp/dl-wget9 sh ./install.sh 2>&1)
           rc=$?
           set -e
           echo "$out"; echo "exit=$rc"
@@ -1019,7 +1019,7 @@ jobs:
           set -euo pipefail
           if command -v curl >/dev/null 2>&1; then echo "::error::curl must be absent"; exit 1; fi
           rm -rf /tmp/dl-bb-ctrl && mkdir -p /tmp/dl-bb-ctrl
-          out=$(ANPU_VERSION=v0.5.5 ANPU_INSTALL_DIR=/tmp/dl-bb-ctrl sh ./install.sh 2>&1)
+          out=$(ANPU_VERSION=v0.5.6 ANPU_INSTALL_DIR=/tmp/dl-bb-ctrl sh ./install.sh 2>&1)
           echo "$out"
           echo "$out" | grep -q "curl not found, using wget to download releases" || { echo "::error::installer did not report the wget fallback"; exit 1; }
           echo "$out" | grep -q "installed to /tmp/dl-bb-ctrl/anpu" || { echo "::error::installer did not report the install dir"; exit 1; }
@@ -1046,7 +1046,7 @@ jobs:
           set -euo pipefail
           if command -v curl >/dev/null 2>&1; then echo "::error::curl must be absent"; exit 1; fi
           set +e
-          out=$(ANPU_VERSION=v0.5.5 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_ALLOW_CUSTOM_BASE_URL=1 ANPU_INSTALL_DIR=/tmp/dl-bb9 sh ./install.sh 2>&1)
+          out=$(ANPU_VERSION=v0.5.6 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_ALLOW_CUSTOM_BASE_URL=1 ANPU_INSTALL_DIR=/tmp/dl-bb9 sh ./install.sh 2>&1)
           rc=$?
           set -e
           echo "$out"; echo "exit=$rc"
@@ -1071,7 +1071,7 @@ jobs:
           mkdir -p /tmp/missing-parent
           MISSING_DIR=/tmp/missing-parent/nested/bin
           test ! -e "$MISSING_DIR"
-          out=$(ANPU_VERSION=v0.5.5 ANPU_INSTALL_DIR="$MISSING_DIR" sh ./install.sh 2>&1)
+          out=$(ANPU_VERSION=v0.5.6 ANPU_INSTALL_DIR="$MISSING_DIR" sh ./install.sh 2>&1)
           echo "$out"
           if echo "$out" | grep -q "is not writable"; then
             echo "::error::missing dir misreported as not writable: $out"
@@ -1101,7 +1101,7 @@ jobs:
         run: |
           set -euo pipefail
           cosign version
-          out=$(ANPU_VERSION=v0.5.5 ANPU_INSTALL_DIR=/tmp/cosign-bin sh ./install.sh 2>&1)
+          out=$(ANPU_VERSION=v0.5.6 ANPU_INSTALL_DIR=/tmp/cosign-bin sh ./install.sh 2>&1)
           echo "$out"
           echo "$out" | grep -q "installed to /tmp/cosign-bin/anpu"
           if [ "${{ matrix.cosign }}" = "v2.4.1" ]; then

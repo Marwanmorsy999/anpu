@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.5.6
+
+- **Security: `ANPU_BASE_URL` hardening (both installers)**. `install.sh`
+  and `install.ps1` could be pointed at a hostile download source with
+  `ANPU_BASE_URL`; that source also serves `checksums.txt`, so a fake
+  archive with a matching checksum passed the SHA-256 check, the
+  installer printed `OK`, noted that cosign was missing and installed
+  the fake. Now:
+  - a base URL that is not under `https://github.com/Marwanmorsy999/anpu/`
+    prints a prominent warning explaining that the published checksums
+    come from the same source and therefore do not prove authenticity;
+  - without a usable cosign (>= 2.5.0) both installers **refuse** to
+    install from a non-official base URL and exit non-zero without
+    installing anything, unless `ANPU_ALLOW_CUSTOM_BASE_URL=1` is set
+    (which means accepting a download that cannot be
+    signature-verified);
+  - with a usable cosign the release signature verification stays
+    **mandatory**: a verification failure aborts the install.
+  The default (official) download path is unchanged and prints no
+  warning.
+- **CI**: new `installer-base-url-guard` (Linux) and
+  `installer-base-url-guard-windows` (Windows PowerShell 5.1 and pwsh)
+  jobs assert the guard: a custom base URL without the allow variable
+  exits non-zero and installs nothing, the same base URL with the allow
+  variable prints the warning, and the default base URL is unchanged and
+  prints no warning. The jobs that use `ANPU_BASE_URL` (the tamper tests
+  and the download-failure tests) now set both variables.
+- **Docs**: README, `docs/install.md` and `docs/releases.md` now state
+  that the SHA-256 check catches corruption and modification in transit
+  but does not prove authenticity, and point at cosign and
+  `gh attestation verify` for that.
+
 ## 0.5.5
 
 - **Windows installer**: `install.ps1` gains an `ANPU_BASE_URL` knob,

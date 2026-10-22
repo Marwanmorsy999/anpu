@@ -162,6 +162,14 @@ The reported digest must match the release checksum.
 SHA-256 verification is mandatory: both installers abort on a missing
 entry or a digest mismatch.
 
+**What it does and does not prove.** The SHA-256 check catches
+corruption and modification *in transit* - a truncated download, a proxy
+that rewrote bytes, a mirror serving something else. It does **not**
+prove authenticity: `checksums.txt` is fetched from the same place as the
+archive, so a hostile source can serve a fake archive together with a
+matching checksum file and the check still passes. Use 2b (cosign) or 2c
+(attestation) for authenticity.
+
 ### 2b. Cosign signature (recommended, needs `cosign >= v2.5.0`)
 
 `checksums.txt` is signed keyless via Sigstore (Fulcio + Rekor) under

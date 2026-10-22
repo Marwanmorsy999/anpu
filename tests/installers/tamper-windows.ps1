@@ -124,6 +124,7 @@ function Invoke-Case([string] $Name, [string] $Root, [bool] $ExpectAbort, [strin
   if (Test-Path -LiteralPath $installDir) { Remove-Item -LiteralPath $installDir -Recurse -Force }
 
   $savedBase = $env:ANPU_BASE_URL
+  $savedAllow = $env:ANPU_ALLOW_CUSTOM_BASE_URL
   $savedVer = $env:ANPU_VERSION
   $savedDir = $env:ANPU_INSTALL_DIR
   $proc = $null
@@ -132,6 +133,10 @@ function Invoke-Case([string] $Name, [string] $Root, [bool] $ExpectAbort, [strin
   try {
     $proc = Start-FixtureServer -Root $Root -ServerPort $serverPort
     $env:ANPU_BASE_URL = "http://127.0.0.1:$serverPort"
+    # The base URL here is a local fixture server, so the installer must be
+    # allowed to use it: the release signature cannot be verified without
+    # cosign. The installer prints its non-official-source warning.
+    $env:ANPU_ALLOW_CUSTOM_BASE_URL = "1"
     $env:ANPU_VERSION = $Version
     $env:ANPU_INSTALL_DIR = $installDir
 
@@ -140,6 +145,7 @@ function Invoke-Case([string] $Name, [string] $Root, [bool] $ExpectAbort, [strin
   } finally {
     Stop-Server $proc
     $env:ANPU_BASE_URL = $savedBase
+    $env:ANPU_ALLOW_CUSTOM_BASE_URL = $savedAllow
     $env:ANPU_VERSION = $savedVer
     $env:ANPU_INSTALL_DIR = $savedDir
   }

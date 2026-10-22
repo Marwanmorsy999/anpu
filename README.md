@@ -36,6 +36,17 @@ see [docs/releases.md](docs/releases.md).
 
 </details>
 
+### What the installer verifies
+
+The installers check the archive against the release's published SHA-256
+checksum. That catches corruption and modification **in transit** - it
+does not prove authenticity: the published `checksums.txt` comes from the
+same place as the archive, so a hostile source can serve a fake archive
+with a matching checksum. For authenticity use cosign or
+`gh attestation verify` - see
+[docs/install.md](docs/install.md#what-the-installer-verifies) for the
+exact commands.
+
 ## Why ANPU
 
 - **Evidence-backed findings only.** No finding without observed evidence — unverifiable checks render as "unavailable", and [miss rates are published](docs/benchmark.md), not buried.

@@ -6,9 +6,13 @@
 #   $env:ANPU_VERSION     release tag, e.g. v0.4.1 (default: latest)
 #   $env:ANPU_INSTALL_DIR install directory (default: $env:LOCALAPPDATA\anpu\bin)
 #   $env:ANPU_BASE_URL    override the release download base URL (testing)
+#   $env:ANPU_ALLOW_CUSTOM_BASE_URL
+#                         set to 1 to allow a non-official ANPU_BASE_URL when
+#                         no usable cosign is installed (see the warning below)
 $ErrorActionPreference = "Stop"
 
 $Repo = "Marwanmorsy999/anpu"
+$OfficialPrefix = "https://github.com/Marwanmorsy999/anpu/"
 $Version = $env:ANPU_VERSION
 if ([string]::IsNullOrWhiteSpace($Version)) { $Version = "latest" }
 $InstallDir = $env:ANPU_INSTALL_DIR
@@ -58,13 +62,6 @@ switch (([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture).To
   default { Fail "anpu installer: unsupported architecture: $_" }
 }
 
-$BaseRoot = "https://github.com/$Repo/releases/download"
-# Testing knob, mirroring install.sh's ANPU_BASE_URL: point the download at
-# another base (the CI tamper test serves tampered fixtures from a local
-# HTTP server). SHA-256 verification stays mandatory either way.
-if (-not [string]::IsNullOrWhiteSpace($env:ANPU_BASE_URL)) {
-  $BaseRoot = $env:ANPU_BASE_URL.TrimEnd("/")
-}
 function Get-CosignVersion {
   try {
     $out = & cosign version 2>&1 | Out-String
@@ -80,6 +77,61 @@ function Test-CosignVersionOk([string]$v, [string]$min) {
   } catch { return $false }
 }
 $CosignMin = "2.5.0"
+
+# --- download source --------------------------------------------------------
+# The published checksums.txt is downloaded from the SAME base URL as the
+# archive, so the SHA-256 check only proves the archive was not corrupted
+# in transit - it does NOT prove the archive came from the ANPU project.
+# A hostile base URL can serve a fake archive together with a matching
+# checksums.txt. Only the release signature (cosign) or a GitHub
+# attestation proves authenticity.
+$BaseRoot = "https://github.com/$Repo/releases/download"
+$CustomBase = $false
+if (-not [string]::IsNullOrWhiteSpace($env:ANPU_BASE_URL)) {
+  $BaseRoot = $env:ANPU_BASE_URL.TrimEnd("/")
+  if (-not $BaseRoot.StartsWith($OfficialPrefix)) { $CustomBase = $true }
+}
+
+# --- cosign availability ----------------------------------------------------
+# Detected BEFORE any download: a non-official base URL is only allowed
+# when the release signature can actually be verified (or the operator
+# explicitly accepts the risk with ANPU_ALLOW_CUSTOM_BASE_URL=1).
+$CosignPath = $null
+$CosignVersion = $null
+$CosignCmd = Get-Command cosign -ErrorAction SilentlyContinue
+if ($CosignCmd) {
+  $CosignPath = $CosignCmd.Source
+  $CosignVersion = Get-CosignVersion
+}
+$CosignUsable = (Test-CosignVersionOk $CosignVersion $CosignMin)
+
+if ($CustomBase) {
+  Write-Host "anpu installer: ============================================================"
+  Write-Host "anpu installer: WARNING: DOWNLOADING FROM A NON-OFFICIAL SOURCE"
+  Write-Host "anpu installer:   base URL: $BaseRoot"
+  Write-Host "anpu installer:   Official ANPU releases are published under"
+  Write-Host "anpu installer:   $OfficialPrefix"
+  Write-Host "anpu installer:   The SHA-256 checksums are downloaded from the SAME"
+  Write-Host "anpu installer:   source, so they only prove the archive was not"
+  Write-Host "anpu installer:   corrupted in transit - they do NOT prove the archive"
+  Write-Host "anpu installer:   came from the ANPU project. A hostile server can"
+  Write-Host "anpu installer:   serve a fake archive together with a matching"
+  Write-Host "anpu installer:   checksums.txt. For authenticity verify the release"
+  Write-Host "anpu installer:   signature with cosign (>= $CosignMin) or run"
+  Write-Host "anpu installer:   'gh attestation verify <file> --repo Marwanmorsy999/anpu'."
+  Write-Host "anpu installer: ============================================================"
+  if (-not $CosignUsable) {
+    if ($env:ANPU_ALLOW_CUSTOM_BASE_URL -ne "1") {
+      Fail ("anpu installer: refusing to install from a non-official source: no usable " +
+            "cosign (>= $CosignMin) was found, so the release signature cannot be verified. " +
+            "Install cosign and retry, or set ANPU_ALLOW_CUSTOM_BASE_URL=1 to accept an " +
+            "unverified download.")
+    }
+    Write-Host "anpu installer: WARNING: ANPU_ALLOW_CUSTOM_BASE_URL=1 is set, but no usable"
+    Write-Host "anpu installer: cosign was found - this download CANNOT be signature-verified."
+  }
+}
+
 function Resolve-LatestRelease([string]$Repository) {
   # PowerShell 5.1 compatibility: -MaximumRedirection 0 is unreliable on 5.1
   # (the redirect surfaces as a terminating error with no Location on some
@@ -157,18 +209,15 @@ try {
   $got = (Get-FileHash -Path (Join-Path $Tmp $ZipName) -Algorithm SHA256).Hash.ToLower()
   if ($got -ne $want.ToLower()) { Fail "anpu installer: checksum mismatch (want $want, got $got)" }
 
-  if (Get-Command cosign -ErrorAction SilentlyContinue) {
-    $cv = Get-CosignVersion
-    if (-not (Test-CosignVersionOk $cv $CosignMin)) {
-      $found = "unknown"
-      if (-not [string]::IsNullOrWhiteSpace($cv)) { $found = "v$cv" }
-      Write-Host "anpu installer: WARNING: cosign $found found, but signature verification requires cosign >= v$CosignMin - skipping signature verification (SHA-256 verification already passed)"
-    } else {
-      Write-Host "anpu installer: verifying cosign signature..."
-      Invoke-WebRequest -Uri "$Base/checksums.txt.sigstore.json" -OutFile (Join-Path $Tmp "checksums.txt.sigstore.json")
-      & cosign verify-blob --bundle (Join-Path $Tmp "checksums.txt.sigstore.json") --certificate-identity-regexp "^https://github.com/$Repo/\.github/workflows/release\.yml@refs/tags/.*$" --certificate-oidc-issuer "https://token.actions.githubusercontent.com" (Join-Path $Tmp "checksums.txt")
-      if ($LASTEXITCODE -ne 0) { Fail "anpu installer: cosign signature verification failed" }
-    }
+  if ($CosignUsable) {
+    Write-Host "anpu installer: verifying cosign signature..."
+    Invoke-WebRequest -Uri "$Base/checksums.txt.sigstore.json" -OutFile (Join-Path $Tmp "checksums.txt.sigstore.json")
+    # Mandatory: a verification failure aborts the install.
+    & $CosignPath verify-blob --bundle (Join-Path $Tmp "checksums.txt.sigstore.json") --certificate-identity-regexp "^https://github.com/$Repo/\.github/workflows/release\.yml@refs/tags/.*$" --certificate-oidc-issuer "https://token.actions.githubusercontent.com" (Join-Path $Tmp "checksums.txt")
+    if ($LASTEXITCODE -ne 0) { Fail "anpu installer: cosign signature verification failed" }
+    Write-Host "anpu installer: cosign signature verified"
+  } elseif (-not [string]::IsNullOrWhiteSpace($CosignVersion)) {
+    Write-Host "anpu installer: WARNING: cosign $CosignVersion found, but signature verification requires cosign >= v$CosignMin - skipping signature verification (SHA-256 verification already passed)"
   } else {
     Write-Host "anpu installer: cosign not found, skipping signature verification (signature verification requires cosign >= v$CosignMin)"
   }

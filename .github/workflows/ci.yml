@@ -658,6 +658,7 @@ jobs:
         env:
           ANPU_VERSION: v0.5.5
           ANPU_BASE_URL: http://127.0.0.1:8123
+          ANPU_ALLOW_CUSTOM_BASE_URL: "1"
         run: |
           set +e
           rm -rf /tmp/tamper-bin && mkdir -p /tmp/tamper-bin
@@ -677,6 +678,7 @@ jobs:
         env:
           ANPU_VERSION: v0.5.5
           ANPU_BASE_URL: http://127.0.0.1:8124
+          ANPU_ALLOW_CUSTOM_BASE_URL: "1"
         run: |
           set +e
           rm -rf /tmp/tamper-sums-bin && mkdir -p /tmp/tamper-sums-bin
@@ -762,6 +764,96 @@ jobs:
           if ($control -notlike '*verdict=failure*') { Write-Error "control-wrong must conclude failure: $control"; exit 1 }
           Write-Host "Windows tamper test OK: clean install, tampered archive, tampered checksums.txt; control concluded failure"
 
+  installer-base-url-guard:
+    name: installer base URL guard (linux)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: ANPU_BASE_URL guard tests (install.sh)
+        run: |
+          set -uo pipefail
+          out=$(sh tests/installers/base-url-guard.sh v0.5.5 2>&1)
+          rc=$?
+          echo "$out"
+          echo "guard script exit=$rc"
+          test "$rc" -eq 0 || { echo "::error::the base URL guard tests failed"; exit 1; }
+          echo "$out" | grep -q "GUARD-RESULT failures=0" || { echo "::error::no GUARD-RESULT line"; exit 1; }
+          # Guard against a vacuous pass: every case must have run.
+          for c in custom-no-allow custom-allowed default-base official-base; do
+            echo "$out" | grep -q "case=$c " || { echo "::error::case $c did not run"; exit 1; }
+          done
+          # The refusal must be real: the custom-no-allow case has to report
+          # a non-zero exit and nothing installed.
+          echo "$out" | grep -q "case=custom-no-allow check=non-zero-exit verdict=success" || { echo "::error::custom-no-allow did not report a non-zero exit"; exit 1; }
+          echo "$out" | grep -q "case=custom-no-allow check=nothing-installed verdict=success" || { echo "::error::custom-no-allow installed something"; exit 1; }
+          echo "$out" | grep -q "case=custom-allowed check=warning-printed verdict=success" || { echo "::error::custom-allowed did not print the warning"; exit 1; }
+          echo "$out" | grep -q "case=default-base check=no-warning verdict=success" || { echo "::error::the default base URL printed the warning"; exit 1; }
+
+  installer-base-url-guard-windows:
+    name: installer base URL guard (${{ matrix.shell }})
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # powershell = Windows PowerShell 5.1, pwsh = PowerShell 7.
+          - shell: pwsh
+            exe: pwsh
+          - shell: powershell
+            exe: powershell
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Download the published release assets
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = 'v0.5.5'
+          $asset = "anpu_$($tag.TrimStart('v'))_windows_amd64.zip"
+          $dir = Join-Path $env:RUNNER_TEMP 'anpu-tamper-fixtures'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $base = "https://github.com/Marwanmorsy999/anpu/releases/download/$tag"
+          Invoke-WebRequest -Uri "$base/$asset" -OutFile (Join-Path $dir $asset) -UseBasicParsing
+          Invoke-WebRequest -Uri "$base/checksums.txt" -OutFile (Join-Path $dir 'checksums.txt') -UseBasicParsing
+          foreach ($f in @($asset, 'checksums.txt')) {
+            $len = (Get-Item (Join-Path $dir $f)).Length
+            Write-Host "fixture $f bytes=$len"
+            if ($len -le 0) { Write-Error "fixture $f is empty"; exit 1 }
+          }
+
+      - name: ANPU_BASE_URL guard tests (install.ps1)
+        run: |
+          # Windows PowerShell 5.1 turns a native command's stderr into a
+          # terminating NativeCommandError as soon as it is merged into the
+          # pipeline, so collect the output explicitly.
+          $ErrorActionPreference = 'Continue'
+          $work = Join-Path $env:RUNNER_TEMP 'anpu-guard-work'
+          $fixtures = Join-Path $env:RUNNER_TEMP 'anpu-tamper-fixtures'
+          $env:GUARD_SHELL_EXE = '${{ matrix.exe }}'
+          $out = & ${{ matrix.exe }} -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tests/installers/base-url-guard.ps1 -InstallScript "${{ github.workspace }}\install.ps1" -FixtureDir $fixtures -Version v0.5.5 -WorkDir $work -Port 18251 2>&1 | Out-String
+          $rc = $LASTEXITCODE
+          Write-Host $out
+          Write-Host "guard script exit=$rc"
+          if ($rc -ne 0) { Write-Error "the base URL guard tests failed"; exit 1 }
+          if ($out -notmatch 'GUARD-RESULT failures=0') { Write-Error "no GUARD-RESULT line"; exit 1 }
+          # Guard against a vacuous pass: every case must have run.
+          foreach ($c in @('custom-no-allow', 'custom-allowed', 'default-base', 'official-base')) {
+            if ($out -notmatch "case=$c ") { Write-Error "case $c did not run"; exit 1 }
+          }
+          if ($out -notmatch 'case=custom-no-allow check=non-zero-exit verdict=success') { Write-Error "custom-no-allow did not report a non-zero exit"; exit 1 }
+          if ($out -notmatch 'case=custom-no-allow check=nothing-installed verdict=success') { Write-Error "custom-no-allow installed something"; exit 1 }
+          if ($out -notmatch 'case=custom-allowed check=warning-printed verdict=success') { Write-Error "custom-allowed did not print the warning"; exit 1 }
+          if ($out -notmatch 'case=default-base check=no-warning verdict=success') { Write-Error "the default base URL printed the warning"; exit 1 }
+
   installer-uninstall:
     name: installer uninstall + purge (ubuntu)
     runs-on: ubuntu-latest
@@ -825,7 +917,7 @@ jobs:
         run: |
           set -uo pipefail
           set +e
-          out=$(ANPU_VERSION=v0.5.5 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_INSTALL_DIR=/tmp/dl-curl9 sh ./install.sh 2>&1)
+          out=$(ANPU_VERSION=v0.5.5 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_ALLOW_CUSTOM_BASE_URL=1 ANPU_INSTALL_DIR=/tmp/dl-curl9 sh ./install.sh 2>&1)
           rc=$?
           set -e
           echo "$out"; echo "exit=$rc"
@@ -894,7 +986,7 @@ jobs:
           NOCURL=$(sh scripts/ci/nocurl-path.sh /tmp/anpu-nocurl-path)
           if PATH="$NOCURL" command -v curl >/dev/null 2>&1; then echo "::error::curl is still reachable"; exit 1; fi
           set +e
-          out=$(PATH="$NOCURL" ANPU_VERSION=v0.5.5 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_INSTALL_DIR=/tmp/dl-wget9 sh ./install.sh 2>&1)
+          out=$(PATH="$NOCURL" ANPU_VERSION=v0.5.5 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_ALLOW_CUSTOM_BASE_URL=1 ANPU_INSTALL_DIR=/tmp/dl-wget9 sh ./install.sh 2>&1)
           rc=$?
           set -e
           echo "$out"; echo "exit=$rc"
@@ -954,7 +1046,7 @@ jobs:
           set -euo pipefail
           if command -v curl >/dev/null 2>&1; then echo "::error::curl must be absent"; exit 1; fi
           set +e
-          out=$(ANPU_VERSION=v0.5.5 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_INSTALL_DIR=/tmp/dl-bb9 sh ./install.sh 2>&1)
+          out=$(ANPU_VERSION=v0.5.5 ANPU_BASE_URL=http://127.0.0.1:9 ANPU_ALLOW_CUSTOM_BASE_URL=1 ANPU_INSTALL_DIR=/tmp/dl-bb9 sh ./install.sh 2>&1)
           rc=$?
           set -e
           echo "$out"; echo "exit=$rc"

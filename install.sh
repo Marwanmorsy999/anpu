@@ -8,6 +8,9 @@
 #   ANPU_INSTALL_DIR install directory (default: /usr/local/bin, falls
 #                    back to $HOME/.local/bin when not writable)
 #   ANPU_BASE_URL    override the release download base URL (testing)
+#   ANPU_ALLOW_CUSTOM_BASE_URL
+#                    set to 1 to allow a non-official ANPU_BASE_URL when
+#                    no usable cosign is installed (see the warning below)
 set -eu
 
 say() { printf '%s\n' "$*" >&2; }
@@ -23,6 +26,7 @@ if [ "${ANPU_UNINSTALL:-0}" = "1" ]; then
 fi
 
 REPO="Marwanmorsy999/anpu"
+OFFICIAL_PREFIX="https://github.com/Marwanmorsy999/anpu/"
 
 if [ "$UNINSTALL" = "1" ]; then
   INSTALL_DIR="${ANPU_INSTALL_DIR:-/usr/local/bin}"
@@ -63,6 +67,78 @@ fi
 VERSION="${ANPU_VERSION:-latest}"
 INSTALL_DIR="${ANPU_INSTALL_DIR:-}"
 BASE_URL="${ANPU_BASE_URL:-https://github.com/$REPO/releases/download}"
+
+# --- download source --------------------------------------------------------
+# The published checksums.txt is downloaded from the SAME base URL as the
+# archive, so the SHA-256 check only proves the archive was not corrupted
+# in transit - it does NOT prove the archive came from the ANPU project.
+# A hostile base URL can serve a fake archive together with a matching
+# checksums.txt. Only the release signature (cosign) or a GitHub
+# attestation proves authenticity.
+CUSTOM_BASE=0
+if [ -n "${ANPU_BASE_URL:-}" ]; then
+  case "$BASE_URL" in
+    "$OFFICIAL_PREFIX"*) ;;
+    *) CUSTOM_BASE=1 ;;
+  esac
+fi
+
+# --- cosign availability ----------------------------------------------------
+# Detected BEFORE any download: a non-official base URL is only allowed
+# when the release signature can actually be verified (or the operator
+# explicitly accepts the risk with ANPU_ALLOW_CUSTOM_BASE_URL=1).
+COSIGN_MIN="2.5.0"
+# Portable major.minor.patch compare: returns 0 when $1 >= $2.
+ver_ge() {
+  a=${1#v}; b=${2#v}
+  a1=${a%%.*}; rest=${a#*.}; a2=${rest%%.*}; a3=${rest#*.}; a3=${a3%%[^0-9]*}
+  b1=${b%%.*}; rest=${b#*.}; b2=${rest%%.*}; b3=${rest#*.}; b3=${b3%%[^0-9]*}
+  [ "${a1:-0}" -gt "${b1:-0}" ] && return 0
+  [ "${a1:-0}" -lt "${b1:-0}" ] && return 1
+  [ "${a2:-0}" -gt "${b2:-0}" ] && return 0
+  [ "${a2:-0}" -lt "${b2:-0}" ] && return 1
+  [ "${a3:-0}" -ge "${b3:-0}" ]
+}
+COSIGN_USABLE=0
+COSIGN_VER=""
+if command -v cosign >/dev/null 2>&1; then
+  COSIGN_VER=$(cosign version 2>/dev/null | sed -n 's/.*GitVersion:[[:space:]]*\(v[0-9][0-9.]*\).*/\1/p' | head -n 1)
+  if [ -z "$COSIGN_VER" ]; then
+    COSIGN_VER=$(cosign version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+  fi
+  if [ -n "$COSIGN_VER" ] && ver_ge "$COSIGN_VER" "$COSIGN_MIN"; then
+    COSIGN_USABLE=1
+  fi
+fi
+
+if [ "$CUSTOM_BASE" = "1" ]; then
+  say "anpu installer: ============================================================"
+  say "anpu installer: WARNING: DOWNLOADING FROM A NON-OFFICIAL SOURCE"
+  say "anpu installer:   base URL: $BASE_URL"
+  say "anpu installer:   Official ANPU releases are published under"
+  say "anpu installer:   $OFFICIAL_PREFIX"
+  say "anpu installer:   The SHA-256 checksums are downloaded from the SAME"
+  say "anpu installer:   source, so they only prove the archive was not"
+  say "anpu installer:   corrupted in transit - they do NOT prove the archive"
+  say "anpu installer:   came from the ANPU project. A hostile server can"
+  say "anpu installer:   serve a fake archive together with a matching"
+  say "anpu installer:   checksums.txt. For authenticity verify the release"
+  say "anpu installer:   signature with cosign (>= v2.5.0) or run"
+  say "anpu installer:   'gh attestation verify <file> --repo Marwanmorsy999/anpu'."
+  say "anpu installer: ============================================================"
+  if [ "$COSIGN_USABLE" != "1" ]; then
+    if [ "${ANPU_ALLOW_CUSTOM_BASE_URL:-0}" != "1" ]; then
+      say "anpu installer: refusing to install from a non-official source: no usable"
+      say "anpu installer: cosign (>= v$COSIGN_MIN) was found, so the release"
+      say "anpu installer: signature cannot be verified. Install cosign and retry, or"
+      say "anpu installer: set ANPU_ALLOW_CUSTOM_BASE_URL=1 to accept an"
+      say "anpu installer: unverified download."
+      exit 1
+    fi
+    say "anpu installer: WARNING: ANPU_ALLOW_CUSTOM_BASE_URL=1 is set, but no usable"
+    say "anpu installer: cosign was found - this download CANNOT be signature-verified."
+  fi
+fi
 
 # --- fetch tool selection ---------------------------------------------------
 # The selected tool is always logged. A silent tool switch is exactly what
@@ -283,35 +359,23 @@ fi
 # verification" — so treat missing/old cosign as skip-with-warning, and
 # abort only when a new-enough cosign reports a real verification failure.
 # SHA-256 verification above stays mandatory in every case.
-COSIGN_MIN="2.5.0"
-# Portable major.minor.patch compare: returns 0 when $1 >= $2.
-ver_ge() {
-  a=${1#v}; b=${2#v}
-  a1=${a%%.*}; rest=${a#*.}; a2=${rest%%.*}; a3=${rest#*.}; a3=${a3%%[^0-9]*}
-  b1=${b%%.*}; rest=${b#*.}; b2=${rest%%.*}; b3=${rest#*.}; b3=${b3%%[^0-9]*}
-  [ "${a1:-0}" -gt "${b1:-0}" ] && return 0
-  [ "${a1:-0}" -lt "${b1:-0}" ] && return 1
-  [ "${a2:-0}" -gt "${b2:-0}" ] && return 0
-  [ "${a2:-0}" -lt "${b2:-0}" ] && return 1
-  [ "${a3:-0}" -ge "${b3:-0}" ]
-}
-if command -v cosign >/dev/null 2>&1; then
-  COSIGN_VER=$(cosign version 2>/dev/null | sed -n 's/.*GitVersion:[[:space:]]*\(v[0-9][0-9.]*\).*/\1/p' | head -n 1)
-  if [ -z "$COSIGN_VER" ]; then
-    COSIGN_VER=$(cosign version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
-  fi
-  if [ -z "$COSIGN_VER" ] || ! ver_ge "$COSIGN_VER" "$COSIGN_MIN"; then
-    say "anpu installer: WARNING: cosign ${COSIGN_VER:-unknown} found, but signature verification requires cosign >= v2.5.0 — skipping signature verification (SHA-256 verification already passed)"
-  else
-    say "anpu installer: verifying cosign signature..."
-    fetch "$BASE/checksums.txt.sigstore.json" "$TMPDIR/checksums.txt.sigstore.json"
-    cosign verify-blob --bundle "$TMPDIR/checksums.txt.sigstore.json" \
-      --certificate-identity-regexp '^https://github.com/Marwanmorsy999/anpu/\.github/workflows/release\.yml@refs/tags/.*$' \
-      --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-      "$TMPDIR/checksums.txt"
-  fi
+# For a non-official base URL the guard above already required a usable
+# cosign, so there the signature check is never skipped.
+if [ "$COSIGN_USABLE" = "1" ]; then
+  say "anpu installer: verifying cosign signature..."
+  fetch "$BASE/checksums.txt.sigstore.json" "$TMPDIR/checksums.txt.sigstore.json"
+  # Mandatory: a verification failure aborts the install (set -e).
+  cosign verify-blob --bundle "$TMPDIR/checksums.txt.sigstore.json" \
+    --certificate-identity-regexp '^https://github.com/Marwanmorsy999/anpu/\.github/workflows/release\.yml@refs/tags/.*$' \
+    --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+    "$TMPDIR/checksums.txt"
+  say "anpu installer: cosign signature verified"
 else
-  say "anpu installer: cosign not found, skipping signature verification (signature verification requires cosign >= v2.5.0)"
+  if [ -n "$COSIGN_VER" ]; then
+    say "anpu installer: WARNING: cosign ${COSIGN_VER} found, but signature verification requires cosign >= v$COSIGN_MIN — skipping signature verification (SHA-256 verification already passed)"
+  else
+    say "anpu installer: cosign not found, skipping signature verification (signature verification requires cosign >= v$COSIGN_MIN)"
+  fi
 fi
 
 # --- extract and install ----------------------------------------------------

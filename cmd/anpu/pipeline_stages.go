@@ -176,7 +176,9 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCt
 			{Label: "Subfinder", Enabled: modules.Subfinder, Scanner: subfinder, SkipReason: "safe profile is passive — use --profile advanced"},
 			{Label: "DNSx", Enabled: modules.DNSx, Scanner: dnsx, SkipReason: "safe profile is passive — use --profile advanced"},
 			// Takeover runs after Subdomains so sc.Subdomains is populated.
-			{Label: "Takeover", Enabled: modules.Takeover, Scanner: takeover.New(), SkipReason: "safe profile is passive — use --profile advanced"},
+			// It shares the pipeline's guarded client (dial-time internal-IP
+			// refusal), same as TakeoverPlus below.
+			{Label: "Takeover", Enabled: modules.Takeover, Scanner: takeover.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			{Label: "PortScan", Enabled: modules.PortScan, Scanner: portscan.New(), SkipReason: "ultra profile only (--profile ultra)"},
 			{Label: "Naabu", Enabled: modules.Naabu, Scanner: naabu, SkipReason: "ultra profile only (--profile ultra)"},
 			{Label: "Dirs", Enabled: modules.Dirs, Scanner: dirs.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
@@ -535,7 +537,7 @@ func nativeStage(label string, client *anpuhttp.Client, mc *models.ModuleConfig)
 	case "subdomains":
 		return subdomains.New(), mc.Subdomains
 	case "takeover":
-		return takeover.New(), mc.Takeover
+		return takeover.New(client), mc.Takeover
 	case "takeoverplus":
 		return takeoverplus.New(client), mc.TakeoverPlus
 	case "dirs":

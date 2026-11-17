@@ -27,8 +27,18 @@ import (
 // findExecutable resolves a tool using PATH first, then common Go/bin
 // locations. This keeps Windows installations working even when the Go
 // bin directory is not on PATH.
+//
+// Fail-closed digest check (v0.5.7 P0-4): when the resolved binary has an
+// install-time digest record and the file on disk no longer matches it,
+// the candidate is refused — a tampered or silently-modified tool binary
+// is never executed; every wrapper degrades to a warning with the exact
+// remediation. Unrecorded binaries resolve as before (`anpu tools verify`
+// flags them for baselining).
 func findExecutable(binary string) (string, error) {
 	if path, err := exec.LookPath(binary); err == nil {
+		if err, refused := digestDriftAt(binary, path); refused {
+			return "", err
+		}
 		return path, nil
 	}
 
@@ -68,10 +78,20 @@ func findExecutable(binary string) (string, error) {
 		}
 	}
 
+	var driftErr error
 	for _, candidate := range candidates {
 		if info, err := os.Stat(candidate); err == nil && !info.IsDir() { // #nosec G703 -- flagged path derives from the operator's own CLI input; escaping the intended tree is operator-inflicted.
+			if err, refused := digestDriftAt(binary, candidate); refused {
+				if driftErr == nil {
+					driftErr = err // keep the first refusal; try remaining candidates
+				}
+				continue
+			}
 			return candidate, nil
 		}
+	}
+	if driftErr != nil {
+		return "", driftErr
 	}
 
 	return "", fmt.Errorf("%s not found on PATH or Go bin directories", binary)

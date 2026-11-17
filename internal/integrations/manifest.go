@@ -38,20 +38,22 @@ type ManifestEntry struct {
 	Present bool `json:"present"`
 }
 
-// manifestMethodRef renders the automated install method + ref for a
-// recipe, or "manual" when only docs exist.
+// manifestMethodRef renders the automated install method + pinned ref
+// for a recipe (installRef carries the v0.5.7 version/digest pin), or
+// "manual" when only docs exist. The manifest hash therefore fingerprints
+// exactly the pinned supply chain a scan ran with.
 func manifestMethodRef(r Recipe) (method, ref string) {
 	switch {
 	case r.GoInstall != "":
-		return "go", r.GoInstall
+		return "go", installRef(r)
 	case r.Pipx != "":
-		return "pipx", r.Pipx
+		return "pipx", installRef(r)
 	case r.Apt != "":
 		return "apt", r.Apt
 	case r.Choco != "":
 		return "choco", r.Choco
 	case r.Docker != "":
-		return "docker", r.Docker
+		return "docker", installRef(r)
 	default:
 		return "manual", r.Manual
 	}

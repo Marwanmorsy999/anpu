@@ -148,7 +148,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 	var rootCT, rootCL string
 	if sc.Ledger == nil || sc.Ledger.Remaining(sc.StageLabel) > 0 {
 		if sc.Ledger != nil {
-			sc.Ledger.Record(sc.StageLabel) // best effort
+			_ = sc.Ledger.Record(sc.StageLabel) // best effort, cap already checked above
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		rresp, rerr := s.client.DoWithHeaders(cctx, "HEAD", strings.TrimSuffix(sc.Target.Raw, "/")+"/", nil)
@@ -161,7 +161,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 	}
 	if sc.Ledger == nil || sc.Ledger.Remaining(sc.StageLabel) > 0 {
 		if sc.Ledger != nil {
-			sc.Ledger.Record(sc.StageLabel) // best effort
+			_ = sc.Ledger.Record(sc.StageLabel) // best effort, cap already checked above
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()

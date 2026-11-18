@@ -19,11 +19,6 @@ import (
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic: 1 control + 4 probes.
-// (WAF veto below needs no extra requests; EntityDescriptor markers
-// cannot match SPA shells, so no root fetch is required here.)
-const maxRequests = 5
-
 // Scanner implements scanner.Scanner.
 type Scanner struct {
 	client *anpuhttp.Client

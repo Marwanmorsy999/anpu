@@ -23,7 +23,6 @@ import (
 
 // Budget and statistical gates.
 const (
-	maxRequests   = 11
 	baselineN     = 5
 	minSeparation = 1500 * time.Millisecond
 	maxControlGap = 750 * time.Millisecond
@@ -59,19 +58,24 @@ func median(ds []time.Duration) time.Duration {
 }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	target, param := pickTarget(sc)
 	if target == "" {
 		return scanner.StageResult{}, nil
 	}
-	made := 0
 	timed := func(v string) (time.Duration, bool) {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return 0, false
 		}
 		cctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 		defer cancel()
-		made++
 		start := time.Now()
 		resp, err := s.client.Get(cctx, withParam(target, param, v))
 		el := time.Since(start)
@@ -108,7 +112,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 
 	var findings []models.Finding
 	for _, p := range timeProbes {
-		if made+2 > maxRequests {
+		if sc.Ledger != nil && sc.Ledger.Remaining(sc.StageLabel) < 2 {
 			break
 		}
 		p1, ok1 := timed(p.payload)

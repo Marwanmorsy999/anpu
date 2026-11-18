@@ -22,9 +22,6 @@ import (
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
-// maxAssets bounds JS asset fetches (1 homepage + 5 assets = 6 requests).
-const maxAssets = 5
-
 // Scanner implements scanner.Scanner.
 type Scanner struct {
 	client *anpuhttp.Client
@@ -47,15 +44,20 @@ var (
 )
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
-	made := 0
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	get := func(u string) string {
-		if made >= 1+maxAssets {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return ""
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.Get(cctx, u)
 		if err != nil || resp == nil {
 			return ""
@@ -76,7 +78,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	}
 	bodies := map[string]string{"[inline]": home}
 	for _, m := range scriptSrcRe.FindAllStringSubmatch(home, -1) {
-		if len(bodies) > maxAssets {
+		if len(bodies) > 5 {
 			break
 		}
 		ref, err := url.Parse(strings.TrimSpace(m[1]))
@@ -126,5 +128,6 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			Remediation: "Block __proto__/constructor/prototype keys; use safe merge libs.",
 		})
 	}
-	return scanner.StageResult{Findings: findings}, nil
+	result = scanner.StageResult{Findings: findings}
+	return result, nil
 }

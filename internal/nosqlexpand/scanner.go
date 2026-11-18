@@ -20,9 +20,6 @@ import (
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic: 2 URLs × (baseline + 7 + control).
-const maxRequests = 18
-
 var nosqlProbes = []struct {
 	name  string
 	param string // appended as param[key]=value style
@@ -54,24 +51,29 @@ func (s *Scanner) Name() string { return "nosqlexpand" }
 func (s *Scanner) Available(_ context.Context) bool { return true }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	if class, reason := adaptive.SurfaceClass(sc.Endpoints, sc.Technologies, sc.Auth.IsAuthenticated()); class == adaptive.ClassStaticMarketing {
 		return scanner.StageResult{Skipped: "NoSQL skipped: " + reason}, nil
 	}
 	targets := pickTargets(sc)
-	made := 0
 	type fetch struct {
 		body   string
 		status int
 		length int
 	}
 	get := func(u string) fetch {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return fetch{}
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.Get(cctx, u)
 		if err != nil || resp == nil {
 			return fetch{}
@@ -97,7 +99,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		var hits []hit
 		var verdicts []string
 		for _, p := range nosqlProbes {
-			if made >= maxRequests {
+			if err := scanner.ChargeBudget(sc); err != nil {
+				budgetExhausted = true
 				break
 			}
 			r := get(withParam(target, p.param, p.value))

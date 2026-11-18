@@ -19,9 +19,6 @@ import (
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic.
-const maxRequests = 3
-
 const introspectionQuery = `{"query":"{__schema{queryType{name}types{name}}}"}`
 
 // Scanner implements scanner.Scanner.
@@ -66,7 +63,13 @@ func typeNames(body []byte) []string {
 }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	var urls []string
 	for _, ep := range sc.Endpoints {
 		if ep.Category != models.EndpointAPI {
@@ -77,13 +80,12 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		}
 	}
 	urls = append(urls, strings.TrimSuffix(sc.Target.Raw, "/")+"/graphql")
-	made := 0
 	for _, u := range urls {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			break
 		}
 		cctx, cancel := context.WithTimeout(ctx, 12*time.Second)
-		made++
 		resp, err := s.client.PostJSON(cctx, u, introspectionQuery, map[string]string{"Accept": "application/json"})
 		cancel()
 		if err != nil || resp == nil || resp.StatusCode != 200 {

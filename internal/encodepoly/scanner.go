@@ -19,9 +19,6 @@ import (
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic: baseline + 11 variants + control.
-const maxRequests = 13
-
 var encodeVariants = []struct {
 	name  string
 	value string
@@ -54,19 +51,24 @@ func (s *Scanner) Name() string { return "encodepoly" }
 func (s *Scanner) Available(_ context.Context) bool { return true }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	target, param := pickTarget(sc)
 	if target == "" {
 		return scanner.StageResult{}, nil
 	}
-	made := 0
 	get := func(v string) *anpuhttp.Response {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.Get(cctx, withRawParam(target, param, v))
 		if err != nil || resp == nil {
 			return nil
@@ -81,7 +83,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	baseSig := of(base)
 	var decoded, blocked []string
 	for _, ev := range encodeVariants[1:] {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			break
 		}
 		resp := get(ev.value)

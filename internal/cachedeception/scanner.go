@@ -22,8 +22,7 @@ import (
 
 // maxTargets and variants bound the budget: 2 × (1 + 3) = 8.
 const (
-	maxTargets  = 2
-	maxRequests = 8
+	maxTargets = 2
 )
 
 var deceptionSuffix = []string{".css", "/anpudecept.css", "%2e.css"}
@@ -43,16 +42,21 @@ func (s *Scanner) Name() string { return "cachedeception" }
 func (s *Scanner) Available(_ context.Context) bool { return true }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	targets := pickTargets(sc)
-	made := 0
 	get := func(u string) *anpuhttp.Response {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.Get(cctx, u)
 		if err != nil || resp == nil {
 			return nil
@@ -68,7 +72,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		}
 		baseWords := wordSet(base.Body)
 		for _, suf := range deceptionSuffix {
-			if made >= maxRequests {
+			if err := scanner.ChargeBudget(sc); err != nil {
+				budgetExhausted = true
 				break
 			}
 			variant := target + suf

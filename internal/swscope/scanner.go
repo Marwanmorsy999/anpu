@@ -21,9 +21,6 @@ import (
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic.
-const maxRequests = 6
-
 // Scanner implements scanner.Scanner.
 type Scanner struct {
 	client *anpuhttp.Client
@@ -48,15 +45,20 @@ var (
 var conventionalSW = []string{"/sw.js", "/service-worker.js", "/serviceworker.js"}
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
-	made := 0
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	get := func(u string) *anpuhttp.Response {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.Get(cctx, u)
 		if err != nil || resp == nil {
 			return nil
@@ -102,7 +104,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	}
 	// Conventional paths as fallback candidates.
 	for _, p := range conventionalSW {
-		if len(scripts) >= 4 || made >= maxRequests {
+		if len(scripts) >= 4 || (sc.Ledger != nil && sc.Ledger.Remaining(sc.StageLabel) <= 0) {
 			break
 		}
 		u := strings.TrimSuffix(sc.Target.Raw, "/") + p
@@ -126,7 +128,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	}
 	sort.Strings(names)
 	for _, u := range names {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			break
 		}
 		resp := get(u)

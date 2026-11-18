@@ -59,28 +59,26 @@ type sig struct {
 }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	targets := pickTargets(sc)
 	if len(targets) == 0 {
 		return scanner.StageResult{}, nil
 	}
 	var findings []models.Finding
 	var endpoints []models.Endpoint
-	made := 0
 	get := func(u string) *anpuhttp.Response {
-		if made >= maxTargets*(1+maxProbes+1) {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
-		}
-		// Charge the global per-tool ledger (Wave 4 item 151); a nil
-		// ledger (unit tests) means uncapped.
-		if sc.Ledger != nil {
-			if err := sc.Ledger.Record("hiddenparams"); err != nil {
-				return nil
-			}
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.Get(cctx, u)
 		if err != nil || resp == nil {
 			return nil

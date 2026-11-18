@@ -22,9 +22,6 @@ import (
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic: 2 endpoints × (absent + garbage + none) + homepage.
-const maxRequests = 7
-
 // Scanner implements scanner.Scanner.
 type Scanner struct {
 	client *anpuhttp.Client
@@ -46,7 +43,13 @@ func noneToken() string {
 }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	if !sc.Config.Modules.Adversarial {
 		return scanner.StageResult{Warnings: []string{"jwtconfirm skipped: requires --adversarial --confirm-authorized (authorized targets only)"}}, nil
 	}
@@ -55,14 +58,13 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		// Fall back to probing the homepage itself (some apps gate /).
 		targets = []string{sc.Target.Raw}
 	}
-	made := 0
 	get := func(u, token string) *anpuhttp.Response {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		var resp *anpuhttp.Response
 		var err error
 		if token == "" {

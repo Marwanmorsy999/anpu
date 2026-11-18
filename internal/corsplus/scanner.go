@@ -23,7 +23,6 @@ import (
 // maxRequests bounds all HTTP traffic: 3 endpoints × (baseline + 3).
 const (
 	maxEndpoints = 3
-	maxRequests  = 12
 )
 
 // Scanner implements scanner.Scanner.
@@ -41,7 +40,13 @@ func (s *Scanner) Name() string { return "corsplus" }
 func (s *Scanner) Available(_ context.Context) bool { return true }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	targets := pickTargets(sc)
 	evilSub := "https://anpuevil." + strings.TrimSuffix(sc.Target.Host, ".")
 	origins := []struct {
@@ -52,14 +57,13 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		{"https://evil.example", "arbitrary Origin reflected with credentials"},
 		{evilSub, "untrusted subdomain Origin reflected with credentials"},
 	}
-	made := 0
 	probe := func(u, origin string) (acao, acac string, ok bool) {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return "", "", false
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.DoWithHeaders(cctx, "GET", u, map[string]string{"Origin": origin})
 		if err != nil || resp == nil {
 			return "", "", false
@@ -70,7 +74,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	var findings []models.Finding
 	for _, target := range targets {
 		for _, o := range origins {
-			if made >= maxRequests {
+			if err := scanner.ChargeBudget(sc); err != nil {
+				budgetExhausted = true
 				break
 			}
 			acao, acac, ok := probe(target, o.origin)

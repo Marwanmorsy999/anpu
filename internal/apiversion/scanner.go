@@ -18,9 +18,6 @@ import (
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic: 1 baseline + 10 variants.
-const maxRequests = 11
-
 var versionPaths = []string{
 	"/v2", "/v3", "/v4", "/api/v2", "/api/v3",
 	"/v1", // downgrade check against a v2-style base is handled by swap logic
@@ -42,23 +39,21 @@ func (s *Scanner) Name() string { return "apiversion" }
 func (s *Scanner) Available(_ context.Context) bool { return true }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
-	base := pickBase(sc)
-	made := 0
-	get := func(u string, headers map[string]string) *anpuhttp.Response {
-		if made >= maxRequests {
-			return nil
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
 		}
-		// Charge the global per-tool ledger (Wave 4 item 151); a nil
-		// ledger (unit tests) means uncapped.
-		if sc.Ledger != nil {
-			if err := sc.Ledger.Record("apiversion"); err != nil {
-				return nil
-			}
+	}()
+	base := pickBase(sc)
+	get := func(u string, headers map[string]string) *anpuhttp.Response {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
+			return nil
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		var resp *anpuhttp.Response
 		var err error
 		if len(headers) == 0 {
@@ -81,7 +76,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	var findings []models.Finding
 	var endpoints []models.Endpoint
 	try := func(u, label string, headers map[string]string) {
-		if made >= maxRequests || len(findings) >= 3 {
+		if (sc.Ledger != nil && sc.Ledger.Remaining(sc.StageLabel) <= 0) || len(findings) >= 3 {
+			budgetExhausted = true
 			return
 		}
 		resp := get(u, headers)
@@ -123,7 +119,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	try(withParam(base, "version", "2"), "?version=2", nil)
 	try(withParam(base, "api-version", "2"), "?api-version=2", nil)
 	try(base, "Accept: application/vnd.api.v2+json", map[string]string{"Accept": "application/vnd.api.v2+json"})
-	return scanner.StageResult{Findings: findings, Endpoints: endpoints}, nil
+	result = scanner.StageResult{Findings: findings, Endpoints: endpoints}
+	return result, nil
 }
 
 // pickBase prefers a discovered API endpoint, else the target root.

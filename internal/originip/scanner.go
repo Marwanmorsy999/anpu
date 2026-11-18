@@ -24,9 +24,6 @@ import (
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic for this stage.
-const maxRequests = 3
-
 // cdnMarkers match CNAME targets of common CDN/WAF providers.
 var cdnMarkers = []string{
 	"cloudflare", "akamai", "fastly", "cloudfront", "azureedge",
@@ -58,19 +55,24 @@ func (s *Scanner) Available(_ context.Context) bool { return true }
 var titleRe = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	host := strings.ToLower(strings.TrimSuffix(sc.Target.Host, "."))
 	if host == "" || net.ParseIP(host) != nil || host == "localhost" || strings.HasSuffix(host, ".localhost") {
 		return scanner.StageResult{}, nil
 	}
-	made := 0
 	get := func(u string) *anpuhttp.Response {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.Get(cctx, u)
 		if err != nil || resp == nil {
 			return nil
@@ -120,7 +122,11 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			baselineWords = fpmatch.WordSet(root.Body)
 		}
 		for _, ip := range ips {
-			if ip.To4() == nil || made >= maxRequests {
+			if ip.To4() == nil {
+				continue
+			}
+			if err := scanner.ChargeBudget(sc); err != nil {
+				budgetExhausted = true
 				continue
 			}
 			scheme := sc.Target.URL.Scheme
@@ -128,8 +134,11 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 				scheme = "https"
 			}
 			direct := fmt.Sprintf("%s://%s/", scheme, ip.String())
+			if err := scanner.ChargeBudget(sc); err != nil {
+				budgetExhausted = true
+				continue
+			}
 			cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			made++
 			presp, perr := s.client.GetWithHost(cctx, direct, host, nil)
 			cancel()
 			if perr != nil || presp == nil {

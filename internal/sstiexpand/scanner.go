@@ -56,19 +56,24 @@ func (s *Scanner) Name() string { return "sstiexpand" }
 func (s *Scanner) Available(_ context.Context) bool { return true }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
 	if class, reason := adaptive.SurfaceClass(sc.Endpoints, sc.Technologies, sc.Auth.IsAuthenticated()); class == adaptive.ClassStaticMarketing {
 		return scanner.StageResult{Skipped: "SSTI skipped: " + reason}, nil
 	}
 	targets := pickTargets(sc)
-	made := 0
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	get := func(u string) string {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return ""
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.Get(cctx, u)
 		if err != nil || resp == nil {
 			return ""
@@ -99,7 +104,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			continue
 		}
 		for _, p := range sstiPayloads {
-			if made >= maxRequests {
+			if sc.Ledger != nil && sc.Ledger.Remaining(sc.StageLabel) <= 0 {
+				budgetExhausted = true
 				break
 			}
 			body := get(withParam(target, param, p.payload))
@@ -128,7 +134,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			break
 		}
 	}
-	return scanner.StageResult{Findings: findings}, nil
+	result = scanner.StageResult{Findings: findings}
+	return result, nil
 }
 
 // volatileRun matches long hex runs — CSRF tokens, session nonces, cache

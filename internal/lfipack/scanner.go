@@ -21,9 +21,6 @@ import (
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic: 2 URLs × (baseline + 8 + control).
-const maxRequests = 20
-
 var fileParams = []string{"file", "page", "path", "include", "template", "name", "load", "pg", "doc", "folder"}
 
 var lfiPayloads = []struct {
@@ -57,19 +54,24 @@ func (s *Scanner) Name() string { return "lfipack" }
 func (s *Scanner) Available(_ context.Context) bool { return true }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	if class, reason := adaptive.SurfaceClass(sc.Endpoints, sc.Technologies, sc.Auth.IsAuthenticated()); class == adaptive.ClassStaticMarketing {
 		return scanner.StageResult{Skipped: "LFI skipped: " + reason}, nil
 	}
 	targets := pickTargets(sc)
-	made := 0
 	get := func(u string) string {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return ""
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.Get(cctx, u)
 		if err != nil || resp == nil {
 			return ""
@@ -89,7 +91,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		}
 		control := get(withParam(t, param, "anpunofilexyz"))
 		for _, p := range lfiPayloads {
-			if made >= maxRequests {
+			if err := scanner.ChargeBudget(sc); err != nil {
+				budgetExhausted = true
 				break
 			}
 			body := get(withParam(t, param, p.payload))

@@ -24,9 +24,6 @@ var iconPaths = []string{
 	"/favicon-32x32.png", "/favicon-16x16.png",
 }
 
-// maxRequests bounds all HTTP traffic: 1 homepage + 8 icons.
-const maxRequests = 9
-
 // Scanner implements scanner.Scanner.
 type Scanner struct {
 	client *anpuhttp.Client
@@ -49,15 +46,20 @@ func hash64(b []byte) string {
 }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
-	made := 0
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	get := func(path string) []byte {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.Get(cctx, strings.TrimSuffix(sc.Target.Raw, "/")+path)
 		if err != nil || resp == nil || resp.StatusCode != 200 || len(resp.Body) == 0 {
 			return nil
@@ -72,7 +74,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	groups := map[string][]string{}
 	var icons []icon
 	for _, p := range iconPaths {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			break
 		}
 		body := get(p)

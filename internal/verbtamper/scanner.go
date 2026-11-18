@@ -25,7 +25,6 @@ import (
 // maxEndpoints and method variants bound the budget.
 const (
 	maxEndpoints = 3
-	maxRequests  = 21
 )
 
 var methods = []string{"POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
@@ -45,19 +44,24 @@ func (s *Scanner) Name() string { return "verbtamper" }
 func (s *Scanner) Available(_ context.Context) bool { return true }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	targets := pickTargets(sc)
 	if len(targets) == 0 {
 		return scanner.StageResult{}, nil
 	}
-	made := 0
 	do := func(method, u string, headers map[string]string) *anpuhttp.Response {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		var resp *anpuhttp.Response
 		var err error
 		if len(headers) == 0 && method == "GET" {
@@ -88,7 +92,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		}
 		baseWords := wordSet(base.Body)
 		for _, m := range methods {
-			if made >= maxRequests {
+			if sc.Ledger != nil && sc.Ledger.Remaining(sc.StageLabel) <= 0 {
+				budgetExhausted = true
 				break
 			}
 			resp := do(m, target, nil)
@@ -123,7 +128,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			break
 		}
 	}
-	return scanner.StageResult{Findings: findings}, nil
+	result = scanner.StageResult{Findings: findings}
+	return result, nil
 }
 
 // pickTargets prefers admin-like/auth discovered endpoints, then any

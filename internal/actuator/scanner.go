@@ -22,9 +22,6 @@ import (
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic: 1 control + 1 lazy root + 10 GET + 1 root HEAD + 1 heapdump HEAD.
-const maxRequests = 14
-
 // Scanner implements scanner.Scanner.
 type Scanner struct {
 	client *anpuhttp.Client
@@ -60,15 +57,20 @@ var endpoints = []endpoint{
 }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
-	made := 0
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	get := func(path string) *anpuhttp.Response {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.Get(cctx, strings.TrimSuffix(sc.Target.Raw, "/")+path)
 		if err != nil || resp == nil {
 			return nil
@@ -97,7 +99,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 
 	var findings []models.Finding
 	for _, e := range endpoints {
-		if made >= maxRequests-1 { // reserve one slot for the heapdump HEAD
+		if sc.Ledger != nil && sc.Ledger.Remaining(sc.StageLabel) < 2 { // reserve one slot for the heapdump HEAD
+			budgetExhausted = true
 			break
 		}
 		resp := get(e.path)
@@ -143,21 +146,25 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	// failure fails open (no suppression without a baseline).
 	var rootStatus int
 	var rootCT, rootCL string
-	if made < maxRequests {
+	if sc.Ledger == nil || sc.Ledger.Remaining(sc.StageLabel) > 0 {
+		if sc.Ledger != nil {
+			_ = sc.Ledger.Record(sc.StageLabel) // best effort, cap already checked above
+		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		rresp, rerr := s.client.DoWithHeaders(cctx, "HEAD", strings.TrimSuffix(sc.Target.Raw, "/")+"/", nil)
 		cancel()
-		made++
 		if rerr == nil && rresp != nil {
 			rootStatus = rresp.StatusCode
 			rootCT = strings.ToLower(rresp.Header.Get("Content-Type"))
 			rootCL = rresp.Header.Get("Content-Length")
 		}
 	}
-	if made < maxRequests {
+	if sc.Ledger == nil || sc.Ledger.Remaining(sc.StageLabel) > 0 {
+		if sc.Ledger != nil {
+			_ = sc.Ledger.Record(sc.StageLabel) // best effort, cap already checked above
+		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		if resp, err := s.client.DoWithHeaders(cctx, "HEAD", strings.TrimSuffix(sc.Target.Raw, "/")+"/actuator/heapdump", nil); err == nil && resp != nil {
 			ct := strings.ToLower(resp.Header.Get("Content-Type"))
 			cl := resp.Header.Get("Content-Length")
@@ -181,7 +188,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			}
 		}
 	}
-	return scanner.StageResult{Findings: findings}, nil
+	result = scanner.StageResult{Findings: findings}
+	return result, nil
 }
 
 func slug(path string) string {

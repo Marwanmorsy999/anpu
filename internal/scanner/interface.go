@@ -231,6 +231,11 @@ type ScanContext struct {
 	// ledger means uncapped (tests, custom pipelines).
 	Ledger *anpuhttp.Ledger
 
+	// StageLabel is set by the pipeline before Run so scanners can charge
+	// the ledger under their stage name. Empty in tests that bypass the
+	// pipeline (those stages are uncapped unless a cap is set under "").
+	StageLabel string
+
 	// ScopeHosts are extra same-site hostnames admitted to in-scan host
 	// matching (scope auto-expansion: a same-registrable-domain redirect
 	// observed on the target, e.g. apex → www). Nil means target-only.

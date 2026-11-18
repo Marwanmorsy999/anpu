@@ -22,9 +22,6 @@ import (
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic: 2 baselines + 2 probes + control.
-const maxRequests = 5
-
 // Scanner implements scanner.Scanner.
 type Scanner struct {
 	client *anpuhttp.Client
@@ -61,7 +58,13 @@ func liveALPN(host, port string) []string {
 }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	if !sc.Config.Modules.Adversarial {
 		return scanner.StageResult{Warnings: []string{"h2smuggle skipped: requires --adversarial --confirm-authorized (authorized targets only)"}}, nil
 	}
@@ -79,14 +82,13 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	if !supportsH2 {
 		return scanner.StageResult{}, nil // no H2, no desync surface
 	}
-	made := 0
 	timedPost := func(body string) (time.Duration, bool) {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return 0, false
 		}
 		cctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 		defer cancel()
-		made++
 		start := time.Now()
 		// Benign body with conflicting lengths; server should 400/ignore.
 		// Nothing is stored, nothing is poisoned.

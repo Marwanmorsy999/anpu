@@ -31,9 +31,6 @@ var suffixes = []string{
 	".log", ".txt", ".conf", ".cfg", ".ini",
 }
 
-// maxRequests bounds all HTTP traffic: 1 control + 1 lazy root + 60 probes.
-const maxRequests = 62
-
 // Scanner implements scanner.Scanner.
 type Scanner struct {
 	client *anpuhttp.Client
@@ -69,13 +66,19 @@ func bases(sc *scanner.ScanContext) []string {
 }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	if class, reason := adaptive.SurfaceClass(sc.Endpoints, sc.Technologies, sc.Auth.IsAuthenticated()); class == adaptive.ClassStaticMarketing {
 		return scanner.StageResult{Skipped: "Backup-file search skipped: " + reason}, nil
 	}
-	made := 0
 	get := func(u string) *anpuhttp.Response {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
 		}
 		// Charge the global per-tool ledger (Wave 4 item 151); a nil
@@ -87,7 +90,6 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.Get(cctx, u)
 		if err != nil || resp == nil {
 			return nil
@@ -114,7 +116,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	var findings []models.Finding
 	for _, b := range bases(sc) {
 		for _, suf := range suffixes {
-			if made >= maxRequests {
+			if err := scanner.ChargeBudget(sc); err != nil {
+				budgetExhausted = true
 				break
 			}
 			u := b + suf

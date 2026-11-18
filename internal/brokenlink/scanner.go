@@ -24,8 +24,7 @@ import (
 // maxLinks and request budget: 1 homepage + 1 control + 2 per link worst
 // case (HEAD then confirming GET), capped so total stays ≤ 21.
 const (
-	maxLinks    = 10
-	maxRequests = 22
+	maxLinks = 10
 )
 
 // Scanner implements scanner.Scanner.
@@ -45,15 +44,20 @@ func (s *Scanner) Available(_ context.Context) bool { return true }
 var hrefRe = regexp.MustCompile(`(?i)(?:href|src)\s*=\s*["']([^"'#]+)["']`)
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
-	made := 0
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	get := func(u string) *anpuhttp.Response {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.Get(cctx, u)
 		if err != nil || resp == nil {
 			return nil
@@ -61,12 +65,12 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		return resp
 	}
 	head := func(u string) *anpuhttp.Response {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
 		}
 		cctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.DoWithHeaders(cctx, "HEAD", u, nil)
 		if err != nil || resp == nil {
 			return nil

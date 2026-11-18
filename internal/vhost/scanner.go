@@ -25,9 +25,6 @@ var candidates = []string{
 	"m", "blog", "shop", "mail", "internal", "beta",
 }
 
-// maxRequests bounds all HTTP traffic.
-const maxRequests = 13
-
 // Scanner implements scanner.Scanner.
 type Scanner struct {
 	client *anpuhttp.Client
@@ -71,19 +68,24 @@ func sigOf(status int, body []byte) [2]int {
 }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	cands := buildCandidates(sc.Target.Host)
 	if len(cands) == 0 {
 		return scanner.StageResult{}, nil
 	}
-	made := 0
 	get := func(hostOverride string) *anpuhttp.Response {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		var resp *anpuhttp.Response
 		var err error
 		if hostOverride == "" {
@@ -105,7 +107,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 
 	var found []string
 	for _, cand := range cands {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			break
 		}
 		resp := get(cand)

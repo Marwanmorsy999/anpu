@@ -63,7 +63,11 @@ var PhaseOrder = map[Phase]int{
 // Stage pairs a named pipeline step with the module toggle that governs
 // whether it runs, and the Scanner that implements it.
 type Stage struct {
-	Label   string
+	Label string
+	// Budget is the per-stage HTTP request cap charged against the shared
+	// ledger (0 = unlimited). Migrated from each stage's local maxRequests
+	// const so behaviour is preserved exactly.
+	Budget  int
 	Enabled bool
 	// SkipReason is reported when Enabled is false so the terminal can
 	// say why instead of printing a bare dash.
@@ -117,11 +121,27 @@ func (p *Pipeline) Run(
 	// Global per-tool budget ledger (Wave 4 item 151): bounded miners
 	// charge here and stop at their caps; everything else is uncapped
 	// but still counted toward the global total.
-	ledger := anpuhttp.NewLedger(anpuhttp.DefaultMaxTotal)
-	ledger.SetCap("hiddenparams", 64)
-	ledger.SetCap("backupplus", 61)
-	ledger.SetCap("apiversion", 11)
-	ledger.SetCap("apiconsole", 11)
+	//
+	// Per-stage caps are declared on each Stage.Budget (migrated from the
+	// stage's local maxRequests const). The global cap is the larger of
+	// DefaultMaxTotal and sum(stage caps)*1.1 so a full-profile scan can
+	// never trip a cap that did not apply before the ledger existed.
+	sumCaps := 0
+	for i := range p.Stages {
+		if p.Stages[i].Enabled && p.Stages[i].Budget > 0 {
+			sumCaps += p.Stages[i].Budget
+		}
+	}
+	maxTotal := anpuhttp.DefaultMaxTotal
+	if int(float64(sumCaps)*1.1) > maxTotal {
+		maxTotal = int(float64(sumCaps) * 1.1)
+	}
+	ledger := anpuhttp.NewLedger(maxTotal)
+	for i := range p.Stages {
+		if p.Stages[i].Enabled && p.Stages[i].Budget > 0 {
+			ledger.SetCap(p.Stages[i].Label, p.Stages[i].Budget)
+		}
+	}
 	sc := &ScanContext{
 		Target:       target,
 		Config:       cfg,
@@ -242,6 +262,9 @@ func (p *Pipeline) Run(
 
 	// runOne executes a single stage against a context snapshot.
 	runOne := func(ctx context.Context, stage Stage, snap *ScanContext) (StageResult, error) {
+		// Charge under the stage's label so the ledger (and any warning
+		// the stage emits on exhaustion) names the right stage.
+		snap.StageLabel = stage.Label
 		isGhostActive := anpuhttp.IsGhost() && anpuhttp.GhostWorkers > 1 && stage.Label == "Active"
 		if isGhostActive && len(snap.Endpoints) > 0 {
 			return p.runGhostSharded(ctx, stage, snap)

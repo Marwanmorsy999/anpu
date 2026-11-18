@@ -22,9 +22,6 @@ import (
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic: 2 URLs × (baseline + 10).
-const maxRequests = 22
-
 var redirectParams = []string{"next", "redirect", "url", "return", "continue", "dest", "target", "r", "u", "callback"}
 
 var redirectPayloads = []struct {
@@ -103,17 +100,22 @@ func sameSite(host, targetHost string) bool {
 }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	targets := pickTargets(sc)
-	made := 0
 	// noFollow issues one GET without following redirects, so the
 	// Location header is inspected exactly and the destination is never
 	// visited. Only in-scope same-host URLs are ever requested.
 	noFollow := func(u string) (status int, location string) {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return 0, ""
 		}
-		made++
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		req, err := http.NewRequestWithContext(cctx, http.MethodGet, u, nil)
@@ -143,7 +145,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			continue
 		}
 		for _, p := range redirectPayloads {
-			if made >= maxRequests {
+			if err := scanner.ChargeBudget(sc); err != nil {
+				budgetExhausted = true
 				break
 			}
 			status, loc := noFollow(withParam(t.URL, param, p.payload))

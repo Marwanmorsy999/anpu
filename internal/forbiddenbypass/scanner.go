@@ -91,16 +91,24 @@ func (s *Scanner) Name() string { return "forbiddenbypass" }
 func (s *Scanner) Available(_ context.Context) bool { return true }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	targets := pickTargets(sc)
-	made := 0
 	do := func(u string, headers map[string]string) *anpuhttp.Response {
-		if made >= maxRequests || u == "" {
+		if u == "" {
+			return nil
+		}
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		var resp *anpuhttp.Response
 		var err error
 		if len(headers) == 0 {
@@ -143,7 +151,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			path = "/"
 		}
 		for _, v := range variantsFor(path) {
-			if made >= maxRequests {
+			if sc.Ledger != nil && sc.Ledger.Remaining(sc.StageLabel) <= 0 {
+				budgetExhausted = true
 				break
 			}
 			vu := v.url(target)
@@ -179,7 +188,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			break
 		}
 	}
-	return scanner.StageResult{Findings: findings}, nil
+	result = scanner.StageResult{Findings: findings}
+	return result, nil
 }
 
 func pickTargets(sc *scanner.ScanContext) []string {

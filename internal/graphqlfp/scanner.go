@@ -18,9 +18,6 @@ import (
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic: 4 paths × (POST + GET).
-const maxRequests = 8
-
 var graphqlPaths = []string{"/graphql", "/api/graphql", "/v1/graphql", "/query"}
 
 // Scanner implements scanner.Scanner.
@@ -66,15 +63,20 @@ func looksGraphQL(body string) bool {
 }
 
 // Run implements scanner.Scanner.
-func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
-	made := 0
+func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scanner.StageResult, err error) {
+	budgetExhausted := false
+	defer func() {
+		if budgetExhausted {
+			result.Warnings = append(result.Warnings, scanner.BudgetExhaustedWarning(sc))
+		}
+	}()
 	post := func(u string) *anpuhttp.Response {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.PostJSON(cctx, u, `{"query":"{__typename}"}`, map[string]string{"Accept": "application/json"})
 		if err != nil || resp == nil {
 			return nil
@@ -82,12 +84,12 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		return resp
 	}
 	get := func(u string) *anpuhttp.Response {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			return nil
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		made++
 		resp, err := s.client.Get(cctx, u)
 		if err != nil || resp == nil {
 			return nil
@@ -99,7 +101,8 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	var endpoints []models.Endpoint
 	var techs []models.Technology
 	for _, p := range graphqlPaths {
-		if made >= maxRequests {
+		if err := scanner.ChargeBudget(sc); err != nil {
+			budgetExhausted = true
 			break
 		}
 		u := strings.TrimSuffix(sc.Target.Raw, "/") + p

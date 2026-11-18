@@ -355,7 +355,7 @@ func unzipFirst(archive, dest, name string) error {
 	extracted := 0
 	for _, f := range r.File {
 		// Zip-Slip guard: the resolved target must stay inside dest.
-		target := filepath.Join(dest, f.Name)
+		target := filepath.Join(dest, f.Name) // #nosec G305 -- target is validated against destClean on the following line
 		if !strings.HasPrefix(filepath.Clean(target)+string(os.PathSeparator), destClean) {
 			return fmt.Errorf("zip entry %q escapes destination — refusing", f.Name)
 		}

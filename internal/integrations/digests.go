@@ -144,7 +144,7 @@ func RecordedDigest(binary string) (string, bool) {
 // sha256FileFull hashes a file, streaming (tools can be >100MB), and
 // reports the file size.
 func sha256FileFull(path string) (string, int64, error) {
-	f, err := os.Open(path) // #nosec G304 -- path resolved by findExecutable from the operator's own tool install
+	f, err := os.Open(path) // #nosec G304 G703 -- path resolved by findExecutable from the operator's own tool install
 	if err != nil {
 		return "", 0, err
 	}
@@ -247,7 +247,7 @@ func digestDriftAt(binary, path string) (error, bool) {
 		return nil, false
 	}
 
-	info, statErr := os.Stat(path)
+	info, statErr := os.Stat(path) // #nosec G703 -- path resolved by findExecutable from the operator's own tool install
 	if statErr != nil {
 		return statErr, true
 	}

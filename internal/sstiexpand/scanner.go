@@ -22,9 +22,6 @@ import (
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
 
-// maxRequests bounds all HTTP traffic: 2 URLs × (baseline + 10 + control).
-const maxRequests = 24
-
 var sstiPayloads = []struct {
 	engine  string
 	payload string

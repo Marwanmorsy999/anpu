@@ -132,7 +132,7 @@ func TestBudgetConcurrentRecord(t *testing.T) {
 			defer wg.Done()
 			sc := &ScanContext{Ledger: ledger, StageLabel: "stage"}
 			for i := 0; i < 20; i++ {
-				ChargeBudget(sc) // ignore error
+				_ = ChargeBudget(sc) // ignore error
 			}
 		}()
 	}

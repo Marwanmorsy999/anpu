@@ -21,7 +21,7 @@ func TestLedgerConcurrentRecordStaysUnderCap(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < perWorker; i++ {
-				l.Record("stage") // ignore error; we check counts below
+				_ = l.Record("stage") // ignore error; we check counts below
 			}
 		}()
 	}

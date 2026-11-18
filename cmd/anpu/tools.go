@@ -17,12 +17,17 @@ func newToolsCmd() *cobra.Command {
 		Short: "See which security engines are ready to use",
 		Long: `Report the status of ANPU's built-in engines and any optional
 external integrations (nuclei). Built-in engines need no installation —
-they are compiled into the anpu binary.`,
+they are compiled into the anpu binary.
+
+External binaries are version-pinned (see the recipes) and their install-
+time sha256 is recorded locally; anpu tools verify audits the records and
+refuses drifted binaries at run time.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runToolsStatus(cmd)
 		},
 	}
 	cmd.AddCommand(newToolsInstallCmd())
+	cmd.AddCommand(newToolsVerifyCmd())
 	return cmd
 }
 
@@ -210,7 +215,7 @@ func runToolsStatus(cmd *cobra.Command) error {
 // (requires --yes). Installing only places the vendor binary on disk —
 // run-time safety rules are unchanged.
 func newToolsInstallCmd() *cobra.Command {
-	var listFlag, dryRunFlag, allFlag, yesBool bool
+	var listFlag, dryRunFlag, allFlag, yesBool, forceFlag bool
 	var levelFilter string
 	cmd := &cobra.Command{
 		Use:   "install [name]",
@@ -255,8 +260,8 @@ Examples:
 				fmt.Print(integrations.FormatRecipe(r, runtime.GOOS))
 				return nil
 			}
-			if _, ok := integrations.LookupBinary(r.Binary); ok {
-				fmt.Printf("%s is already installed (%s)\n", r.Name, r.Binary)
+			if _, already := integrations.LookupBinary(r.Binary); already && !forceFlag {
+				fmt.Printf("%s is already installed (%s) — use --force to reinstall and re-baseline its digest\n", r.Name, r.Binary)
 				return nil
 			}
 			fmt.Print(integrations.FormatRecipe(r, runtime.GOOS))
@@ -283,8 +288,65 @@ Examples:
 	cmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "print the recipe without installing")
 	cmd.Flags().BoolVar(&allFlag, "all", false, "install every installable recipe (requires --yes)")
 	cmd.Flags().BoolVar(&yesBool, "yes", false, "confirm installation without prompting")
+	cmd.Flags().BoolVar(&forceFlag, "force", false, "reinstall even when the binary already resolves (re-baselines the recorded digest)")
 	cmd.Flags().StringVar(&levelFilter, "level", "", "with --all, limit to safe, advanced, or ultra")
 	return cmd
+}
+
+// newToolsVerifyCmd implements `anpu tools verify`: re-hash every
+// installed registry binary and compare against the install-time record
+// (v0.5.7 P0-4). Non-zero exit on drift — the run-time wrappers refuse
+// drifted binaries, so this is the audit + re-baseline entry point.
+func newToolsVerifyCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "verify",
+		Short: "Audit installed tool binaries against their install-time digests",
+		Long: `Re-hash every installed registry binary and compare it with the
+sha256 recorded when 'anpu tools install' put it on disk. Any binary that
+changed since install is reported as drift — ANPU refuses to execute such
+binaries at run time until you audit the host and reinstall
+('anpu tools install <tool> --force') to re-baseline.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			reports := integrations.VerifyAllDigests()
+			if len(reports) == 0 {
+				fmt.Println("no registry tools installed — nothing to verify")
+				return nil
+			}
+			drifted := 0
+			for _, r := range reports {
+				sym := "?"
+				switch r.Status {
+				case "ok":
+					sym = "✓"
+				case "drift", "error":
+					sym = "✗"
+					drifted++
+				case "norecord":
+					sym = "~"
+				case "missing":
+					sym = "-"
+				}
+				fmt.Printf("  %s %-14s %-8s %s\n", sym, r.Tool, r.Status, r.Detail)
+			}
+			fmt.Printf("\n%d checked, %d drifted/refused, %d unrecorded, %d not installed\n",
+				len(reports), drifted, countStatus(reports, "norecord"), countStatus(reports, "missing"))
+			if drifted > 0 {
+				return fmt.Errorf("%d tool binaries no longer match their install-time digest — audit the host, then reinstall with --force to re-baseline", drifted)
+			}
+			return nil
+		},
+	}
+}
+
+func countStatus(reports []integrations.DigestReport, status string) int {
+	n := 0
+	for _, r := range reports {
+		if r.Status == status {
+			n++
+		}
+	}
+	return n
 }
 
 // runInstallAll installs every installable recipe, continuing past

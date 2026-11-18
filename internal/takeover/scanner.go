@@ -14,19 +14,25 @@
 // Both signals are required to avoid false positives from shared-IP CDNs
 // where the CNAME target is always present. Only GET is issued — no writes,
 // no authentication, no side effects. Errors are warnings, not failures.
+//
+// HTTP fetching goes through the shared guarded client (internal/http):
+// every connection is validated at dial time (loopback/private/link-local
+// and other special-purpose addresses refused), redirect chains are
+// guarded, and response bodies are size-capped. A subdomain whose DNS
+// mis-resolves to an internal address is therefore refused at the dial
+// layer instead of being fetched with a raw client.
 package takeover
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	anpuhttp "github.com/Marwanmorsy999/anpu/internal/http"
 	"github.com/Marwanmorsy999/anpu/internal/scanner"
 	"github.com/Marwanmorsy999/anpu/pkg/models"
 )
@@ -204,18 +210,19 @@ type dnsResolver interface {
 // Scanner is the pipeline stage for subdomain takeover detection.
 type Scanner struct {
 	resolver dnsResolver
-	client   *http.Client
+	client   *anpuhttp.Client
 }
 
-func New() *Scanner {
+// New builds the scanner on top of the shared guarded HTTP client, the
+// same one every other analyzer uses (mirrors takeoverplus.New). The
+// guarded client enforces dial-time IP validation and redirect guards so
+// a hostile or mis-resolved subdomain cannot pull the scanner into an
+// internal network. Redirects are not followed, matching the previous
+// first-response fingerprinting behavior.
+func New(client *anpuhttp.Client) *Scanner {
 	return &Scanner{
 		resolver: net.DefaultResolver,
-		client: &http.Client{
-			Timeout: 10 * time.Second,
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				return http.ErrUseLastResponse // don't follow redirects
-			},
-		},
+		client:   client,
 	}
 }
 
@@ -410,27 +417,32 @@ func (s *Scanner) checkDangling(ctx context.Context, host, cname, target string)
 	return f, ""
 }
 
-// fetchBody GETs the subdomain and returns up to 32 KB of the response body.
-func (s *Scanner) fetchBody(ctx context.Context, host string) (string, string) {
-	url := "https://" + host
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", fmt.Sprintf("takeover: build request for %s: %v", host, err)
-	}
-	req.Header.Set("User-Agent", "anpu-security-scanner/1.0")
+// maxFingerprintBody caps how much of a response body is fingerprinted,
+// matching the previous raw-client behavior (provider dangling markers
+// appear near the top of the page).
+const maxFingerprintBody = 32 * 1024
 
-	resp, err := s.client.Do(req)
+// fetchBody GETs the subdomain through the shared guarded client and
+// returns up to 32 KB of the response body. Redirects are not followed
+// (first response only). Plain HTTP is tried as a fallback because some
+// dangling CNAMEs only serve HTTP. The guarded client refuses internal
+// addresses at dial time, so a mis-resolved subdomain surfaces here as a
+// warning, never as a fetch of internal content.
+func (s *Scanner) fetchBody(ctx context.Context, host string) (string, string) {
+	resp, err := s.client.GetNoRedirect(ctx, "https://"+host)
 	if err != nil {
 		// Try plain HTTP as fallback (some dangling CNAMEs only serve HTTP).
-		req2, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+host, nil)
-		req2.Header.Set("User-Agent", "anpu-security-scanner/1.0")
-		resp, err = s.client.Do(req2)
+		resp, err = s.client.GetNoRedirect(ctx, "http://"+host)
 		if err != nil {
 			return "", fmt.Sprintf("takeover: GET %s: %v", host, err)
 		}
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	buf, _ := io.ReadAll(io.LimitReader(resp.Body, 32*1024))
-	return string(buf), ""
+	if resp == nil {
+		return "", fmt.Sprintf("takeover: GET %s: empty response", host)
+	}
+	body := resp.Body
+	if len(body) > maxFingerprintBody {
+		body = body[:maxFingerprintBody]
+	}
+	return string(body), ""
 }

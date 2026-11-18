@@ -86,20 +86,16 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 		if param == "" {
 			continue
 		}
-		_ = get(target) // baseline warms connection; detection is control-gated
+		_ = get(target) // warm the connection
 		baseline := get(target)
 		control := get(withParam(target, param, "anpu9x8z7"))
-		// Reference for chrome subtraction: the control if it arrived,
-		// else the baseline. If neither (flaky target under load), we
-		// cannot tell static-page "49" from evaluation — skip the target
-		// rather than guess. This determinism matters: an errored control
-		// used to silently disable the guard and FP on any page whose
-		// static HTML contains "49" (observed on DVWA under scan load).
-		ref := control
-		if ref == "" {
-			ref = baseline
-		}
-		if ref == "" {
+		// Three-way differential, mirroring sqli.go's baseline
+		// subtraction: the "49" signal must be NEW relative to the
+		// unpolluted page (baseline) — never trusted to the control
+		// alone. If both reference requests failed (flaky target
+		// under load), we cannot tell static-page "49" from
+		// evaluation — skip the target rather than guess.
+		if baseline == "" && control == "" {
 			continue
 		}
 		for _, p := range sstiPayloads {
@@ -114,7 +110,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 			if strings.Contains(body, p.payload) {
 				continue
 			}
-			if !evalsTo49(body, ref) {
+			if !evalsTo49(body, baseline, control) {
 				continue // no payload-attributable evaluation signal
 			}
 			findings = append(findings, models.Finding{
@@ -151,29 +147,46 @@ func stripVolatile(s string) string {
 }
 
 // evalsTo49 reports whether the payload response contains an evaluation
-// signal for "49" that the reference (control, or baseline when the control
-// errored) does not already explain. A bare substring check false-positives
-// on pages whose static HTML already contains "49" (e.g. a DOCTYPE URL) or
-// whose random tokens luck into "49": the signal only counts when the
-// reference lacks "49" entirely, or when the payload response contains
-// strictly more volatile-stripped "49" occurrences than the reference.
-// Verbatim payload reflection is excluded before this is called.
-func evalsTo49(body, ref string) bool {
-	body, ref = stripVolatile(body), stripVolatile(ref)
+// signal for "49" that is payload-attributable under the three-way
+// differential:
+//
+//  1. baseline subtraction (mirrors sqli.go): the payload response must
+//     contain strictly more "49" occurrences than the untouched page. A
+//     "49" the page already renders without any payload (DVWA's DOCTYPE
+//     URL, version strings) proves nothing — and it must be subtracted
+//     even when the control arrived, because the control can be a
+//     degraded response (WAF block page, short error page) that lacks the
+//     static "49" and would otherwise bless it as a hit.
+//  2. control subtraction (unchanged): when the random control arrived,
+//     the payload response must also gain "49" over it, so a dynamic page
+//     whose content varies per request cannot fabricate the gain.
+//
+// Volatile hex runs are stripped from every body before counting.
+// Verbatim payload reflection is excluded before this is called. When the
+// baseline request errored but the control arrived, the baseline term is
+// vacuous (empty baseline) and the control term carries the guard; when
+// the control errored, baseline subtraction alone decides — matching the
+// previous fallback behavior.
+func evalsTo49(body, baseline, control string) bool {
+	body = stripVolatile(body)
 	if !strings.Contains(body, "49") {
 		return false
 	}
-	if !strings.Contains(ref, "49") {
+	if !controlGains49(body, baseline) {
+		return false
+	}
+	if control == "" {
 		return true
 	}
-	return controlGains49(body, ref)
+	return controlGains49(body, control)
 }
 
 // controlGains49 reports whether body contains more "49" occurrences than
-// the reference. Callers must strip volatile tokens first. Static-page
-// "49"s (DOCTYPE, version strings) appear in both; a real evaluation adds
-// at least one more.
+// the reference. Static-page "49"s (DOCTYPE, version strings) appear in
+// both; a real evaluation adds at least one more. The reference is
+// stripped of volatile tokens here; the caller must strip body first.
 func controlGains49(body, ref string) bool {
+	ref = stripVolatile(ref)
 	return strings.Count(body, "49") > strings.Count(ref, "49")
 }
 

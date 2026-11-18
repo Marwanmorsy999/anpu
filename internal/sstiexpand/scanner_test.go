@@ -231,3 +231,100 @@ func TestEchoGuardStillApplies(t *testing.T) {
 		}
 	}
 }
+
+// Regression (v0.5.7 P0-3): the control response can be a degraded page
+// (WAF block page, short error page) that lacks the static "49" the real
+// page always carries. The old single-reference logic (ref = control when
+// it arrived) blessed that static "49" as evaluation — a false positive.
+// Baseline subtraction mirroring sqli.go must run unconditionally: the
+// "49" must be NEW relative to the untouched page, whatever the control
+// returned.
+func TestControlBlockPageDoesNotBypassBaselineSubtraction(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("anpuprobe") == "anpu9x8z7" {
+			// WAF block page for the random control: no "49".
+			_, _ = w.Write([]byte("<html><body>Request blocked by WAF</body></html>"))
+			return
+		}
+		// The real page always carries a static "49" (version string).
+		_, _ = w.Write([]byte("<html><body>nginx 1.49.2 — welcome</body></html>"))
+	}))
+	defer srv.Close()
+	res, err := New(testClient()).Run(context.Background(), testContext(srv.URL))
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, f := range res.Findings {
+		if f.ID == "sstiexpand-evaluated" {
+			t.Fatalf("static 49 blessed by a degraded control must not raise SSTI, got %q", f.Title)
+		}
+	}
+}
+
+// The fix must not swallow true positives when the control is degraded:
+// a real evaluation gains "49" over BOTH the baseline and the control.
+func TestEvalStillFiresWhenControlIsBlockPage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Query().Get("anpuprobe")
+		if p == "anpu9x8z7" {
+			_, _ = w.Write([]byte("<html><body>Request blocked by WAF</body></html>"))
+			return
+		}
+		body := "<html><body><h1>Hello, guest</h1></body></html>"
+		if p == "${7*7}" {
+			body = "<html><body><h1>Hello, 49</h1></body></html>"
+		}
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	res, err := New(testClient()).Run(context.Background(), testContext(srv.URL))
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	found := false
+	for _, f := range res.Findings {
+		if f.ID == "sstiexpand-evaluated" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("real evaluation behind a degraded control must still raise SSTI, got %d findings", len(res.Findings))
+	}
+}
+
+// Baseline request errored but the control arrived: the baseline term is
+// vacuous and the control guard carries the decision. A static "49" page
+// must stay silent (payload gains nothing over the control).
+func TestBaselineErrorLeavesControlGuardInCharge(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.RawQuery == "" {
+			// Warm-up and baseline requests (no probe param): kill the
+			// connection so the baseline comes back empty.
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				t.Error("server does not support hijack")
+				return
+			}
+			conn, _, err := hj.Hijack()
+			if err != nil {
+				t.Errorf("hijack: %v", err)
+				return
+			}
+			_ = conn.Close()
+			return
+		}
+		// Everything probed lands here: static "49" in both control and
+		// payload responses, nothing ever evaluates.
+		_, _ = w.Write([]byte("<html><body>build 49 — ok</body></html>"))
+	}))
+	defer srv.Close()
+	res, err := New(testClient()).Run(context.Background(), testContext(srv.URL))
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, f := range res.Findings {
+		if f.ID == "sstiexpand-evaluated" {
+			t.Fatalf("errored baseline + static 49 must not raise SSTI, got %q", f.Title)
+		}
+	}
+}

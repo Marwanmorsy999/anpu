@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1
 
 # --- build stage: the anpu binary (pure Go, no C toolchain) ---
-# Go 1.27.3+ is required: earlier stdlib releases carry the net/http,
+# Go 1.27.4+ is required: earlier stdlib releases carry the net/http,
 # net/http/internal/http2, crypto/tls and mime/multipart advisories that
-# govulncheck reports as affecting reachable code (CI gate), and Go 1.27.2
-# still carries crypto/x509 GO-2026-6809.
+# govulncheck reports as affecting reachable code (CI gate), and Go 1.27.3
+# still carries crypto/x509 GO-2026-6809 and net/http GO-2026-6859.
 # Base image pinned by digest for supply-chain integrity.
-FROM golang:1.27.3-bookworm@sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5 AS build
+FROM golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS build
 WORKDIR /src
 
 # Copy the whole module; `go mod download` runs inside the build and is
@@ -20,7 +20,7 @@ RUN CGO_ENABLED=0 go build -trimpath -o /out/anpu ./cmd/anpu
 # `go install` compiles the real nuclei binary so standard/deep profiles get
 # full template coverage in-container. Skipped entirely for the default
 # anpu target (it is not in that target's dependency graph).
-FROM golang:1.27.3-bookworm@sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5 AS nuclei
+FROM golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS nuclei
 RUN CGO_ENABLED=0 go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
 
 # --- shared runtime base ---

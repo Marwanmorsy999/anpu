@@ -55,114 +55,271 @@ type Recipe struct {
 	Adversarial bool
 	// Notes carries safety tuning (e.g. "nikto: no-DoS tuning").
 	Notes string
+	// Version pins the install ref to an upstream release (v0.5.7
+	// supply-chain hardening): go module version for GoInstall,
+	// PyPI release for Pipx, git tag for pipx git refs, image tag for
+	// Docker when no Digest is available. Versions are resolved from
+	// the authoritative registry (proxy.golang.org / PyPI) at pin
+	// time — never guessed. Empty = no automated install method, or
+	// the ref is documented-unpinned (distro-managed apt/choco).
+	Version string
+	// Digest is the expected content digest for digest-addressable
+	// install methods (docker image manifest digest). A digest-
+	// addressed pull is content-addressed: the registry refuses any
+	// image whose manifest does not hash to this value, so the pin is
+	// itself the integrity check. For locally-built binaries (go/pipx)
+	// a static digest cannot be shipped — build output varies by
+	// toolchain — so ANPU records the installed binary's sha256 at
+	// install time and re-verifies it at every run (see digests.go:
+	// record-then-verify, fail closed on drift).
+	Digest string
+}
+
+// versionPins pins every automated install recipe to an upstream release
+// (v0.5.7 P0-4). Sources, fetched 2026-11-18:
+//   - Go tools: proxy.golang.org <module>/@latest (the module version the
+//     Go checksum database will verify at install time).
+//   - pipx tools: PyPI <pkg>/json info.version.
+//
+// Entries deliberately absent: apt/choco recipes (distro-managed updates
+// are the integrity channel), pipx git refs whose upstream tag could not
+// be resolved at pin time (ghauri, Oralyzer — documented in Notes), and
+// manual-only recipes.
+var versionPins = map[string]string{
+	// Recon / subdomains (Go).
+	"amass":       "v4.2.0",
+	"assetfinder": "v0.1.1",
+	"shuffledns":  "v1.2.1",
+	"puredns":     "v2.1.1",
+	"alterx":      "v0.1.0",
+	"gotator":     "v0.0.0-20220531210547-85554801a28a",
+	"metabigor":   "v1.2.8",
+	// Probe / fingerprint.
+	"tlsx":            "v1.4.6",
+	"cdncheck":        "v1.4.0",
+	"asnmap":          "v1.2.0",
+	"webanalyze":      "v0.4.6",
+	"csprecon":        "v0.5.0",
+	"hakoriginfinder": "v0.0.0-20260805040542-837a771381f2",
+	// Crawl / URL / params.
+	"gau":         "v2.2.4",
+	"waybackurls": "v0.1.0",
+	"hakrawler":   "v0.0.0-20260805040537-52a16fe61bd1",
+	"gospider":    "v1.1.6",
+	"cariddi":     "v1.4.6",
+	"unfurl":      "v0.4.3",
+	"qsreplace":   "v0.0.3",
+	"anew":        "v0.1.1",
+	// Content fuzz.
+	"ffuf":     "v2.3.0",
+	"gobuster": "v3.8.2",
+	// Vuln point-tools.
+	"kxss":    "v0.0.0-20260531193025-acb2dc76e840",
+	"gxss":    "v0.0.0-20240804155857-8ee938bf4ead",
+	"crlfuzz": "v1.4.1",
+	"subzy":   "v1.2.1",
+	"subjack": "v0.0.0-20261021015659-38710c8bf174",
+	// Secrets / JS.
+	"gitleaks": "v8.30.1",
+	"subjs":    "v1.0.1",
+	// Git exposure.
+	"gitjacker": "v0.1.0",
+	// Screenshots.
+	"gowitness": "v0.0.0-20261011045312-601c84367aaf",
+	// Code scope SAST/SCA.
+	"osv-scanner": "v1.9.2",
+	// pipx (PyPI releases).
+	"dnsgen":     "1.0.4",
+	"dnsrecon":   "0.10.1",
+	"uro":        "1.0.2",
+	"arjun":      "2.2.7",
+	"dirsearch":  "0.5.0",
+	"droopescan": "1.45.1",
+	"wafw00f":    "2.4.2",
+	"wfuzz":      "3.1.0",
+	"semgrep":    "1.185.0",
+	"git-dumper": "1.0.9",
+	"xsstrike":   "3.2.2",
+}
+
+// digestPins ships expected content digests for digest-addressable
+// install methods (v0.5.7 P0-4). The mobsf digest is the multi-arch
+// manifest digest of the :latest image, resolved from the Docker Hub
+// registry API at pin time (2026-11-18); a digest-addressed pull is
+// content-addressed, so the registry itself rejects any image that does
+// not hash to this value.
+var digestPins = map[string]string{
+	"mobsf": "sha256:f185153825a97862a75b38d2527fa41a4484a1f62f9e5b15c756d3a2aefa6cad",
+}
+
+// applyPins copies the fetched Version/Digest pins onto the registry
+// recipes, so the registry literal above stays positional and the pin
+// table stays a reviewable one-line-per-tool diff.
+func applyPins(recipes []Recipe) []Recipe {
+	for i := range recipes {
+		if v, ok := versionPins[recipes[i].Name]; ok {
+			recipes[i].Version = v
+		}
+		if d, ok := digestPins[recipes[i].Name]; ok {
+			recipes[i].Digest = d
+		}
+	}
+	return recipes
 }
 
 // registryList holds the full Wave 2 free-binary catalog; entries with
 // no automated recipe carry Manual guidance instead of a guessed URL.
-var registryList = []Recipe{
+// applyPins copies the upstream version/digest pins from the tables above
+// onto each recipe before anything consumes the registry.
+var registryList = applyPins([]Recipe{
 	// Recon / subdomains (11) — advanced, passive/keyless.
-	{"amass", "amass", LevelAdvanced, "github.com/owasp-amass/amass/v4/cmd/amass@latest", "", "amass", "", "", "", false, "passive enum only (-passive); keyless data sources"},
-	{"assetfinder", "assetfinder", LevelAdvanced, "github.com/tomnomnom/assetfinder@latest", "", "", "", "", "", false, "passive subdomain discovery"},
-	{"findomain", "findomain", LevelAdvanced, "", "", "", "findomain", "", "https://github.com/Findomain/Findomain/releases", false, "prebuilt binary; keyless sources"},
-	{"shuffledns", "shuffledns", LevelAdvanced, "github.com/projectdiscovery/shuffledns/cmd/shuffledns@latest", "", "", "", "", "", false, "needs resolver file; massdns-backed"},
-	{"puredns", "puredns", LevelAdvanced, "github.com/d3mondev/puredns/v2@latest", "", "", "", "", "", false, "needs resolver file"},
-	{"massdns", "massdns", LevelAdvanced, "", "", "massdns", "massdns", "", "", false, "C resolver; build from source on Windows"},
-	{"dnsgen", "dnsgen", LevelAdvanced, "", "dnsgen", "", "", "", "", false, "permutation generator (offline)"},
-	{"alterx", "alterx", LevelAdvanced, "github.com/projectdiscovery/alterx/cmd/alterx@latest", "", "", "", "", "", false, "offline subdomain permutation"},
-	{"gotator", "gotator", LevelAdvanced, "github.com/Josue87/gotator@latest", "", "", "", "", "", false, "offline permutation (stdin wordlist)"},
-	{"dnsrecon", "dnsrecon", LevelAdvanced, "", "dnsrecon", "dnsrecon", "", "", "", false, "DNS enumeration scripts"},
-	{"metabigor", "metabigor", LevelAdvanced, "github.com/j3ssie/metabigor@latest", "", "", "", "", "", false, "passive intel (keyless sources only)"},
+	{"amass", "amass", LevelAdvanced, "github.com/owasp-amass/amass/v4/cmd/amass@latest", "", "amass", "", "", "", false, "passive enum only (-passive); keyless data sources", "", ""},
+	{"assetfinder", "assetfinder", LevelAdvanced, "github.com/tomnomnom/assetfinder@latest", "", "", "", "", "", false, "passive subdomain discovery", "", ""},
+	{"findomain", "findomain", LevelAdvanced, "", "", "", "findomain", "", "https://github.com/Findomain/Findomain/releases", false, "prebuilt binary; keyless sources", "", ""},
+	{"shuffledns", "shuffledns", LevelAdvanced, "github.com/projectdiscovery/shuffledns/cmd/shuffledns@latest", "", "", "", "", "", false, "needs resolver file; massdns-backed", "", ""},
+	{"puredns", "puredns", LevelAdvanced, "github.com/d3mondev/puredns/v2@latest", "", "", "", "", "", false, "needs resolver file", "", ""},
+	{"massdns", "massdns", LevelAdvanced, "", "", "massdns", "massdns", "", "", false, "C resolver; build from source on Windows", "", ""},
+	{"dnsgen", "dnsgen", LevelAdvanced, "", "dnsgen", "", "", "", "", false, "permutation generator (offline)", "", ""},
+	{"alterx", "alterx", LevelAdvanced, "github.com/projectdiscovery/alterx/cmd/alterx@latest", "", "", "", "", "", false, "offline subdomain permutation", "", ""},
+	{"gotator", "gotator", LevelAdvanced, "github.com/Josue87/gotator@latest", "", "", "", "", "", false, "offline permutation (stdin wordlist)", "", ""},
+	{"dnsrecon", "dnsrecon", LevelAdvanced, "", "dnsrecon", "dnsrecon", "", "", "", false, "DNS enumeration scripts", "", ""},
+	{"metabigor", "metabigor", LevelAdvanced, "github.com/j3ssie/metabigor@latest", "", "", "", "", "", false, "passive intel (keyless sources only)", "", ""},
 	// Probe / fingerprint (6) — advanced.
-	{"tlsx", "tlsx", LevelAdvanced, "github.com/projectdiscovery/tlsx/cmd/tlsx@latest", "", "", "", "", "", false, "TLS probe"},
-	{"cdncheck", "cdncheck", LevelAdvanced, "github.com/projectdiscovery/cdncheck/cmd/cdncheck@latest", "", "", "", "", "", false, "CDN detection"},
-	{"asnmap", "asnmap", LevelAdvanced, "github.com/projectdiscovery/asnmap/cmd/asnmap@latest", "", "", "", "", "", false, "ASN lookup (keyless)"},
-	{"webanalyze", "webanalyze", LevelAdvanced, "github.com/rverton/webanalyze/cmd/webanalyze@latest", "", "", "", "", "", false, "tech fingerprint (update -update first)"},
-	{"csprecon", "csprecon", LevelAdvanced, "github.com/edoardottt/csprecon/cmd/csprecon@latest", "", "", "", "", "", false, "CSP subdomain recon"},
-	{"hakoriginfinder", "hakoriginfinder", LevelAdvanced, "github.com/hakluke/hakoriginfinder@latest", "", "", "", "", "", false, "origin discovery helper"},
+	{"tlsx", "tlsx", LevelAdvanced, "github.com/projectdiscovery/tlsx/cmd/tlsx@latest", "", "", "", "", "", false, "TLS probe", "", ""},
+	{"cdncheck", "cdncheck", LevelAdvanced, "github.com/projectdiscovery/cdncheck/cmd/cdncheck@latest", "", "", "", "", "", false, "CDN detection", "", ""},
+	{"asnmap", "asnmap", LevelAdvanced, "github.com/projectdiscovery/asnmap/cmd/asnmap@latest", "", "", "", "", "", false, "ASN lookup (keyless)", "", ""},
+	{"webanalyze", "webanalyze", LevelAdvanced, "github.com/rverton/webanalyze/cmd/webanalyze@latest", "", "", "", "", "", false, "tech fingerprint (update -update first)", "", ""},
+	{"csprecon", "csprecon", LevelAdvanced, "github.com/edoardottt/csprecon/cmd/csprecon@latest", "", "", "", "", "", false, "CSP subdomain recon", "", ""},
+	{"hakoriginfinder", "hakoriginfinder", LevelAdvanced, "github.com/hakluke/hakoriginfinder@latest", "", "", "", "", "", false, "origin discovery helper", "", ""},
 	// Crawl / URL / params (13) — advanced (active polite).
-	{"gau", "gau", LevelAdvanced, "github.com/lc/gau/v2/cmd/gau@latest", "", "", "", "", "", false, "archive URLs (keyless)"},
-	{"waybackurls", "waybackurls", LevelAdvanced, "github.com/tomnomnom/waybackurls@latest", "", "", "", "", "", false, "wayback corpus (keyless)"},
-	{"hakrawler", "hakrawler", LevelAdvanced, "github.com/hakluke/hakrawler@latest", "", "", "", "", "", false, "crawler"},
-	{"gospider", "gospider", LevelAdvanced, "github.com/jaeles-project/gospider@latest", "", "", "", "", "", false, "crawler"},
-	{"cariddi", "cariddi", LevelAdvanced, "github.com/edoardottt/cariddi/cmd/cariddi@latest", "", "", "", "", "", false, "crawler + endpoint secrets"},
-	{"unfurl", "unfurl", LevelAdvanced, "github.com/tomnomnom/unfurl@latest", "", "", "", "", "", false, "URL parser (offline)"},
-	{"uro", "uro", LevelAdvanced, "", "uro", "", "", "", "", false, "Python via pipx (pipx install uro)"},
-	{"qsreplace", "qsreplace", LevelAdvanced, "github.com/tomnomnom/qsreplace@latest", "", "", "", "", "", false, "query replacement (offline)"},
-	{"anew", "anew", LevelAdvanced, "github.com/tomnomnom/anew@latest", "", "", "", "", "", false, "dedup append (offline)"},
-	{"arjun", "arjun", LevelAdvanced, "", "arjun", "", "", "", "", false, "param discovery (bounded threads)"},
-	{"paramspider", "paramspider", LevelAdvanced, "", "", "", "", "", "https://github.com/devanshbatham/ParamSpider (no PyPI entry point — clone and run python3 -m paramspider.main)", false, "param mining via archives"},
-	{"x8", "x8", LevelAdvanced, "", "", "", "", "", "https://github.com/Sh1Yo/x8/releases", false, "hidden-param discovery (bounded)"},
-	{"kiterunner", "kiterunner", LevelAdvanced, "", "", "", "", "", "https://github.com/assetnote/kiterunner (prebuilt)", false, "API routes brute (bounded wordlist)"},
+	{"gau", "gau", LevelAdvanced, "github.com/lc/gau/v2/cmd/gau@latest", "", "", "", "", "", false, "archive URLs (keyless)", "", ""},
+	{"waybackurls", "waybackurls", LevelAdvanced, "github.com/tomnomnom/waybackurls@latest", "", "", "", "", "", false, "wayback corpus (keyless)", "", ""},
+	{"hakrawler", "hakrawler", LevelAdvanced, "github.com/hakluke/hakrawler@latest", "", "", "", "", "", false, "crawler", "", ""},
+	{"gospider", "gospider", LevelAdvanced, "github.com/jaeles-project/gospider@latest", "", "", "", "", "", false, "crawler", "", ""},
+	{"cariddi", "cariddi", LevelAdvanced, "github.com/edoardottt/cariddi/cmd/cariddi@latest", "", "", "", "", "", false, "crawler + endpoint secrets", "", ""},
+	{"unfurl", "unfurl", LevelAdvanced, "github.com/tomnomnom/unfurl@latest", "", "", "", "", "", false, "URL parser (offline)", "", ""},
+	{"uro", "uro", LevelAdvanced, "", "uro", "", "", "", "", false, "Python via pipx (pipx install uro)", "", ""},
+	{"qsreplace", "qsreplace", LevelAdvanced, "github.com/tomnomnom/qsreplace@latest", "", "", "", "", "", false, "query replacement (offline)", "", ""},
+	{"anew", "anew", LevelAdvanced, "github.com/tomnomnom/anew@latest", "", "", "", "", "", false, "dedup append (offline)", "", ""},
+	{"arjun", "arjun", LevelAdvanced, "", "arjun", "", "", "", "", false, "param discovery (bounded threads)", "", ""},
+	{"paramspider", "paramspider", LevelAdvanced, "", "", "", "", "", "https://github.com/devanshbatham/ParamSpider (no PyPI entry point — clone and run python3 -m paramspider.main)", false, "param mining via archives", "", ""},
+	{"x8", "x8", LevelAdvanced, "", "", "", "", "", "https://github.com/Sh1Yo/x8/releases", false, "hidden-param discovery (bounded)", "", ""},
+	{"kiterunner", "kiterunner", LevelAdvanced, "", "", "", "", "", "https://github.com/assetnote/kiterunner (prebuilt)", false, "API routes brute (bounded wordlist)", "", ""},
 	// Content fuzz (5) — ultra (noisy).
-	{"ffuf", "ffuf", LevelUltra, "github.com/ffuf/ffuf/v2@latest", "", "ffuf", "ffuf", "", "", false, "fuzzer: bounded wordlist + rate limit"},
-	{"gobuster", "gobuster", LevelUltra, "github.com/OJ/gobuster/v3@latest", "", "gobuster", "gobuster", "", "", false, "dir fuzzer: bounded wordlist"},
-	{"feroxbuster", "feroxbuster", LevelUltra, "", "", "", "", "", "https://github.com/epi052/feroxbuster/releases", false, "Rust fuzzer: bounded + auto-tune off"},
-	{"dirsearch", "dirsearch", LevelUltra, "", "dirsearch", "", "", "", "", false, "dir fuzzer: bounded wordlist"},
-	{"wfuzz", "wfuzz", LevelUltra, "", "wfuzz", "wfuzz", "", "", "https://github.com/xmendez/wfuzz (pycurl pin unbuildable on Python 3.12+ — needs Python <=3.11 to install)", false, "fuzzer: bounded payload set"},
+	{"ffuf", "ffuf", LevelUltra, "github.com/ffuf/ffuf/v2@latest", "", "ffuf", "ffuf", "", "", false, "fuzzer: bounded wordlist + rate limit", "", ""},
+	{"gobuster", "gobuster", LevelUltra, "github.com/OJ/gobuster/v3@latest", "", "gobuster", "gobuster", "", "", false, "dir fuzzer: bounded wordlist", "", ""},
+	{"feroxbuster", "feroxbuster", LevelUltra, "", "", "", "", "", "https://github.com/epi052/feroxbuster/releases", false, "Rust fuzzer: bounded + auto-tune off", "", ""},
+	{"dirsearch", "dirsearch", LevelUltra, "", "dirsearch", "", "", "", "", false, "dir fuzzer: bounded wordlist", "", ""},
+	{"wfuzz", "wfuzz", LevelUltra, "", "wfuzz", "wfuzz", "", "", "https://github.com/xmendez/wfuzz (pycurl pin unbuildable on Python 3.12+ — needs Python <=3.11 to install)", false, "fuzzer: bounded payload set", "", ""},
 	// Vuln point-tools (22). Intrusive/read-only flags forced in wrapper
 	// args; Adversarial ones additionally gated.
-	{"sqlmap", "sqlmap", LevelUltra, "", "", "sqlmap", "", "", "https://github.com/sqlmapproject/sqlmap (PyPI 1.10.x wheel has no working entry point — clone and run sqlmap.py; Windows Defender may quarantine it without an exclusion)", true, "read-only flags forced (--batch --level=1 --risk=1, no --os-shell/--dump-all)"},
-	{"ghauri", "ghauri", LevelUltra, "", "git+https://github.com/r0oth3x49/ghauri.git", "", "", "", "https://github.com/r0oth3x49/ghauri (not on PyPI — installed from git)", true, "read-only flags forced (--batch, no --dump-all)"},
-	{"xsstrike", "xsstrike", LevelAdvanced, "", "xsstrike", "", "", "", "https://github.com/s0md3v/XSStrike (non-interactive: --skip --skip-dom)", false, "XSS point tool (crawl-only + blind off by default)"},
-	{"kxss", "kxss", LevelAdvanced, "github.com/Emoe/kxss@latest", "", "", "", "", "", false, "reflected-param filter (stdin)"},
-	{"gxss", "gxss", LevelAdvanced, "github.com/KathanP19/Gxss@latest", "", "", "", "", "", false, "reflection checker (stdin)"},
-	{"crlfuzz", "crlfuzz", LevelAdvanced, "github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@latest", "", "", "", "", "", false, "CRLF scanner"},
-	{"nikto", "nikto", LevelUltra, "", "", "nikto", "nikto", "", "", false, "no-DoS tuning (-Tuning x to skip DoS checks)"},
-	{"whatweb", "whatweb", LevelAdvanced, "", "", "whatweb", "", "", "", false, "fingerprint (polite, --max-redirects bounded)"},
-	{"wafw00f", "wafw00f", LevelAdvanced, "", "wafw00f", "wafw00f", "", "", "", false, "WAF detect (few requests)"},
-	{"commix", "commix", LevelUltra, "", "", "", "", "", "https://github.com/commixproject/commix (the PyPI 'commix' package is an unrelated stub — clone and run commix.py)", true, "read-only eval only; no os-shell"},
-	{"tplmap", "tplmap", LevelUltra, "", "", "", "", "", "https://github.com/epi052/tplmap is gone — use the sstimap fork (python3 sstimap.py)", true, "read-only SSTI confirm only"},
-	{"sstimap", "sstimap", LevelUltra, "", "", "", "", "", "https://github.com/vladko312/sstimap (no PyPI entry point — clone and run python3 sstimap.py)", true, "read-only SSTI confirm only"},
-	{"ssrfmap", "ssrfmap", LevelUltra, "", "", "", "", "", "https://github.com/swisskyrepo/SSRFmap (python)", true, "read-only SSRF confirm; analyst-owned callback only"},
-	{"nosqlmap", "nosqlmap", LevelUltra, "", "", "", "", "", "https://github.com/codingo/NoSQLMap (python)", true, "read-only NoSQL confirm"},
-	{"graphqlmap", "graphqlmap", LevelUltra, "", "", "", "", "", "https://github.com/swisskyrepo/GraphQLmap (no PyPI entry point — clone and run bin/graphqlmap)", false, "GraphQL enum (introspection-gated)"},
-	{"jwt_tool", "jwt_tool", LevelAdvanced, "", "", "", "", "", "https://github.com/ticarpi/jwt_tool (python3 jwt_tool.py)", false, "JWT checks (offline, local key confusion only with consent)"},
-	{"nomore403", "nomore403", LevelAdvanced, "", "", "", "", "", "https://github.com/devanshbatham/NoMore403 is gone — vendored techniques live in ANPU's native ForbiddenBypass/VerbTamper", false, "403-bypass technique pack (bounded)"},
-	{"oralyzer", "oralyzer", LevelAdvanced, "", "git+https://github.com/r0075h3ll/Oralyzer.git", "", "", "", "https://github.com/r0075h3ll/Oralyzer (not on PyPI — installed from git)", false, "open-redirect fuzz (bounded payloads)"},
-	{"openredirex", "openredirex", LevelAdvanced, "", "", "", "", "", "https://github.com/devanshbatham/openredirex (Python, not Go — clone and run python3 openredirex.py; pip install aiohttp tqdm first)", false, "open-redirect probe (stdin URLs, -c 10 bounded; pip install aiohttp tqdm first)"},
-	{"smuggler", "smuggler", LevelUltra, "", "", "", "", "", "https://github.com/defparam/smuggler (python3 smuggler.py)", true, "safe-subset only (CL.TE/TE.CL time-diff); adversarial gate"},
-	{"dotdotpwn", "dotdotpwn", LevelUltra, "", "", "dotdotpwn", "", "", "", true, "read-only traversal confirm; adversarial gate"},
-	{"corsy", "corsy", LevelAdvanced, "", "", "", "", "", "https://github.com/s0md3v/Corsy (no PyPI entry point — clone and run python3 corsy.py with PYTHONUTF8=1 on Windows)", false, "CORS misconfig scanner"},
+	{"sqlmap", "sqlmap", LevelUltra, "", "", "sqlmap", "", "", "https://github.com/sqlmapproject/sqlmap (PyPI 1.10.x wheel has no working entry point — clone and run sqlmap.py; Windows Defender may quarantine it without an exclusion)", true, "read-only flags forced (--batch --level=1 --risk=1, no --os-shell/--dump-all)", "", ""},
+	{"ghauri", "ghauri", LevelUltra, "", "git+https://github.com/r0oth3x49/ghauri.git", "", "", "", "https://github.com/r0oth3x49/ghauri (not on PyPI — installed from git)", true, "read-only flags forced (--batch, no --dump-all)", "", ""},
+	{"xsstrike", "xsstrike", LevelAdvanced, "", "xsstrike", "", "", "", "https://github.com/s0md3v/XSStrike (non-interactive: --skip --skip-dom)", false, "XSS point tool (crawl-only + blind off by default)", "", ""},
+	{"kxss", "kxss", LevelAdvanced, "github.com/Emoe/kxss@latest", "", "", "", "", "", false, "reflected-param filter (stdin)", "", ""},
+	{"gxss", "gxss", LevelAdvanced, "github.com/KathanP19/Gxss@latest", "", "", "", "", "", false, "reflection checker (stdin)", "", ""},
+	{"crlfuzz", "crlfuzz", LevelAdvanced, "github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@latest", "", "", "", "", "", false, "CRLF scanner", "", ""},
+	{"nikto", "nikto", LevelUltra, "", "", "nikto", "nikto", "", "", false, "no-DoS tuning (-Tuning x to skip DoS checks)", "", ""},
+	{"whatweb", "whatweb", LevelAdvanced, "", "", "whatweb", "", "", "", false, "fingerprint (polite, --max-redirects bounded)", "", ""},
+	{"wafw00f", "wafw00f", LevelAdvanced, "", "wafw00f", "wafw00f", "", "", "", false, "WAF detect (few requests)", "", ""},
+	{"commix", "commix", LevelUltra, "", "", "", "", "", "https://github.com/commixproject/commix (the PyPI 'commix' package is an unrelated stub — clone and run commix.py)", true, "read-only eval only; no os-shell", "", ""},
+	{"tplmap", "tplmap", LevelUltra, "", "", "", "", "", "https://github.com/epi052/tplmap is gone — use the sstimap fork (python3 sstimap.py)", true, "read-only SSTI confirm only", "", ""},
+	{"sstimap", "sstimap", LevelUltra, "", "", "", "", "", "https://github.com/vladko312/sstimap (no PyPI entry point — clone and run python3 sstimap.py)", true, "read-only SSTI confirm only", "", ""},
+	{"ssrfmap", "ssrfmap", LevelUltra, "", "", "", "", "", "https://github.com/swisskyrepo/SSRFmap (python)", true, "read-only SSRF confirm; analyst-owned callback only", "", ""},
+	{"nosqlmap", "nosqlmap", LevelUltra, "", "", "", "", "", "https://github.com/codingo/NoSQLMap (python)", true, "read-only NoSQL confirm", "", ""},
+	{"graphqlmap", "graphqlmap", LevelUltra, "", "", "", "", "", "https://github.com/swisskyrepo/GraphQLmap (no PyPI entry point — clone and run bin/graphqlmap)", false, "GraphQL enum (introspection-gated)", "", ""},
+	{"jwt_tool", "jwt_tool", LevelAdvanced, "", "", "", "", "", "https://github.com/ticarpi/jwt_tool (python3 jwt_tool.py)", false, "JWT checks (offline, local key confusion only with consent)", "", ""},
+	{"nomore403", "nomore403", LevelAdvanced, "", "", "", "", "", "https://github.com/devanshbatham/NoMore403 is gone — vendored techniques live in ANPU's native ForbiddenBypass/VerbTamper", false, "403-bypass technique pack (bounded)", "", ""},
+	{"oralyzer", "oralyzer", LevelAdvanced, "", "git+https://github.com/r0075h3ll/Oralyzer.git", "", "", "", "https://github.com/r0075h3ll/Oralyzer (not on PyPI — installed from git)", false, "open-redirect fuzz (bounded payloads)", "", ""},
+	{"openredirex", "openredirex", LevelAdvanced, "", "", "", "", "", "https://github.com/devanshbatham/openredirex (Python, not Go — clone and run python3 openredirex.py; pip install aiohttp tqdm first)", false, "open-redirect probe (stdin URLs, -c 10 bounded; pip install aiohttp tqdm first)", "", ""},
+	{"smuggler", "smuggler", LevelUltra, "", "", "", "", "", "https://github.com/defparam/smuggler (python3 smuggler.py)", true, "safe-subset only (CL.TE/TE.CL time-diff); adversarial gate", "", ""},
+	{"dotdotpwn", "dotdotpwn", LevelUltra, "", "", "dotdotpwn", "", "", "", true, "read-only traversal confirm; adversarial gate", "", ""},
+	{"corsy", "corsy", LevelAdvanced, "", "", "", "", "", "https://github.com/s0md3v/Corsy (no PyPI entry point — clone and run python3 corsy.py with PYTHONUTF8=1 on Windows)", false, "CORS misconfig scanner", "", ""},
 	// CMS (4) — advanced; wpscan enum keyless (DB notes token-optional).
-	{"wpscan", "wpscan", LevelAdvanced, "", "", "", "wpscan", "", "https://wpscan.com (docker: wpscanteam/wpscan)", false, "enum keyless (--enumerate vp,vt --random-user-agent); vuln DB notes token-optional"},
-	{"cmseek", "cmseek", LevelAdvanced, "", "", "", "", "", "https://github.com/Tuhinshubhra/CMSeeK (python3 cmseek.py)", false, "CMS detect"},
-	{"droopescan", "droopescan", LevelAdvanced, "", "droopescan", "", "", "", "", false, "Drupal/Silverstripe scan"},
-	{"joomscan", "joomscan", LevelAdvanced, "", "", "joomscan", "", "", "", false, "Joomla scan"},
+	{"wpscan", "wpscan", LevelAdvanced, "", "", "", "wpscan", "", "https://wpscan.com (docker: wpscanteam/wpscan)", false, "enum keyless (--enumerate vp,vt --random-user-agent); vuln DB notes token-optional", "", ""},
+	{"cmseek", "cmseek", LevelAdvanced, "", "", "", "", "", "https://github.com/Tuhinshubhra/CMSeeK (python3 cmseek.py)", false, "CMS detect", "", ""},
+	{"droopescan", "droopescan", LevelAdvanced, "", "droopescan", "", "", "", "", false, "Drupal/Silverstripe scan", "", ""},
+	{"joomscan", "joomscan", LevelAdvanced, "", "", "joomscan", "", "", "", false, "Joomla scan", "", ""},
 	// Takeover corroboration (2) — advanced.
-	{"subzy", "subzy", LevelAdvanced, "github.com/PentestPad/subzy@latest", "", "", "", "", "", false, "takeover corroboration (fingerprint match)"},
-	{"subjack", "subjack", LevelAdvanced, "github.com/haccer/subjack@latest", "", "", "", "", "", false, "takeover corroboration (fingerprint match)"},
+	{"subzy", "subzy", LevelAdvanced, "github.com/PentestPad/subzy@latest", "", "", "", "", "", false, "takeover corroboration (fingerprint match)", "", ""},
+	{"subjack", "subjack", LevelAdvanced, "github.com/haccer/subjack@latest", "", "", "", "", "", false, "takeover corroboration (fingerprint match)", "", ""},
 	// Secrets / JS (7) — advanced; local modes only (no cloud exfil).
-	{"gitleaks", "gitleaks", LevelAdvanced, "github.com/zricethezav/gitleaks/v8@latest", "", "", "gitleaks", "", "", false, "local repo/filesystem scan only"},
-	{"trufflehog", "trufflehog", LevelAdvanced, "", "", "", "", "", "https://github.com/trufflesecurity/trufflehog/releases (go install unsupported: replace directives — use the prebuilt archive)", false, "local filesystem/git scan only (no --only-verified exfil)"},
-	{"noseyparker", "noseyparker", LevelAdvanced, "", "", "", "", "", "https://github.com/praetorian-inc/noseyparker/releases", false, "local secret scan"},
-	{"jsluice", "jsluice", LevelAdvanced, "", "", "", "", "", "https://github.com/BishopFox/jsluice (no Windows prebuilt; go build fails on Go 1.24+ — archived upstream)", false, "JS endpoint/secret extract (offline)"},
-	{"subjs", "subjs", LevelAdvanced, "github.com/lc/subjs@latest", "", "", "", "", "", false, "JS URL collect (stdin)"},
-	{"secretfinder", "secretfinder", LevelAdvanced, "", "", "", "", "", "https://github.com/m4ll0k/SecretFinder (python3 SecretFinder.py)", false, "JS secret regex (offline)"},
-	{"linkfinder", "linkfinder", LevelAdvanced, "", "", "", "", "", "https://github.com/GerbenJavado/LinkFinder (no PyPI entry point — clone and run python3 linkfinder.py; needs jsbeautifier)", false, "JS endpoint extract (offline)"},
+	{"gitleaks", "gitleaks", LevelAdvanced, "github.com/zricethezav/gitleaks/v8@latest", "", "", "gitleaks", "", "", false, "local repo/filesystem scan only", "", ""},
+	{"trufflehog", "trufflehog", LevelAdvanced, "", "", "", "", "", "https://github.com/trufflesecurity/trufflehog/releases (go install unsupported: replace directives — use the prebuilt archive)", false, "local filesystem/git scan only (no --only-verified exfil)", "", ""},
+	{"noseyparker", "noseyparker", LevelAdvanced, "", "", "", "", "", "https://github.com/praetorian-inc/noseyparker/releases", false, "local secret scan", "", ""},
+	{"jsluice", "jsluice", LevelAdvanced, "", "", "", "", "", "https://github.com/BishopFox/jsluice (no Windows prebuilt; go build fails on Go 1.24+ — archived upstream)", false, "JS endpoint/secret extract (offline)", "", ""},
+	{"subjs", "subjs", LevelAdvanced, "github.com/lc/subjs@latest", "", "", "", "", "", false, "JS URL collect (stdin)", "", ""},
+	{"secretfinder", "secretfinder", LevelAdvanced, "", "", "", "", "", "https://github.com/m4ll0k/SecretFinder (python3 SecretFinder.py)", false, "JS secret regex (offline)", "", ""},
+	{"linkfinder", "linkfinder", LevelAdvanced, "", "", "", "", "", "https://github.com/GerbenJavado/LinkFinder (no PyPI entry point — clone and run python3 linkfinder.py; needs jsbeautifier)", false, "JS endpoint extract (offline)", "", ""},
 	// Git exposure (2) — adversarial (dump = state-touching read of history).
-	{"git-dumper", "git-dumper", LevelUltra, "", "git-dumper", "", "", "", "", true, "dump mode only under --adversarial --confirm-authorized; detection-only otherwise"},
-	{"gitjacker", "gitjacker", LevelUltra, "github.com/liamg/gitjacker/cmd/gitjacker@latest", "", "", "", "", "", true, "dump mode only under --adversarial --confirm-authorized"},
+	{"git-dumper", "git-dumper", LevelUltra, "", "git-dumper", "", "", "", "", true, "dump mode only under --adversarial --confirm-authorized; detection-only otherwise", "", ""},
+	{"gitjacker", "gitjacker", LevelUltra, "github.com/liamg/gitjacker/cmd/gitjacker@latest", "", "", "", "", "", true, "dump mode only under --adversarial --confirm-authorized", "", ""},
 	// Network (3) — ultra; root fallbacks noted.
-	{"nmap", "nmap", LevelUltra, "", "", "nmap", "nmap", "", "", false, "default -sV (no -O without root; no DoS scripts)"},
-	{"masscan", "masscan", LevelUltra, "", "", "masscan", "", "", "", false, "needs root for raw sockets; rate-capped (--rate 1000)"},
-	{"rustscan", "rustscan", LevelUltra, "", "", "", "", "", "https://github.com/RustScan/RustScan/releases", false, "fast port triage; needs root for SYN on Linux"},
+	{"nmap", "nmap", LevelUltra, "", "", "nmap", "nmap", "", "", false, "default -sV (no -O without root; no DoS scripts)", "", ""},
+	{"masscan", "masscan", LevelUltra, "", "", "masscan", "", "", "", false, "needs root for raw sockets; rate-capped (--rate 1000)", "", ""},
+	{"rustscan", "rustscan", LevelUltra, "", "", "", "", "", "https://github.com/RustScan/RustScan/releases", false, "fast port triage; needs root for SYN on Linux", "", ""},
 	// Screenshots (2) — ultra; headless-chrome dependency noted.
-	{"gowitness", "gowitness", LevelUltra, "github.com/sensepost/gowitness@latest", "", "", "", "", "", false, "screenshots (needs headless chrome)"},
-	{"aquatone", "aquatone", LevelUltra, "", "", "", "", "", "https://github.com/michenriksen/aquatone/releases", false, "screenshots (needs headless chrome)"},
+	{"gowitness", "gowitness", LevelUltra, "github.com/sensepost/gowitness@latest", "", "", "", "", "", false, "screenshots (needs headless chrome)", "", ""},
+	{"aquatone", "aquatone", LevelUltra, "", "", "", "", "", "https://github.com/michenriksen/aquatone/releases", false, "screenshots (needs headless chrome)", "", ""},
 	// Social (1) — advanced.
-	{"socialhunter", "socialhunter", LevelAdvanced, "", "", "", "", "", "https://github.com/utkusen/socialhunter (python)", false, "social surface enum (keyless)"},
+	{"socialhunter", "socialhunter", LevelAdvanced, "", "", "", "", "", "https://github.com/utkusen/socialhunter (python)", false, "social surface enum (keyless)", "", ""},
 	// Code scope SAST/SCA (4) — local, safe to run on owned code.
-	{"semgrep", "semgrep", LevelAdvanced, "", "semgrep", "", "", "", "https://semgrep.dev/docs/getting-started (pipx/binary)", false, "SAST on local code (free rulesets)"},
-	{"trivy", "trivy", LevelAdvanced, "", "", "", "trivy", "", "https://github.com/aquasecurity/trivy/releases", false, "vuln scan fs/repo (local DB)"},
-	{"osv-scanner", "osv-scanner", LevelAdvanced, "github.com/google/osv-scanner/cmd/osv-scanner@v1", "", "", "", "", "", false, "SCA via OSV (keyless)"},
-	{"grype", "grype", LevelAdvanced, "", "", "", "grype", "", "https://github.com/anchore/grype/releases", false, "vuln scan dir (local DB)"},
+	{"semgrep", "semgrep", LevelAdvanced, "", "semgrep", "", "", "", "https://semgrep.dev/docs/getting-started (pipx/binary)", false, "SAST on local code (free rulesets)", "", ""},
+	{"trivy", "trivy", LevelAdvanced, "", "", "", "trivy", "", "https://github.com/aquasecurity/trivy/releases", false, "vuln scan fs/repo (local DB)", "", ""},
+	{"osv-scanner", "osv-scanner", LevelAdvanced, "github.com/google/osv-scanner/cmd/osv-scanner@v1", "", "", "", "", "", false, "SCA via OSV (keyless)", "", ""},
+	{"grype", "grype", LevelAdvanced, "", "", "", "grype", "", "https://github.com/anchore/grype/releases", false, "vuln scan dir (local DB)", "", ""},
 	// Exploit correlation (1) — safe, local clone, mapping only.
-	{"searchsploit", "searchsploit", LevelSafe, "", "", "", "", "", "https://gitlab.com/exploit-database/exploitdb (clone to ~/.exploitdb; Windows runs it via Git-bash shim)", false, "local exploit-db clone; mapping only, no exploit run"},
+	{"searchsploit", "searchsploit", LevelSafe, "", "", "", "", "", "https://gitlab.com/exploit-database/exploitdb (clone to ~/.exploitdb; Windows runs it via Git-bash shim)", false, "local exploit-db clone; mapping only, no exploit run", "", ""},
 	// Mobile (1) — ultra, docker-gated like ZAP; static first.
-	{"mobsf", "mobsf", LevelUltra, "", "", "", "", "opensecurity/mobile-security-framework-mobsf:latest", "https://github.com/MobSF/Mobile-Security-Framework-MobSF", true, "static analysis first; dynamic only with explicit consent"},
+	{"mobsf", "mobsf", LevelUltra, "", "", "", "", "opensecurity/mobile-security-framework-mobsf:latest", "https://github.com/MobSF/Mobile-Security-Framework-MobSF", true, "static analysis first; dynamic only with explicit consent", "", ""},
+})
+
+// installRef renders the version-pinned install reference for go and
+// pipx recipes (v0.5.7 P0-4): the module/package at the pinned version,
+// or the recipe's own ref when no pin applies (git refs whose upstream
+// tag could not be resolved at pin time). resolveInstall, InstallHint,
+// FormatRecipe and manifestMethodRef all render through this helper so
+// what the operator is told, what is installed, and what the manifest
+// records can never drift apart.
+func installRef(r Recipe) string {
+	switch {
+	case r.GoInstall != "":
+		mod := r.GoInstall
+		// Strip any existing ref suffix (@latest, @v1, @master...):
+		// the pin table decides the version, never the recipe string.
+		if i := strings.LastIndex(mod, "@"); i > strings.LastIndex(mod, "/") {
+			mod = mod[:i]
+		}
+		if r.Version != "" {
+			return mod + "@" + r.Version
+		}
+		return mod + "@latest"
+	case r.Pipx != "":
+		if r.Version == "" {
+			return r.Pipx
+		}
+		if strings.Contains(r.Pipx, "git+") {
+			// Pin the git ref at the tag: git+https://host/x.git@v1.2.3
+			if strings.HasSuffix(r.Pipx, ".git") {
+				return r.Pipx + "@" + r.Version
+			}
+			return r.Pipx
+		}
+		return r.Pipx + "==" + r.Version
+	case r.Docker != "":
+		if r.Digest != "" {
+			// Digest-addressed: repo@sha256:... (immutable).
+			return strings.TrimSuffix(r.Docker, ":latest") + "@" + r.Digest
+		}
+		if r.Version != "" {
+			return strings.TrimSuffix(r.Docker, ":latest") + ":" + r.Version
+		}
+		return r.Docker
+	default:
+		return ""
+	}
 }
 
-// Registry maps canonical tool name → install recipe.
 var Registry = func() map[string]Recipe {
 	m := make(map[string]Recipe, len(registryList))
 	for _, r := range registryList {
@@ -198,13 +355,15 @@ func Names() []string {
 }
 
 // InstallHint renders a copy-paste install recipe for the current OS.
+// go/pipx/docker lines render through installRef so the copy-paste
+// command installs exactly the pinned ref resolveInstall would run.
 func InstallHint(r Recipe, goos string) string {
 	var parts []string
 	if r.GoInstall != "" {
-		parts = append(parts, "go install -v "+r.GoInstall)
+		parts = append(parts, "go install -v "+installRef(r))
 	}
 	if r.Pipx != "" {
-		parts = append(parts, "pipx install "+r.Pipx)
+		parts = append(parts, "pipx install "+installRef(r))
 	}
 	if r.Apt != "" && (goos == "linux" || goos == "") {
 		parts = append(parts, "sudo apt install -y "+r.Apt)
@@ -213,7 +372,7 @@ func InstallHint(r Recipe, goos string) string {
 		parts = append(parts, "choco install -y "+r.Choco)
 	}
 	if r.Docker != "" {
-		parts = append(parts, "docker pull "+r.Docker)
+		parts = append(parts, "docker pull "+installRef(r))
 	}
 	if r.Manual != "" {
 		parts = append(parts, "manual: "+r.Manual)

@@ -89,13 +89,14 @@ func hasAutomatedRecipe(r Recipe) bool {
 }
 
 // InstallHintShort is the first automated install step, or the manual
-// pointer when only docs exist.
+// pointer when only docs exist. Rendered through installRef so the hint
+// always shows the version-pinned ref that resolveInstall would run.
 func InstallHintShort(r Recipe, goos string) string {
 	if r.GoInstall != "" {
-		return "go install -v " + r.GoInstall
+		return "go install -v " + installRef(r)
 	}
 	if r.Pipx != "" {
-		return "pipx install " + r.Pipx
+		return "pipx install " + installRef(r)
 	}
 	if r.Apt != "" && (goos == "linux" || goos == "") {
 		return "sudo apt install -y " + r.Apt
@@ -104,7 +105,7 @@ func InstallHintShort(r Recipe, goos string) string {
 		return "choco install -y " + r.Choco
 	}
 	if r.Docker != "" {
-		return "docker pull " + r.Docker
+		return "docker pull " + installRef(r)
 	}
 	if r.Manual != "" {
 		return "manual: " + r.Manual

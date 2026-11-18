@@ -26,8 +26,8 @@ jobs:
         with:
           # Pinned rather than read from go.mod: govulncheck flags reachable
           # stdlib advisories (net/http, net/http/internal/http2, crypto/tls,
-          # mime/multipart, crypto/x509) that are fixed in Go 1.27.3+.
-          go-version: '1.27.3'
+          # mime/multipart, crypto/x509) that are fixed in Go 1.27.4+.
+          go-version: '1.27.4'
 
       - name: Verify gofmt
         run: |
@@ -83,7 +83,7 @@ jobs:
         with:
           # v2 line (v1 binaries refuse go1.25+ targets at load).
           # Pinned exact; tree verified clean against this version.
-          # Must be built with Go >= 1.27.3 to match the pinned toolchain:
+          # Must be built with Go >= 1.27.4 to match the pinned toolchain:
           # v2.13.x is built with go1.27.1 and cannot decode go1.27.2+
           # export data ("export data version 5 is greater than maximum
           # supported version 4"), which fails the lint job outright.
@@ -142,7 +142,7 @@ jobs:
 
       - name: gosec
         # gosec v2.29.0 (latest release) vendors x/tools v0.49.0, which
-        # cannot decode Go 1.27.3 export data. It then reports
+        # cannot decode Go 1.27.4 export data. It then reports
         # "package has type errors, skipping SSA analysis, no ssa result"
         # for most packages and exits non-zero while effectively finding
         # nothing. Rebuild it against x/tools v0.52.0 (pinned) so SSA
@@ -187,8 +187,8 @@ jobs:
         with:
           # Pinned rather than read from go.mod: govulncheck flags reachable
           # stdlib advisories (net/http, net/http/internal/http2, crypto/tls,
-          # mime/multipart, crypto/x509) that are fixed in Go 1.27.3+.
-          go-version: '1.27.3'
+          # mime/multipart, crypto/x509) that are fixed in Go 1.27.4+.
+          go-version: '1.27.4'
 
       - name: Verify gofmt
         run: |
@@ -232,8 +232,8 @@ jobs:
         with:
           # Pinned rather than read from go.mod: govulncheck flags reachable
           # stdlib advisories (net/http, net/http/internal/http2, crypto/tls,
-          # mime/multipart, crypto/x509) that are fixed in Go 1.27.3+.
-          go-version: '1.27.3'
+          # mime/multipart, crypto/x509) that are fixed in Go 1.27.4+.
+          go-version: '1.27.4'
 
       - name: Run live verification
         run: bash scripts/verify.sh
@@ -322,8 +322,8 @@ jobs:
         with:
           # Pinned rather than read from go.mod: govulncheck flags reachable
           # stdlib advisories (net/http, net/http/internal/http2, crypto/tls,
-          # mime/multipart, crypto/x509) that are fixed in Go 1.27.3+.
-          go-version: '1.27.3'
+          # mime/multipart, crypto/x509) that are fixed in Go 1.27.4+.
+          go-version: '1.27.4'
 
       - name: Install syft (SBOM generator)
         # Pinned; required on PATH for GoReleaser's sboms pipe.
@@ -432,7 +432,7 @@ jobs:
             setup: apk add --no-cache git tar coreutils openssl ca-certificates
           - image: archlinux:latest
             fetch: curl
-            setup: pacman -Sy --noconfirm git curl tar coreutils
+            setup: pacman -Syu --noconfirm git curl tar coreutils
           - image: kalilinux/kali-rolling
             fetch: curl
             setup: apt-get update && apt-get install -y git curl tar coreutils
@@ -1123,7 +1123,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.27.3'
+          go-version: '1.27.4'
 
       - name: Run validation harness
         env:

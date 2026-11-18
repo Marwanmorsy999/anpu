@@ -3,14 +3,13 @@ module github.com/Marwanmorsy999/anpu
 go 1.26.0
 
 // Minimum toolchain for building and for the govulncheck CI gate.
-// Go 1.27.2 and earlier carry stdlib advisories in net/http,
-// net/http/internal/http2, crypto/tls and mime/multipart that affect
-// reachable code, and Go 1.27.2 carries crypto/x509 GO-2026-6809
-// ("distrust compromised intermediate certificates"); those are fixed in
-// 1.27.3. The `go` directive above is deliberately left lower so the
+// Go 1.27.3 and earlier carry stdlib advisories in net/http,
+// net/http/internal/http2, crypto/tls, mime/multipart and crypto/x509
+// that affect reachable code (GO-2026-6809/6859); those are fixed in
+// 1.27.4. The `go` directive above is deliberately left lower so the
 // module stays buildable by a broader toolchain range; CI pins this exact
 // version via setup-go.
-toolchain go1.27.3
+toolchain go1.27.4
 
 require (
 	github.com/refraction-networking/utls v1.8.2
@@ -29,7 +28,7 @@ require (
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/akrylysov/pogreb v0.10.2 // indirect
 	github.com/alecthomas/chroma/v2 v2.20.0 // indirect
-	github.com/andybalholm/brotli v1.2.0 // indirect
+	github.com/andybalholm/brotli v1.2.7 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
@@ -66,7 +65,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.18.2 // indirect
+	github.com/klauspost/compress v1.20.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/libdns/libdns v1.1.1 // indirect

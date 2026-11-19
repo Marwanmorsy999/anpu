@@ -5,7 +5,8 @@
 
 Measured with [`anpu bench`](cli.md#anpu-bench) against the planted-signal
 fixture in [`tests/bench`](../tests/bench) (`ground-truth.yml` is the
-machine-readable contract). The table is auto-generated and freshness-gated
+machine-readable contract). The fixture is also the official zero-setup
+demo target: `docker compose -f tests/bench/docker-compose.yml up -d`. The table is auto-generated and freshness-gated
 by CI: if a code change moves a verdict, the gate fails until a human
 re-runs the bench, reviews the diff, and commits it deliberately.
 

@@ -205,6 +205,18 @@ docker run --rm -v "$(pwd)/reports:/reports" anpu:nuclei scan https://example.co
 
 ## 4. Quick start
 
+### Zero-setup demo (bench fixture)
+
+```sh
+docker compose -f tests/bench/docker-compose.yml up -d
+./anpu bench --target http://127.0.0.1:8901
+./anpu scan http://127.0.0.1:8901 --profile advanced
+docker compose -f tests/bench/docker-compose.yml down
+```
+
+The fixture is a deliberately vulnerable local app; see
+[docs/benchmark.md](docs/benchmark.md) and [tests/bench](tests/bench).
+
 ```sh
 # Safe (default) profile
 ./anpu scan https://example.com

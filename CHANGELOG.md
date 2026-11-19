@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.5.8
+
+- **Request-budget central enforcement (#90)**: every HTTP-issuing scanner
+  stage routes through the shared `anpuhttp.Ledger` with per-stage caps;
+  ad-hoc `made`/`maxRequests` counters removed from all 41 scanners.
+- **Bench double-charging fix (#91)**: removed redundant `ChargeBudget`/
+  `Ledger.Record` calls in exposedconfig, apiconsole, backupplus,
+  graphqlfp, originip that caused premature budget exhaustion (exposed-env
+  MISS in the honesty bench); added budget parity tests.
+- **Guarded-client consolidation + in-process tar.gz + update hardening
+  (#92)**: subdomains, redirectpack and oauthpack now use the guarded
+  `anpuhttp.Client`; `extractTarGz` no longer shells out to `tar`
+  (path-traversal/symlink/device refusal); `downloadFile` gains a 10m
+  timeout and 512 MB body cap.
+- **Go benchmarks + fixture digest pinning + benchmark smoke CI (#93)**:
+  six `Benchmark*` (sstiexpand, scoring, headers, reporting, diff, active);
+  pinned `python:3.13-slim` digest; new `bench-go-smoke` job.
+- **Packaging (#94)**: committed man pages (`man/anpu.1`), `docs/install.md`
+  channel matrix, winget/homebrew/nix manifests, `GOVERNANCE.md`, and a
+  `packaging-validate` CI job.
+- **Adoption docs (#95)**: `docs/comparison.md` (honest vs subfinder/httpx/
+  nuclei/subzy), README zero-setup demo using the bench fixture.
+
 ## 0.5.6
 
 - **Security: `ANPU_BASE_URL` hardening (both installers)**. `install.sh`

@@ -1164,8 +1164,8 @@ jobs:
           import re, pathlib, sys
           import yaml
           # Winget YAML shape
-          w = yaml.safe_load(open("manifests/winget/Marwanmorsy999.anpu.yaml"))
-          assert isinstance(w, (dict, list)), "winget manifest must parse"
+          docs = list(yaml.safe_load_all(open("manifests/winget/Marwanmorsy999.anpu.yaml")))
+          assert len(docs) >= 1 and all(isinstance(d, dict) for d in docs), "winget manifest must parse"
           # Version/url reference latest tag pattern
           text = pathlib.Path("manifests/winget/Marwanmorsy999.anpu.yaml").read_text()
           assert re.search(r"v\d+\.\d+\.\d+", text), "winget must reference a version tag"

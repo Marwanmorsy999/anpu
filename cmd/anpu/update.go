@@ -378,7 +378,7 @@ func extractTarGz(archive, dest string) error {
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil { // #nosec G301
 			return fmt.Errorf("create dir for %q: %w", hdr.Name, err)
 		}
-		out, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.FileMode(hdr.Mode)&0o777) // #nosec G304
+		out, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.FileMode(hdr.Mode)&0o777) // #nosec G304 G115 -- mode from checksum-verified release archive
 		if err != nil {
 			return fmt.Errorf("create %q: %w", hdr.Name, err)
 		}

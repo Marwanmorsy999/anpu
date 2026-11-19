@@ -11,8 +11,6 @@ package oauthpack
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -56,26 +54,13 @@ func redirectPayloads(host string) []struct{ name, uri string } {
 }
 
 // noFollow issues one GET without following redirects.
-func noFollow(ctx context.Context, u string) (status int, location string) {
+func (s *Scanner) noFollow(ctx context.Context, u string) (status int, location string) {
 	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(cctx, http.MethodGet, u, nil)
-	if err != nil {
-		return 0, ""
-	}
-	req.Header.Set("User-Agent", anpuhttp.UserAgent)
-	cli := &http.Client{
-		Timeout: 10 * time.Second,
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	resp, err := cli.Do(req)
+	resp, err := s.client.GetNoRedirect(cctx, u)
 	if err != nil || resp == nil {
 		return 0, ""
 	}
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 	return resp.StatusCode, resp.Header.Get("Location")
 }
 
@@ -102,7 +87,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 		if !counted() {
 			break
 		}
-		bStatus, _ := noFollow(ctx, withParam(target, "redirect_uri", base))
+		bStatus, _ := s.noFollow(ctx, withParam(target, "redirect_uri", base))
 		if bStatus == 0 {
 			continue
 		}
@@ -110,7 +95,7 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 			if !counted() {
 				break
 			}
-			status, loc := noFollow(ctx, withParam(target, "redirect_uri", p.uri))
+			status, loc := s.noFollow(ctx, withParam(target, "redirect_uri", p.uri))
 			if status == 0 || status < 300 || status >= 400 {
 				continue
 			}

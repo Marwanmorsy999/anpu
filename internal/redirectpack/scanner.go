@@ -11,8 +11,6 @@ package redirectpack
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -118,23 +116,10 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		req, err := http.NewRequestWithContext(cctx, http.MethodGet, u, nil)
-		if err != nil {
-			return 0, ""
-		}
-		req.Header.Set("User-Agent", anpuhttp.UserAgent)
-		cli := &http.Client{
-			Timeout: 10 * time.Second,
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		}
-		resp, err := cli.Do(req)
+		resp, err := s.client.GetNoRedirect(cctx, u)
 		if err != nil || resp == nil {
 			return 0, ""
 		}
-		defer func() { _ = resp.Body.Close() }()
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		return resp.StatusCode, resp.Header.Get("Location")
 	}
 
@@ -145,11 +130,10 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 			continue
 		}
 		for _, p := range redirectPayloads {
-			if err := scanner.ChargeBudget(sc); err != nil {
-				budgetExhausted = true
+			status, loc := noFollow(withParam(t.URL, param, p.payload))
+			if budgetExhausted {
 				break
 			}
-			status, loc := noFollow(withParam(t.URL, param, p.payload))
 			if status == 0 {
 				continue
 			}

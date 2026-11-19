@@ -30,11 +30,15 @@ import (
 
 type Scanner struct {
 	resolver *net.Resolver
-	client   *http.Client
+	client   *httpx.Client
+	scanCtx  *scanner.ScanContext
 }
 
-func New() *Scanner {
-	return &Scanner{resolver: net.DefaultResolver, client: &http.Client{Timeout: 20 * time.Second}}
+func New(client *httpx.Client) *Scanner {
+	if client == nil {
+		client = httpx.NewClientWithLocalNetworkAllowed(true)
+	}
+	return &Scanner{resolver: net.DefaultResolver, client: client}
 }
 
 func (s *Scanner) Name() string                       { return "subdomains" }
@@ -58,6 +62,8 @@ type crtshResponse struct {
 }
 
 func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.StageResult, error) {
+	s.scanCtx = sc
+	defer func() { s.scanCtx = nil }()
 	// Per-stage deadline: subdomains ≤60s total.
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
@@ -138,20 +144,19 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 }
 
 func (s *Scanner) queryCTLogs(ctx context.Context, host string) ([]string, string) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://crt.sh/?q=%%25.%s&output=json", host), nil)
-	if err != nil {
+	u := fmt.Sprintf("https://crt.sh/?q=%%25.%s&output=json", host)
+	if err := scanner.ChargeBudget(s.scanCtx); err != nil {
 		return nil, ""
 	}
-	resp, err := s.client.Do(req)
+	resp, err := s.client.Get(ctx, u)
 	if err != nil {
 		return nil, fmt.Sprintf("crt.sh query failed (continuing with other sources): %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Sprintf("crt.sh returned status %d (continuing with other sources)", resp.StatusCode)
 	}
 	var rows []crtshResponse
-	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+	if err := json.Unmarshal(resp.Body, &rows); err != nil {
 		return nil, fmt.Sprintf("could not parse crt.sh output: %v", err)
 	}
 	var out []string

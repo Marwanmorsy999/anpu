@@ -171,7 +171,7 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCt
 			// schema locations (GET-only). --only stays absolute: explicit
 			// flags never force the stage on (they warn instead, above).
 			{Label: "API", Enabled: modules.API, Scanner: api.New(apiCfg)},
-			{Label: "Subdomains", Enabled: modules.Subdomains, Scanner: subdomains.New(), SkipReason: "safe profile is passive — use --profile advanced"},
+			{Label: "Subdomains", Enabled: modules.Subdomains, Scanner: subdomains.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			// Subfinder merges passive subdomains into sc.Subdomains for Takeover.
 			{Label: "Subfinder", Enabled: modules.Subfinder, Scanner: subfinder, SkipReason: "safe profile is passive — use --profile advanced"},
 			{Label: "DNSx", Enabled: modules.DNSx, Scanner: dnsx, SkipReason: "safe profile is passive — use --profile advanced"},
@@ -537,7 +537,7 @@ func nativeStage(label string, client *anpuhttp.Client, mc *models.ModuleConfig)
 	case "endpoints":
 		return endpoints.New(client), mc.Endpoints
 	case "subdomains":
-		return subdomains.New(), mc.Subdomains
+		return subdomains.New(client), mc.Subdomains
 	case "takeover":
 		return takeover.New(client), mc.Takeover
 	case "takeoverplus":

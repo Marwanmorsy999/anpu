@@ -66,13 +66,6 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 			budgetExhausted = true
 			return nil
 		}
-		// Charge the global per-tool ledger (Wave 4 item 151); a nil
-		// ledger (unit tests) means uncapped.
-		if sc.Ledger != nil {
-			if err := sc.Ledger.Record("apiconsole"); err != nil {
-				return nil
-			}
-		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		resp, err := s.client.Get(cctx, strings.TrimSuffix(sc.Target.Raw, "/")+path)
@@ -104,11 +97,10 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 	var findings []models.Finding
 	var endpoints []models.Endpoint
 	for _, p := range consoleProbes {
-		if err := scanner.ChargeBudget(sc); err != nil {
-			budgetExhausted = true
+		resp := get(p.path)
+		if budgetExhausted {
 			break
 		}
-		resp := get(p.path)
 		if resp == nil || resp.StatusCode != 200 || len(resp.Body) < 32 {
 			continue
 		}

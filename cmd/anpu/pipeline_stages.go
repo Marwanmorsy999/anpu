@@ -225,6 +225,7 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCt
 			{Label: "PolicyHeaders", Enabled: modules.PolicyHeaders, Scanner: policyheaders.New(client)},
 			{Label: "CookiePrefix", Enabled: modules.CookiePrefix, Scanner: cookieprefix.New(client)},
 			{Label: "APIVersion", Budget: 11, Enabled: modules.APIVersion, Scanner: apiversion.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
+			// APIConsole: 1 control + 10 probes; +1 for the lazy root fetch on first marker hit.
 			{Label: "APIConsole", Budget: 12, Enabled: modules.APIConsole, Scanner: apiconsole.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			{Label: "VHost", Budget: 13, Enabled: modules.VHost, Scanner: vhost.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			// Wave 1 batches 4-5 — items 31-50. JWTPlus/H2FP/GFClassify/
@@ -246,6 +247,7 @@ func buildPipeline(client *anpuhttp.Client, modules models.ModuleConfig, authzCt
 			{Label: "CertHistory", Enabled: modules.CertHistory, Scanner: certhistory.New(client)},
 			{Label: "AXFRPlus", Enabled: modules.AXFRPlus, Scanner: axfrplus.New(), SkipReason: "safe profile is passive — use --profile advanced"},
 			{Label: "SubPermute", Enabled: modules.SubPermute, Scanner: subpermute.New()},
+			// BackupPlus: 1 control + up to 60 probes + 1 lazy root fetch on first hit.
 			{Label: "BackupPlus", Budget: 62, Enabled: modules.BackupPlus, Scanner: backupplus.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			{Label: "FaviconPlus", Budget: 9, Enabled: modules.FaviconPlus, Scanner: faviconplus.New(client), SkipReason: "safe profile is passive — use --profile advanced"},
 			{Label: "DebugMethods", Budget: 8, Enabled: modules.DebugMethods, Scanner: debugmethods.New(client), SkipReason: "safe profile is passive — use --profile advanced"},

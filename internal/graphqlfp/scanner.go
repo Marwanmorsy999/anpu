@@ -101,15 +101,17 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 	var endpoints []models.Endpoint
 	var techs []models.Technology
 	for _, p := range graphqlPaths {
-		if err := scanner.ChargeBudget(sc); err != nil {
-			budgetExhausted = true
-			break
-		}
 		u := strings.TrimSuffix(sc.Target.Raw, "/") + p
 		resp := post(u)
+		if budgetExhausted {
+			break
+		}
 		if resp == nil || !looksGraphQL(string(resp.Body)) {
 			// GET fallback for GET-enabled endpoints.
 			resp = get(u + "?query=%7B__typename%7D")
+			if budgetExhausted {
+				break
+			}
 			if resp == nil || !looksGraphQL(string(resp.Body)) {
 				continue
 			}

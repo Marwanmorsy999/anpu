@@ -81,13 +81,6 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 			budgetExhausted = true
 			return nil
 		}
-		// Charge the global per-tool ledger (Wave 4 item 151); a nil
-		// ledger (unit tests) means uncapped.
-		if sc.Ledger != nil {
-			if err := sc.Ledger.Record("backupplus"); err != nil {
-				return nil
-			}
-		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		resp, err := s.client.Get(cctx, u)
@@ -116,16 +109,15 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 	var findings []models.Finding
 	for _, b := range bases(sc) {
 		for _, suf := range suffixes {
-			if err := scanner.ChargeBudget(sc); err != nil {
-				budgetExhausted = true
-				break
-			}
 			u := b + suf
 			// Skip nested-archive monstrosities (base already archival).
 			if strings.HasSuffix(strings.ToLower(b), ".zip") && strings.HasSuffix(suf, ".zip") {
 				continue
 			}
 			resp := get(u)
+			if budgetExhausted {
+				break
+			}
 			if resp == nil || resp.StatusCode != 200 || len(resp.Body) < 32 {
 				continue
 			}

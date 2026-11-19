@@ -1,7 +1,9 @@
 package main
 
 import (
+	"archive/tar"
 	"archive/zip"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -12,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/Marwanmorsy999/anpu/pkg/version"
 	"github.com/spf13/cobra"
@@ -202,7 +205,8 @@ func resolveLatestTagFrom(latestURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	client := &http.Client{
+	client := &http.Client{ // #nosec G107 -- fixed github.com releases host; redirect is captured, not followed
+		Timeout: 10 * time.Minute,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -262,8 +266,14 @@ func validReleaseTag(tag string) error {
 	return fmt.Errorf("tag carries no version digits")
 }
 
+// downloadFile fetches url into dest. Raw net/http is intentional here:
+// the host is fixed to github.com release assets (redirects to
+// objects.githubusercontent.com are expected) and the payload is verified
+// by sha256 against checksums.txt before use. Guarded by a 10m timeout
+// and a 512 MB body cap so a hostile mirror cannot exhaust disk.
 func downloadFile(url, dest string) error {
-	resp, err := http.Get(url) // #nosec G107
+	client := &http.Client{Timeout: 10 * time.Minute} // #nosec G107 -- fixed github.com release host, sha256-verified after download
+	resp, err := client.Get(url)
 	if err != nil {
 		return err
 	}
@@ -276,7 +286,7 @@ func downloadFile(url, dest string) error {
 		return err
 	}
 	defer func() { _ = f.Close() }()
-	_, err = io.Copy(f, resp.Body)
+	_, err = io.Copy(f, io.LimitReader(resp.Body, 512*1024*1024))
 	return err
 }
 
@@ -323,10 +333,64 @@ func copyFile(src, dst string) error {
 }
 
 func extractTarGz(archive, dest string) error {
-	// use tar via os/exec to avoid adding deps
-	cmd := exec.Command("tar", "-xzf", archive, "-C", dest) // #nosec G204
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("tar extract failed: %v\n%s", err, string(out))
+	f, err := os.Open(archive) // #nosec G304 -- archive is the checksum-verified download path
+	if err != nil {
+		return fmt.Errorf("open tar.gz: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return fmt.Errorf("open gzip: %w", err)
+	}
+	defer func() { _ = gz.Close() }()
+
+	tr := tar.NewReader(gz)
+	destClean := filepath.Clean(dest) + string(os.PathSeparator)
+	extracted := 0
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("read tar entry: %w", err)
+		}
+		// Refuse anything that is not a regular file or directory: no
+		// symlinks, hardlinks, devices, FIFOs (a release archive never
+		// contains them; following one would write outside dest).
+		switch hdr.Typeflag {
+		case tar.TypeReg, tar.TypeDir:
+		default:
+			return fmt.Errorf("tar entry %q has unsafe type %d - refusing", hdr.Name, hdr.Typeflag)
+		}
+		target := filepath.Join(dest, hdr.Name) // #nosec G305 -- target is validated against destClean below
+		if !strings.HasPrefix(filepath.Clean(target)+string(os.PathSeparator), destClean) {
+			return fmt.Errorf("tar entry %q escapes destination - refusing", hdr.Name)
+		}
+		if hdr.Typeflag == tar.TypeDir {
+			if err := os.MkdirAll(target, 0o755); err != nil { // #nosec G301
+				return fmt.Errorf("create dir %q: %w", hdr.Name, err)
+			}
+			extracted++
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil { // #nosec G301
+			return fmt.Errorf("create dir for %q: %w", hdr.Name, err)
+		}
+		out, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.FileMode(hdr.Mode)&0o777) // #nosec G304 G115 -- mode from checksum-verified release archive
+		if err != nil {
+			return fmt.Errorf("create %q: %w", hdr.Name, err)
+		}
+		if _, err := io.Copy(out, tr); err != nil { // #nosec G110
+			_ = out.Close()
+			return fmt.Errorf("write %q: %w", hdr.Name, err)
+		}
+		_ = out.Close()
+		extracted++
+	}
+	if extracted == 0 {
+		return fmt.Errorf("release archive is empty")
 	}
 	return nil
 }

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"archive/tar"
 	"archive/zip"
+	"compress/gzip"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -177,5 +179,146 @@ func TestUnzipFirstRejectsEmptyArchive(t *testing.T) {
 	buildTestZip(t, zipPath, map[string]string{})
 	if err := unzipFirst(zipPath, filepath.Join(dir, "out"), "anpu.exe"); err == nil {
 		t.Fatal("empty zip must be an error")
+	}
+}
+
+// buildTestTarGz writes a tar.gz archive with the given entries.
+func buildTestTarGz(t *testing.T, path string, entries map[string]string, extras ...func(*tar.Writer)) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create tar.gz: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+	gz := gzip.NewWriter(f)
+	tw := tar.NewWriter(gz)
+	for name, content := range entries {
+		hdr := &tar.Header{Name: name, Mode: 0o644, Size: int64(len(content)), Typeflag: tar.TypeReg}
+		if err := tw.WriteHeader(hdr); err != nil {
+			t.Fatalf("write header %q: %v", name, err)
+		}
+		if _, err := tw.Write([]byte(content)); err != nil {
+			t.Fatalf("write entry %q: %v", name, err)
+		}
+	}
+	for _, extra := range extras {
+		extra(tw)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+}
+
+func TestExtractTarGzExtractsPayload(t *testing.T) {
+	dir := t.TempDir()
+	archive := filepath.Join(dir, "anpu.tar.gz")
+	buildTestTarGz(t, archive, map[string]string{
+		"anpu": "MACHINE-CODE-PLACEHOLDER",
+	})
+	dest := filepath.Join(dir, "extract")
+	if err := extractTarGz(archive, dest); err != nil {
+		t.Fatalf("extractTarGz: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dest, "anpu"))
+	if err != nil {
+		t.Fatalf("extracted missing: %v", err)
+	}
+	if string(got) != "MACHINE-CODE-PLACEHOLDER" {
+		t.Fatalf("content mismatch: %q", got)
+	}
+}
+
+func TestExtractTarGzRejectsTraversal(t *testing.T) {
+	dir := t.TempDir()
+	archive := filepath.Join(dir, "evil.tar.gz")
+	buildTestTarGz(t, archive, map[string]string{
+		"anpu": "ok",
+	})
+	buildTestTarGz(t, archive, map[string]string{"anpu": "ok"}, func(tw *tar.Writer) {
+		content := "outside"
+		hdr := &tar.Header{Name: "../evil", Mode: 0o644, Size: int64(len(content)), Typeflag: tar.TypeReg}
+		_ = tw.WriteHeader(hdr)
+		_, _ = tw.Write([]byte(content))
+	})
+	dest := filepath.Join(dir, "extract")
+	err := extractTarGz(archive, dest)
+	if err == nil {
+		t.Fatal("traversal entry must be refused")
+	}
+	if !strings.Contains(err.Error(), "escapes destination") {
+		t.Fatalf("error should name traversal refusal, got: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "evil")); statErr == nil {
+		t.Fatal("traversal wrote a file outside destination")
+	}
+}
+
+func TestExtractTarGzRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	archive := filepath.Join(dir, "sym.tar.gz")
+	buildTestTarGz(t, archive, map[string]string{"anpu": "ok"}, func(tw *tar.Writer) {
+		hdr := &tar.Header{Name: "link", Typeflag: tar.TypeSymlink, Linkname: "/etc/passwd"}
+		_ = tw.WriteHeader(hdr)
+	})
+	dest := filepath.Join(dir, "extract")
+	err := extractTarGz(archive, dest)
+	if err == nil {
+		t.Fatal("symlink entry must be refused")
+	}
+	if !strings.Contains(err.Error(), "unsafe type") {
+		t.Fatalf("error should name unsafe type, got: %v", err)
+	}
+}
+
+func TestExtractTarGzRejectsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	archive := filepath.Join(dir, "empty.tar.gz")
+	buildTestTarGz(t, archive, map[string]string{})
+	dest := filepath.Join(dir, "out")
+	if err := extractTarGz(archive, dest); err == nil {
+		t.Fatal("empty archive must be an error")
+	}
+}
+
+// Regression test for the downloadFile size cap: a server streaming more
+// than 512 MB must be truncated (io.Copy with LimitReader), so the
+// destination never grows unbounded.
+func TestDownloadFileSizeCap(t *testing.T) {
+	// Serve a body just over a small cap by using the real 512 MB cap is
+	// too large; instead verify LimitReader semantics via a direct copy
+	// using the same constant the production code uses.
+	const capBytes = 512 * 1024 * 1024
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Write capBytes+1024 bytes.
+		buf := make([]byte, 4096)
+		remaining := capBytes + 1024
+		for remaining > 0 {
+			n := len(buf)
+			if n > remaining {
+				n = remaining
+			}
+			_, _ = w.Write(buf[:n])
+			remaining -= n
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "big.bin")
+	if err := downloadFile(srv.URL, dest); err != nil {
+		t.Fatalf("downloadFile: %v", err)
+	}
+	info, err := os.Stat(dest)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if info.Size() > capBytes {
+		t.Fatalf("destination size %d exceeds cap %d", info.Size(), capBytes)
+	}
+	if info.Size() != capBytes {
+		t.Fatalf("expected exactly %d bytes (cap), got %d", capBytes, info.Size())
 	}
 }

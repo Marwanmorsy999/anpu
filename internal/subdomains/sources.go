@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/Marwanmorsy999/anpu/internal/scanner"
 )
 
 // Passive source endpoints. Package vars so tests can point them at
@@ -77,20 +78,21 @@ func (s *Scanner) queryPassiveSources(ctx context.Context, host string) ([]strin
 // fetchCapped GETs a URL and returns up to maxBytes of the body for
 // status-200 responses.
 func (s *Scanner) fetchCapped(ctx context.Context, url string, maxBytes int64) ([]byte, int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err := scanner.ChargeBudget(s.scanCtx); err != nil {
+		return nil, 0, err
+	}
+	resp, err := s.client.Get(ctx, url)
 	if err != nil {
 		return nil, 0, err
 	}
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, resp.StatusCode, fmt.Errorf("status %d", resp.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes))
-	return body, resp.StatusCode, err
+	body := resp.Body
+	if int64(len(body)) > maxBytes {
+		body = body[:maxBytes]
+	}
+	return body, resp.StatusCode, nil
 }
 
 // queryCommonCrawl harvests hostnames from the Common Crawl columnar

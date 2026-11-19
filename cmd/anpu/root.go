@@ -24,6 +24,9 @@ var (
 	flagDataDir    string
 )
 
+// NewRootCmd exposes the root command for man-page generation and tests.
+func NewRootCmd() *cobra.Command { return newRootCmd() }
+
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "anpu",

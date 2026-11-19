@@ -1154,16 +1154,16 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install validation deps
+        run: pip install --quiet pyyaml
+
       - name: Validate manifests
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import re, pathlib, sys
+          import yaml
           # Winget YAML shape
-          try:
-              import yaml
-          except Exception as e:
-              print("pyyaml missing:", e); sys.exit(1)
           w = yaml.safe_load(open("manifests/winget/Marwanmorsy999.anpu.yaml"))
           assert isinstance(w, (dict, list)), "winget manifest must parse"
           # Version/url reference latest tag pattern

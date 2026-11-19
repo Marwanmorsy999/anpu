@@ -1140,3 +1140,44 @@ jobs:
           set -euo pipefail
           docker logout ghcr.io 2>/dev/null || true
           docker run --rm ghcr.io/marwanmorsy999/anpu version
+  packaging-validate:
+    name: packaging manifests validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate manifests
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, pathlib, sys
+          # Winget YAML shape
+          try:
+              import yaml
+          except Exception as e:
+              print("pyyaml missing:", e); sys.exit(1)
+          w = yaml.safe_load(open("manifests/winget/Marwanmorsy999.anpu.yaml"))
+          assert isinstance(w, (dict, list)), "winget manifest must parse"
+          # Version/url reference latest tag pattern
+          text = pathlib.Path("manifests/winget/Marwanmorsy999.anpu.yaml").read_text()
+          assert re.search(r"v\d+\.\d+\.\d+", text), "winget must reference a version tag"
+          # Homebrew formula
+          rb = pathlib.Path("Formula/anpu.rb").read_text()
+          assert "class Anpu" in rb and "def install" in rb
+          assert re.search(r"v\d+\.\d+\.\d+", rb), "formula must reference a version tag"
+          # Nix flake
+          flake = pathlib.Path("flake.nix").read_text()
+          assert "buildGoModule" in flake
+          assert re.search(r"\d+\.\d+\.\d+", flake), "flake must reference a version"
+          # man page present
+          assert pathlib.Path("man/anpu.1").exists(), "man page missing"
+          print("packaging manifests OK")
+          PY

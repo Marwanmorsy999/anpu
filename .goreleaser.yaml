@@ -36,6 +36,7 @@ archives:
       - README.md
       - LICENSE
       - anpu.example.yaml
+      - man/anpu.1
   # Stable, version-less archive names so
   # releases/latest/download/anpu_<os>_<arch>.tar.gz always resolves.
   - id: anpu-stable
@@ -50,6 +51,7 @@ archives:
       - README.md
       - LICENSE
       - anpu.example.yaml
+      - man/anpu.1
 
 # Native Linux packages (deb/rpm/apk/archlinux) via nFPM — no extra
 # toolchain needed. These make `apt/dnf/apk/pacman install ./anpu*.deb`

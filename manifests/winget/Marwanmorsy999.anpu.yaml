@@ -1,0 +1,31 @@
+PackageIdentifier: Marwanmorsy999.anpu
+PackageVersion: 0.5.7
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0
+---
+PackageIdentifier: Marwanmorsy999.anpu
+PackageVersion: 0.5.7
+DefaultLocale: en-US
+ManifestType: installer
+ManifestVersion: 1.6.0
+Installers:
+  - Architecture: x64
+    InstallerType: zip
+    InstallerUrl: https://github.com/Marwanmorsy999/anpu/releases/download/v0.5.7/anpu_0.5.7_windows_amd64.zip
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+  - Architecture: arm64
+    InstallerType: zip
+    InstallerUrl: https://github.com/Marwanmorsy999/anpu/releases/download/v0.5.7/anpu_0.5.7_windows_arm64.zip
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+ManifestType: installer
+---
+PackageIdentifier: Marwanmorsy999.anpu
+PackageVersion: 0.5.7
+DefaultLocale: en-US
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
+Publisher: Marwan Morsy
+PackageName: anpu
+License: MIT
+ShortDescription: Web security intelligence engine.

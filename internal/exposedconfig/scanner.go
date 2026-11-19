@@ -95,11 +95,10 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 
 	var findings []models.Finding
 	for _, p := range probes {
-		if err := scanner.ChargeBudget(sc); err != nil {
-			budgetExhausted = true
+		resp := get(p.path)
+		if budgetExhausted {
 			break
 		}
-		resp := get(p.path)
 		if resp == nil || resp.StatusCode != 200 || len(resp.Body) == 0 {
 			continue
 		}

@@ -19,7 +19,7 @@ re-runs the bench, reviews the diff, and commits it deliberately.
 | `open-redirect` — /go?url= 302-redirects to absolute URLs. | ○ expected miss | ✓ HIT |
 
 Findings (safe): 12 total (9 confirmed / 3 unconfirmed), 11 unmatched.
-Findings (advanced): 33 total (21 confirmed / 12 unconfirmed), 28 unmatched.
+Findings (advanced): 30 total (17 confirmed / 13 unconfirmed), 24 unmatched.
 Unmatched findings are counted, never auto-labeled false positives.
 † non-gating: measured and shown, excluded from freshness checks until its flakiness is root-caused.
 

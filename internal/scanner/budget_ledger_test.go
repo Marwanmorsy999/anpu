@@ -50,9 +50,6 @@ func budgetTestCtx(stage string, cap int) *ScanContext {
 // TestBudgetForcedTruncation: a tiny SetCap stops a stage with a warning
 // while another stage (with a generous cap) completes.
 func TestBudgetForcedTruncation(t *testing.T) {
-	client := anpuhttp.NewClientWithLocalNetworkAllowed(true)
-	_ = client
-
 	// Stage "truncated" has cap=1, makes 5 requests -> should stop with warning.
 	sc := budgetTestCtx("truncated", 1)
 	sc.Config = models.ScanConfig{Target: "http://example.com", Profile: models.ProfileSafe}

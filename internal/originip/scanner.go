@@ -125,10 +125,6 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 			if ip.To4() == nil {
 				continue
 			}
-			if err := scanner.ChargeBudget(sc); err != nil {
-				budgetExhausted = true
-				continue
-			}
 			scheme := sc.Target.URL.Scheme
 			if scheme == "" {
 				scheme = "https"

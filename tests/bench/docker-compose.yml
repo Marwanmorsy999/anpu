@@ -15,9 +15,8 @@
 # (and only when) the target is loopback.
 services:
   bench-target:
-    # Versioned tag; no digest pin on purpose — this is a throwaway local
-    # target, not a release artifact. Re-pull weekly in CI for freshness.
-    image: python:3.13-slim
+    # Pinned by digest for reproducibility (multi-arch index).
+    image: python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
     command: ["python", "/srv/server.py"]
     volumes:
       - ./server.py:/srv/server.py:ro

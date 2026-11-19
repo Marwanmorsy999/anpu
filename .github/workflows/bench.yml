@@ -85,3 +85,21 @@ jobs:
       - name: Stop benchmark fixture
         if: always()
         run: docker compose -f tests/bench/docker-compose.yml down
+
+  bench-go-smoke:
+    name: go benchmark smoke (compile + no panic)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.27.4'
+
+      - name: Run Go benchmarks (smoke)
+        # Fails only on compile error or panic; benchmark numbers are
+        # never gated here.
+        run: go test -bench=. -benchtime=1x ./...

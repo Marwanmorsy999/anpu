@@ -9,6 +9,17 @@ machine-readable contract). The table is auto-generated and freshness-gated
 by CI: if a code change moves a verdict, the gate fails until a human
 re-runs the bench, reviews the diff, and commits it deliberately.
 
+## Variance policy
+
+- Run with `anpu bench --runs 5` for any verdict-changing review.
+- Report the median verdict across runs.
+- A verdict counts as drift only when it changes in a majority of runs
+  (>= 3 of 5). Timing-sensitive misses that flip in a single run are
+  treated as flaky, not drift, and must not be committed as a verdict
+  change.
+- Tolerance: a run that differs from the median in verdict is allowed
+  up to 1 of 5 times without triggering a refresh.
+
 <!-- BENCH:START -->
 | Signal | safe | advanced |
 | --- | --- | --- |

@@ -36,6 +36,12 @@ type Scanner struct {
 	scanCtx  *scanner.ScanContext
 }
 
+// dnsLookup is the DNS resolution entry point. It is a package-level var so
+// tests can stub it with a fake resolver without touching real network.
+var dnsLookup = func(ctx context.Context, resolver *net.Resolver, host string) ([]net.IPAddr, error) {
+	return resolver.LookupIPAddr(ctx, host)
+}
+
 func New(client *httpx.Client) *Scanner {
 	if client == nil {
 		client = httpx.NewClientWithLocalNetworkAllowed(true)
@@ -209,7 +215,7 @@ func (s *Scanner) dnsBrute(ctx context.Context, host string) []string {
 			name := prefix + "." + host
 			cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 			defer cancel()
-			if ips, err := s.resolver.LookupIPAddr(cctx, name); err == nil && len(ips) > 0 {
+			if ips, err := dnsLookup(cctx, s.resolver, name); err == nil && len(ips) > 0 {
 				mu.Lock()
 				out = append(out, name)
 				mu.Unlock()
@@ -233,7 +239,7 @@ func (s *Scanner) resolveAll(ctx context.Context, candidates []string) []string 
 			defer func() { <-sem }()
 			cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 			defer cancel()
-			if ips, err := s.resolver.LookupIPAddr(cctx, name); err == nil && len(ips) > 0 {
+			if ips, err := dnsLookup(cctx, s.resolver, name); err == nil && len(ips) > 0 {
 				mu.Lock()
 				out = append(out, name)
 				mu.Unlock()

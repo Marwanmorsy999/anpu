@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.9
+
+- **Changelog ordering fix (#99)**: restored strict reverse-chronological order.
+- **CT-log override (#100)**: subdomains CT-log base URL configurable via
+  `ScanConfig.CTLogBaseURL` and `ANPU_CTLOG_BASE_URL` env (default
+  `https://crt.sh`), validated as well-formed http(s) URL.
+- **Fixture-level budget parity matrix (#102)**: parity tests for the
+  top-8 cap stages (HiddenParams, BackupPlus, ForbiddenBypass,
+  SSTIExpand, RedirectPack, BrokenLink, VerbTamper, LFIPack) asserting
+  `httptest hits == Ledger.Count(stage)`.
+- **Trust docs refresh (#101)**: `docs/trust.md` updated to v0.5.8 reality.
+- **Behavior fix — LFIPack double-charging (#102)**: `internal/lfipack`
+  was calling `ChargeBudget` both in its payload loop and inside its
+  `get()` closure, billing every LFI probe twice and effectively running
+  on half of its 20-request budget. Removed the redundant loop charge so
+  LFIPack now receives its full 20-request budget; LFI probe detection
+  coverage improves.
+
 ## 0.5.8
 
 - **Request-budget central enforcement (#90)**: every HTTP-issuing scanner

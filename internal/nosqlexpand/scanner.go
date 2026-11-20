@@ -99,11 +99,10 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 		var hits []hit
 		var verdicts []string
 		for _, p := range nosqlProbes {
-			if err := scanner.ChargeBudget(sc); err != nil {
-				budgetExhausted = true
+			r := get(withParam(target, p.param, p.value))
+			if budgetExhausted {
 				break
 			}
-			r := get(withParam(target, p.param, p.value))
 			if r.body == "" || r.body == base.body || r.body == control.body {
 				verdicts = append(verdicts, fmt.Sprintf("%s: no-change (%d, %dB vs base %dB)", p.name, r.status, r.length, base.length))
 				continue

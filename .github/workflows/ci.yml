@@ -668,7 +668,7 @@ jobs:
           echo "$out"
           echo "installer exit=$rc"
           # Evidence the installer actually fetched OUR tampered tarball.
-          grep -q "GET /v0.5.10/anpu_0.5.9_linux_amd64.tar.gz" /tmp/tamper/http.log || { echo "::error::installer never fetched the tampered tarball"; exit 1; }
+          grep -q "GET /v0.5.10/anpu_0.5.10_linux_amd64.tar.gz" /tmp/tamper/http.log || { echo "::error::installer never fetched the tampered tarball"; exit 1; }
           echo "$out" | grep -qi "checksum.*mismatch\|: FAILED\|hash.*mismatch" || { echo "::error::no checksum-mismatch message: $out"; exit 1; }
           if [ "$rc" -eq 0 ]; then echo "::error::tampered archive did not abort the installer"; exit 1; fi
           test ! -e /tmp/tamper-bin/anpu || { echo "::error::installer installed a binary despite checksum failure"; exit 1; }

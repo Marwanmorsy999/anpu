@@ -88,11 +88,10 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 	var findings []models.Finding
 	var endpoints []models.Endpoint
 	for _, p := range wsdlPaths {
-		if err := scanner.ChargeBudget(sc); err != nil {
-			budgetExhausted = true
+		resp := get(p)
+		if budgetExhausted {
 			break
 		}
-		resp := get(p)
 		if resp == nil || resp.StatusCode != 200 || len(resp.Body) < 64 {
 			continue
 		}

@@ -72,12 +72,11 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 		}
 		baseWords := wordSet(base.Body)
 		for _, suf := range deceptionSuffix {
-			if err := scanner.ChargeBudget(sc); err != nil {
-				budgetExhausted = true
-				break
-			}
 			variant := target + suf
 			resp := get(variant)
+			if budgetExhausted {
+				break
+			}
 			if resp == nil || resp.StatusCode != 200 || len(resp.Body) < 64 {
 				continue
 			}

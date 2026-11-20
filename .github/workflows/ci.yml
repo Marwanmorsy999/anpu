@@ -582,7 +582,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG=v0.5.10
-          TARBALL="anpu_0.5.9_linux_amd64.tar.gz"
+          TARBALL="anpu_0.5.10_linux_amd64.tar.gz"
           rm -rf /tmp/tamper /tmp/tamper-sums
           mkdir -p "/tmp/tamper/$TAG" "/tmp/tamper-sums/$TAG"
           curl -fsSL "https://github.com/Marwanmorsy999/anpu/releases/download/$TAG/$TARBALL" -o "/tmp/tamper/$TAG/$TARBALL"

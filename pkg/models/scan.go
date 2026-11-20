@@ -111,6 +111,11 @@ type ScanConfig struct {
 	// coverage (completed vs runnable stages).
 	Budget time.Duration
 
+	// CTLogBaseURL overrides the certificate-transparency log base URL used
+	// by the subdomains scanner (default https://crt.sh). Must be a
+	// well-formed http(s) URL when set; ANPU_CTLOG_BASE_URL env overrides.
+	CTLogBaseURL string
+
 	// Auth is the credential context for this scan.  An empty AuthContext
 	// (Method == AuthMethodNone) means the scan runs anonymously.
 	// Authentication is always opt-in — this field is never populated

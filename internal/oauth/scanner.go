@@ -116,11 +116,10 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 		{"/.well-known/jwks.json", "\"keys\""},
 	}
 	for _, c := range commons {
-		if err := scanner.ChargeBudget(sc); err != nil {
-			budgetExhausted = true
+		resp := get(c.path)
+		if budgetExhausted {
 			break
 		}
-		resp := get(c.path)
 		if resp == nil || len(resp.Body) == 0 {
 			continue
 		}

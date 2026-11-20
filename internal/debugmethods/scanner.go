@@ -84,11 +84,11 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 	}
 	// TEST/TRACK enabled (informational method-surface gap).
 	for _, m := range []string{"TEST", "TRACK"} {
-		if err := scanner.ChargeBudget(sc); err != nil {
-			budgetExhausted = true
+		resp := do(m, nil)
+		if budgetExhausted {
 			break
 		}
-		if resp := do(m, nil); resp != nil && resp.StatusCode == 200 {
+		if resp != nil && resp.StatusCode == 200 {
 			findings = append(findings, mkFinding(sc, "debugmethods-"+strings.ToLower(m), m+" method enabled",
 				"The "+m+" method answers 200: unnecessary method surface. Restrict to GET/HEAD/POST (+ app needs) explicitly.",
 				models.SeverityLow, m+"→200"))

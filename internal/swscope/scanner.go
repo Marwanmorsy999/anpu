@@ -128,11 +128,10 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 	}
 	sort.Strings(names)
 	for _, u := range names {
-		if err := scanner.ChargeBudget(sc); err != nil {
-			budgetExhausted = true
+		resp := get(u)
+		if budgetExhausted {
 			break
 		}
-		resp := get(u)
 		if resp == nil || resp.StatusCode != 200 {
 			continue
 		}

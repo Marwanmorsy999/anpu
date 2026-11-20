@@ -74,11 +74,10 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 	groups := map[string][]string{}
 	var icons []icon
 	for _, p := range iconPaths {
-		if err := scanner.ChargeBudget(sc); err != nil {
-			budgetExhausted = true
+		body := get(p)
+		if budgetExhausted {
 			break
 		}
-		body := get(p)
 		if body == nil {
 			continue
 		}

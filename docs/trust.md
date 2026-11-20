@@ -32,7 +32,7 @@ a scoreboard you cannot argue with is marketing, not measurement.
 | Code-Review | 0 | structural for a solo dev; needs a second reviewer |
 | Branch-Protection | 0 | **not enabled on `main`** -- human checklist below (biggest lever) |
 | Token-Permissions | 10 | job-level least privilege everywhere |
-| Pinned-Dependencies | 5 | most actions SHA-pinned; ~7 bare `actions/checkout@v7` refs remain (Task 2 of v0.5.10 cycle addresses) |
+| Pinned-Dependencies | 5 | every action SHA-pinned as of v0.5.10 (Task 2 of the v0.5.10 cycle) |
 | Security-Policy | 10 | real links to the advisory flow |
 | License | 9 | Apache-2.0 text present; SPDX identifier mismatch in winget/Homebrew fixed in Task 2 of this cycle |
 | SAST | 10 | CodeQL security-extended on push/PR/weekly |

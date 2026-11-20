@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.10
+
+- **Tier-2 fixture-level budget parity (#105)**: parity tests for
+  NoSQLExpand, Actuator, VHost, EncodePoly, APIConsole, CORSPlus.
+- **CT-log override (#100)**: configurable CT-log base URL.
+- **Trust refresh (#106)**: Scorecard 6.2 + advisory reconciliation.
+- **Hygiene (#107)**: release-train closure step, releases.md refresh.
+- **License & pins (#108)**: Apache-2.0 metadata consistency, full
+  actions SHA-pinning.
+- **Behavior fix — double-charging (#102, #105)**: CORSPlus, EncodePoly,
+  NoSQLExpand (and earlier LFIPack, exposedconfig, apiconsole, backupplus,
+  graphqlfp, originip) were calling `ChargeBudget` both in their payload
+  loop and inside their fetch closure, billing every probe twice and
+  effectively running on half the declared budget. Removed the redundant
+  loop charges so each stage receives its full declared budget; on
+  exhaustion no HTTP request is issued.
+
 ## 0.5.9
 
 - **Changelog ordering fix (#99)**: restored strict reverse-chronological order.

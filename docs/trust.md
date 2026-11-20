@@ -44,7 +44,7 @@ marketing, not measurement.
 | Dependency-Update-Tool | 10 | Dependabot gomod + actions |
 | Packaging | 10 | release workflow detected |
 | CI-Tests | 10 | 13/13 merged PRs checked |
-| Vulnerabilities | 3 | 7 upstream OSV items, none reachable per `govulncheck` (one ID-scoped waiver); Dependabot owns the fixes |
+| Vulnerabilities | 3 | 7 upstream OSV items, none reachable per `govulncheck`. One documented, ID-scoped waiver: `GO-2026-5932` (golang.org/x/crypto openpgp deprecation, Fixed in: N/A, init-only via the opt-in OOB module); the CI `govulncheck` gate fails on any other affecting advisory. Dependabot owns the remaining fixes |
 | Fuzzing | 0 | no fuzzer integration — future work, not a claim |
 | Contributors | 0 | solo project — structural, not a defect |
 
@@ -69,6 +69,28 @@ meaningful).
 | Coverage ratchet | `codecov.yml` (project `auto`, patch 80%) + CI floor gate |
 | Signed releases + SBOM | cosign bundle + SLSA attestations + CycloneDX per archive on every `v*` tag (score lifts on first signed release) |
 | SAST + dependency review | CodeQL `security-extended` on push/PR/weekly; dependency-review on PRs |
+
+## Release artifacts (v0.5.8+)
+
+Every `v*` release publishes, and the release workflow verifies before
+publishing:
+
+- `checksums.txt` (SHA-256 for every archive/package) plus
+  `checksums.txt.sigstore.json` (cosign keyless bundle over checksums.txt).
+- Per-archive CycloneDX SBOMs (`*.sbom.cyclonedx.json`).
+- SLSA build-provenance attestations (`gh attestation verify`).
+- Stable, version-less archive aliases (`anpu_<os>_<arch>.tar.gz` /
+  `.zip`) that are byte-identical to their versioned counterparts.
+- Native packages: `.deb`, `.rpm`, `.apk`, `.pkg.tar.zst` (amd64/arm64).
+
+Verification commands: [docs/install.md](install.md).
+
+## Packaging drift guard
+
+The `packaging-validate` CI job parses `manifests/winget/...yaml`,
+`Formula/anpu.rb` and `flake.nix`, extracts each manifest's version, and
+asserts all three equal `git describe --tags --abbrev=0`. CI fails on
+drift, so a release cannot ship with stale store manifests.
 
 ## Human checklist (GitHub UI, cannot be set from files)
 

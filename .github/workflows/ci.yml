@@ -115,7 +115,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - name: Fail on unresolvable action refs in docs
@@ -180,10 +180,10 @@ jobs:
         shell: bash
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           # Pinned rather than read from go.mod: govulncheck flags reachable
           # stdlib advisories (net/http, net/http/internal/http2, crypto/tls,
@@ -225,10 +225,10 @@ jobs:
         shell: bash
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           # Pinned rather than read from go.mod: govulncheck flags reachable
           # stdlib advisories (net/http, net/http/internal/http2, crypto/tls,
@@ -250,7 +250,7 @@ jobs:
         shell: bash
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Verify relative markdown links
         run: |
@@ -391,7 +391,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Fail on any CR byte in *.sh
         run: |
@@ -443,7 +443,7 @@ jobs:
         run: ${{ matrix.setup }}
 
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Assert the expected fetch tool
         run: |
@@ -486,7 +486,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Run installer
         env:
@@ -515,7 +515,7 @@ jobs:
         shell: ${{ matrix.shell }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Run installer
         env:
@@ -561,7 +561,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # Positive control first: prove the *clean* path really installs. Without
       # this, a tamper test that aborts for any reason (network, DNS, missing
@@ -714,7 +714,7 @@ jobs:
         shell: ${{ matrix.shell }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Download the published release assets
         run: |
@@ -771,7 +771,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: ANPU_BASE_URL guard tests (install.sh)
         run: |
@@ -812,7 +812,7 @@ jobs:
         shell: ${{ matrix.shell }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Download the published release assets
         run: |
@@ -861,7 +861,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Fake HOME with binary + data dir
         run: |
           set -euo pipefail
@@ -885,7 +885,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Positive control (clean install succeeds with curl)
         run: |
           set -euo pipefail
@@ -934,7 +934,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Build a curl-free PATH
         run: |
           set -euo pipefail
@@ -1013,7 +1013,7 @@ jobs:
           if wget --help 2>&1 | grep -q -- '--no-verbose'; then echo "::error::GNU wget present, expected BusyBox wget"; exit 1; fi
           echo "BusyBox wget confirmed: $(wget --help 2>&1 | head -n 1)"
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Positive control (clean install succeeds with busybox wget)
         run: |
           set -euo pipefail
@@ -1063,7 +1063,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Missing ANPU_INSTALL_DIR is created (not "not writable")
         run: |
           set -euo pipefail
@@ -1092,9 +1092,9 @@ jobs:
         cosign: [v2.4.1, v2.6.1]
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Install pinned cosign
-        uses: sigstore/cosign-installer@v4.1.2
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: ${{ matrix.cosign }}
       - name: Install with pinned cosign (SHA-256 mandatory, sigstore conditional)
@@ -1118,10 +1118,10 @@ jobs:
       contents: read
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: '1.27.4'
 
@@ -1152,7 +1152,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
 

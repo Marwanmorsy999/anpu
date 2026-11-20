@@ -27,5 +27,5 @@ ManifestType: defaultLocale
 ManifestVersion: 1.6.0
 Publisher: Marwan Morsy
 PackageName: anpu
-License: MIT
+License: Apache-2.0
 ShortDescription: Web security intelligence engine.

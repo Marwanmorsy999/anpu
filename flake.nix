@@ -15,6 +15,7 @@
           src = ./.;
           vendorHash = null;
           subPackages = [ "cmd/anpu" ];
+          meta.license = pkgs.lib.licenses.asl20;
         };
         apps.default = {
           type = "app";

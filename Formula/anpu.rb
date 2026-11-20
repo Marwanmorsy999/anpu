@@ -2,7 +2,7 @@ class Anpu < Formula
   desc "Web security intelligence engine"
   homepage "https://github.com/Marwanmorsy999/anpu"
   version "0.5.9"
-  license "MIT"
+  license "Apache-2.0"
 
   on_macos do
     if Hardware::CPU.arm?

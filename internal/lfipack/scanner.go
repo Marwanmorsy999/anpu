@@ -91,11 +91,10 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 		}
 		control := get(withParam(t, param, "anpunofilexyz"))
 		for _, p := range lfiPayloads {
-			if err := scanner.ChargeBudget(sc); err != nil {
-				budgetExhausted = true
+			body := get(withParam(t, param, p.payload))
+			if budgetExhausted {
 				break
 			}
-			body := get(withParam(t, param, p.payload))
 			if body == "" || body == base || body == control {
 				continue
 			}

@@ -1,20 +1,5 @@
 # Changelog
 
-## 0.5.7 (retroactive)
-
-Entry reconstructed from the v0.5.7 release notes and git history; it was
-not recorded when the release shipped.
-
-- **CI**: toolchain bumped to Go 1.27.4 (GO-2026-6859); Arch Linux
-  partial-upgrade guard fixed.
-- **Tools**: install recipes pinned to versions and fail closed on binary
-  drift; gosec annotations added for the new tool-install code.
-- **Takeover**: subdomain fetches routed through the shared guarded client.
-- **SSTIExpand**: baseline subtraction made unconditional, mirroring sqli.
-- **Update**: `fmt.Sprintf` PowerShell unzip replaced with in-process zip
-  extraction; gosec annotations added for the update code.
-- **Post-release**: installer matrix pinned to v0.5.6.
-
 ## 0.5.8
 
 - **Request-budget central enforcement (#90)**: every HTTP-issuing scanner
@@ -37,6 +22,21 @@ not recorded when the release shipped.
   `packaging-validate` CI job.
 - **Adoption docs (#95)**: `docs/comparison.md` (honest vs subfinder/httpx/
   nuclei/subzy), README zero-setup demo using the bench fixture.
+
+## 0.5.7 (retroactive)
+
+Entry reconstructed from the v0.5.7 release notes and git history; it was
+not recorded when the release shipped.
+
+- **CI**: toolchain bumped to Go 1.27.4 (GO-2026-6859); Arch Linux
+  partial-upgrade guard fixed.
+- **Tools**: install recipes pinned to versions and fail closed on binary
+  drift; gosec annotations added for the new tool-install code.
+- **Takeover**: subdomain fetches routed through the shared guarded client.
+- **SSTIExpand**: baseline subtraction made unconditional, mirroring sqli.
+- **Update**: `fmt.Sprintf` PowerShell unzip replaced with in-process zip
+  extraction; gosec annotations added for the update code.
+- **Post-release**: installer matrix pinned to v0.5.6.
 
 ## 0.5.6
 

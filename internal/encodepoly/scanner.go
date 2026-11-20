@@ -83,11 +83,10 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 	baseSig := of(base)
 	var decoded, blocked []string
 	for _, ev := range encodeVariants[1:] {
-		if err := scanner.ChargeBudget(sc); err != nil {
-			budgetExhausted = true
+		resp := get(ev.value)
+		if budgetExhausted {
 			break
 		}
-		resp := get(ev.value)
 		if resp == nil {
 			continue
 		}

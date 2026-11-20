@@ -74,11 +74,10 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 	var findings []models.Finding
 	for _, target := range targets {
 		for _, o := range origins {
-			if err := scanner.ChargeBudget(sc); err != nil {
-				budgetExhausted = true
+			acao, acac, ok := probe(target, o.origin)
+			if budgetExhausted {
 				break
 			}
-			acao, acac, ok := probe(target, o.origin)
 			if !ok {
 				continue
 			}

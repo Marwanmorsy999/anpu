@@ -55,6 +55,14 @@ jobs:
             echo "Issue already open for $TITLE — nothing to do."
             exit 0
           fi
+          # Close any previous open train issues whose release has shipped.
+          for n in $(gh issue list --state open --search "Release train in:title" --json number --jq '.[].number'); do
+            t="$(gh issue view "$n" --json title --jq '.title')"
+            ver="$(echo "$t" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"
+            if [ -n "$ver" ] && gh release view "$ver" >/dev/null 2>&1; then
+              gh issue close "$n" -c "Release $ver shipped — closing train issue."
+            fi
+          done
           BASE="$(git describe --tags --abbrev=0 2>/dev/null || echo '')"
           if [ -n "$BASE" ]; then
             # '|| true': head closing the pipe early (SIGPIPE) must not

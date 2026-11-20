@@ -246,6 +246,7 @@ The release archive includes the executable plus these project files:
 - `README.md`
 - `LICENSE`
 - `anpu.example.yaml`
+- `man/anpu.1`
 
 The GoReleaser configuration also publishes `checksums.txt`. Release version and commit metadata are injected into the binary at build time.
 

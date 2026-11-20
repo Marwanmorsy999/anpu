@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -143,8 +145,35 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (scanner.Sta
 	return scanner.StageResult{Findings: findings, Warnings: warnings, Subdomains: live}, nil
 }
 
+// DefaultCTLogBaseURL is the certificate-transparency log used when no
+// override is configured.
+const DefaultCTLogBaseURL = "https://crt.sh"
+
+// ctlogBaseURL resolves the CT-log base URL: config field first, then
+// ANPU_CTLOG_BASE_URL, then the default. The value must be a well-formed
+// absolute http(s) URL; anything else falls back to the default so a
+// misconfiguration cannot redirect requests to an unintended host.
+func ctlogBaseURL(sc *scanner.ScanContext) string {
+	base := ""
+	if sc != nil {
+		base = strings.TrimSpace(sc.Config.CTLogBaseURL)
+	}
+	if base == "" {
+		base = strings.TrimSpace(os.Getenv("ANPU_CTLOG_BASE_URL"))
+	}
+	if base == "" {
+		base = DefaultCTLogBaseURL
+	}
+	u, err := url.Parse(base)
+	if err != nil || !u.IsAbs() || (u.Scheme != "http" && u.Scheme != "https") {
+		return DefaultCTLogBaseURL
+	}
+	return strings.TrimSuffix(base, "/")
+}
+
 func (s *Scanner) queryCTLogs(ctx context.Context, host string) ([]string, string) {
-	u := fmt.Sprintf("https://crt.sh/?q=%%25.%s&output=json", host)
+	base := ctlogBaseURL(s.scanCtx)
+	u := fmt.Sprintf("%s/?q=%%25.%s&output=json", base, host)
 	if err := scanner.ChargeBudget(s.scanCtx); err != nil {
 		return nil, ""
 	}

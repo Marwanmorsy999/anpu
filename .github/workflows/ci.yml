@@ -1148,6 +1148,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -1160,24 +1162,32 @@ jobs:
       - name: Validate manifests
         run: |
           set -euo pipefail
+          latest=$(git describe --tags --abbrev=0)
+          echo "latest tag: $latest"
+          latest_no_v=${latest#v}
+          export ANPU_LATEST="$latest_no_v"
           python3 - <<'PY'
-          import re, pathlib, sys
+          import os, re, pathlib, sys
           import yaml
+          latest = os.environ["ANPU_LATEST"]
           # Winget YAML shape
           docs = list(yaml.safe_load_all(open("manifests/winget/Marwanmorsy999.anpu.yaml")))
           assert len(docs) >= 1 and all(isinstance(d, dict) for d in docs), "winget manifest must parse"
-          # Version/url reference latest tag pattern
+          winget_versions = {d.get("PackageVersion") for d in docs if d.get("PackageVersion")}
+          assert winget_versions == {latest}, f"winget version {winget_versions} != latest {latest}"
           text = pathlib.Path("manifests/winget/Marwanmorsy999.anpu.yaml").read_text()
           assert re.search(r"v\d+\.\d+\.\d+", text), "winget must reference a version tag"
           # Homebrew formula
           rb = pathlib.Path("Formula/anpu.rb").read_text()
           assert "class Anpu" in rb and "def install" in rb
-          assert re.search(r"v\d+\.\d+\.\d+", rb), "formula must reference a version tag"
+          m = re.search(r'version "([\d.]+)"', rb)
+          assert m and m.group(1) == latest, f"formula version {m and m.group(1)} != latest {latest}"
           # Nix flake
           flake = pathlib.Path("flake.nix").read_text()
           assert "buildGoModule" in flake
-          assert re.search(r"\d+\.\d+\.\d+", flake), "flake must reference a version"
+          m = re.search(r'version = "([\d.]+)"', flake)
+          assert m and m.group(1) == latest, f"flake version {m and m.group(1)} != latest {latest}"
           # man page present
           assert pathlib.Path("man/anpu.1").exists(), "man page missing"
-          print("packaging manifests OK")
+          print(f"packaging manifests OK (latest {latest})")
           PY

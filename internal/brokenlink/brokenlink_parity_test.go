@@ -25,11 +25,14 @@ func TestBrokenLinkBudgetParity(t *testing.T) {
 	ledger := anpuhttp.NewLedger(100000)
 	ledger.SetCap("BrokenLink", 1000)
 	sc := &scanner.ScanContext{
-		Target:     &scanner.ValidatedTarget{Raw: srv.URL, Host: "127.0.0.1"},
+		Target:     &scanner.ValidatedTarget{Raw: srv.URL, Host: "brokenlinkfixture.example"},
 		Ledger:     ledger,
 		StageLabel: "BrokenLink",
-		Endpoints:  []models.Endpoint{{URL: srv.URL + "/", Category: models.EndpointPage}},
-		Config:     models.ScanConfig{Target: srv.URL, Profile: models.ProfileAdvanced},
+		Endpoints: []models.Endpoint{
+			{URL: srv.URL + "/?redirect=/missing", Category: models.EndpointPage},
+			{URL: srv.URL + "/index.html", Category: models.EndpointPage},
+		},
+		Config: models.ScanConfig{Target: srv.URL, Profile: models.ProfileAdvanced},
 	}
 	s := New(client)
 	_, err := s.Run(context.Background(), sc)
@@ -38,5 +41,8 @@ func TestBrokenLinkBudgetParity(t *testing.T) {
 	}
 	if int64(ledger.Count("BrokenLink")) != hits {
 		t.Fatalf("budget parity: hits=%d ledger=%d", hits, ledger.Count("BrokenLink"))
+	}
+	if hits < 2 {
+		t.Fatalf("expected multiple broken-link probes to be driven, hits=%d", hits)
 	}
 }

@@ -107,11 +107,10 @@ func (s *Scanner) Run(ctx context.Context, sc *scanner.ScanContext) (result scan
 
 	var found []string
 	for _, cand := range cands {
-		if err := scanner.ChargeBudget(sc); err != nil {
-			budgetExhausted = true
+		resp := get(cand)
+		if budgetExhausted {
 			break
 		}
-		resp := get(cand)
 		if resp == nil {
 			continue
 		}

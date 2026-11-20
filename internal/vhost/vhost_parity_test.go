@@ -25,7 +25,7 @@ func TestVHostBudgetParity(t *testing.T) {
 	ledger := anpuhttp.NewLedger(100000)
 	ledger.SetCap("VHost", 1000)
 	sc := &scanner.ScanContext{
-		Target:     &scanner.ValidatedTarget{Raw: srv.URL, Host: "127.0.0.1"},
+		Target:     &scanner.ValidatedTarget{Raw: srv.URL, Host: "vhostfixture.example"},
 		Ledger:     ledger,
 		StageLabel: "VHost",
 		Config:     models.ScanConfig{Target: srv.URL, Profile: models.ProfileAdvanced},
@@ -37,5 +37,8 @@ func TestVHostBudgetParity(t *testing.T) {
 	}
 	if int64(ledger.Count("VHost")) != hits {
 		t.Fatalf("budget parity: hits=%d ledger=%d", hits, ledger.Count("VHost"))
+	}
+	if hits < 2 {
+		t.Fatalf("expected both base and per-candidate paths to be driven, hits=%d", hits)
 	}
 }

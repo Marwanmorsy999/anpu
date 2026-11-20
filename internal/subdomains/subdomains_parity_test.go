@@ -2,6 +2,7 @@ package subdomains
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -82,6 +83,35 @@ func TestQueryCTLogsOverrideParity(t *testing.T) {
 	}
 	if int64(ledger.Count("Subdomains")) != hits {
 		t.Fatalf("budget parity: hits=%d ledger=%d", hits, ledger.Count("Subdomains"))
+	}
+}
+
+// TestSubdomainsDNSSeam drives the DNS resolution path (dnsBrute,
+// resolveAll) with a stubbed dnsLookup — no real network — and asserts
+// the scanner surfaces live hostnames.
+func TestSubdomainsDNSSeam(t *testing.T) {
+	oldALN := scanner.AllowLocalNetwork
+	scanner.AllowLocalNetwork = true // exercise the DNS seam without the local-network guard
+	t.Cleanup(func() { scanner.AllowLocalNetwork = oldALN })
+
+	old := dnsLookup
+	var stubbed int64
+	dnsLookup = func(_ context.Context, _ *net.Resolver, host string) ([]net.IPAddr, error) {
+		atomic.AddInt64(&stubbed, 1)
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	}
+	t.Cleanup(func() { dnsLookup = old })
+
+	s := New(anpuhttp.NewClientWithLocalNetworkAllowed(true))
+	ctx := context.Background()
+	if got := s.dnsBrute(ctx, "dnsseam.example"); len(got) == 0 {
+		t.Fatalf("dnsBrute: expected stubbed DNS to return live names, got %v", got)
+	}
+	if atomic.LoadInt64(&stubbed) == 0 {
+		t.Fatal("expected the stub to be invoked")
+	}
+	if got := s.resolveAll(ctx, []string{"www.dnsseam.example", "api.dnsseam.example"}); len(got) != 2 {
+		t.Fatalf("resolveAll: expected 2 live names, got %v", got)
 	}
 }
 

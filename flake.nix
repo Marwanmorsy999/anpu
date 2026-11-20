@@ -11,7 +11,7 @@
       in {
         packages.default = pkgs.buildGoModule {
           pname = "anpu";
-          version = "0.5.9";
+          version = "0.5.10";
           src = ./.;
           vendorHash = null;
           subPackages = [ "cmd/anpu" ];

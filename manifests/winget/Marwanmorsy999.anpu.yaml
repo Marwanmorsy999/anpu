@@ -1,27 +1,27 @@
 PackageIdentifier: Marwanmorsy999.anpu
-PackageVersion: 0.5.8
+PackageVersion: 0.5.9
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: 1.6.0
 ---
 PackageIdentifier: Marwanmorsy999.anpu
-PackageVersion: 0.5.8
+PackageVersion: 0.5.9
 DefaultLocale: en-US
 ManifestType: installer
 ManifestVersion: 1.6.0
 Installers:
   - Architecture: x64
     InstallerType: zip
-    InstallerUrl: https://github.com/Marwanmorsy999/anpu/releases/download/v0.5.8/anpu_0.5.8_windows_amd64.zip
-    InstallerSha256: 8e17242ab0702fafd974529bad2d8a4b2556b4b83133934431f5e328f9b57cea
+    InstallerUrl: https://github.com/Marwanmorsy999/anpu/releases/download/v0.5.9/anpu_0.5.9_windows_amd64.zip
+    InstallerSha256: 53187dc7326b7e53dfc09bd4d104514e9c082817fd53733c9e6eb83ddcb4c660
   - Architecture: arm64
     InstallerType: zip
-    InstallerUrl: https://github.com/Marwanmorsy999/anpu/releases/download/v0.5.8/anpu_0.5.8_windows_arm64.zip
-    InstallerSha256: c7df1856f87ecf9fb33a60104fed985df397c8ed2da31a3f4eaa5acbac5a1b1f
+    InstallerUrl: https://github.com/Marwanmorsy999/anpu/releases/download/v0.5.9/anpu_0.5.9_windows_arm64.zip
+    InstallerSha256: 62ae1e4b4eb9b62b2edd9e40e52a62a1607fc0ad70be6e946c1a076b2ed1ca05
 ManifestType: installer
 ---
 PackageIdentifier: Marwanmorsy999.anpu
-PackageVersion: 0.5.8
+PackageVersion: 0.5.9
 DefaultLocale: en-US
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
